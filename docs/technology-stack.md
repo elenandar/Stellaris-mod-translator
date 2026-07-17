@@ -1,95 +1,114 @@
 # Технологический стек
 
-Стек зафиксирован на уровне поддерживаемых major/minor-линий. Точные patch-версии будут закреплены lock-файлами при старте M1. Снимок решения: 17 июля 2026 года.
+Baseline рассчитан на персональный local-only CLI для текущего Apple Silicon Mac. Точные версии toolchain и зависимостей закрепляются lock-файлами только после M1 spikes. Снимок решения: 17 июля 2026 года.
 
-## Принятый стек
+## Принятый baseline
 
 | Слой | Технология | Причина |
 |---|---|---|
-| Desktop shell | Tauri 2, Rust stable | нативные dialogs и permissions, кроссплатформенная упаковка, малый runtime и Rust-граница для опасных файловых операций |
-| UI | React 19, TypeScript strict, Vite | зрелый компонентный UI, типизированные контракты, быстрый локальный build без отдельного web-сервера в поставке |
-| Доменное ядро | Rust workspace, edition 2024 | один бинарный runtime, строгие типы, безопасная работа с байтами, property/fuzz testing и отсутствие Python-sidecar |
-| Async и задачи | Tokio + внутренняя persistent queue | пауза, отмена и возобновление без внешнего broker |
-| Данные | SQLite, `rusqlite`, foreign keys, WAL, явные SQL migrations | локальная транзакционная база без отдельного сервера; прозрачная схема и простой backup |
-| Сериализация | Serde | единые типизированные команды, события, manifests и provider payloads |
-| HTTP | `reqwest` с ограниченными adapters | исходящие вызовы только к выбранному provider; приложение не открывает listening-порт |
-| Локальная модель | Ollama native API | локальный opt-in runtime, модель можно менять без изменения ядра |
-| Поиск памяти | точные индексы + SQLite FTS5 | воспроизводимо и достаточно для первой версии; vector database добавляется только после измеренного выигрыша |
-| Наблюдаемость | `tracing`, структурированные локальные события | диагностика заданий с correlation ID и редактированием чувствительного текста |
-| Rust QA | `cargo test`, `proptest`, `cargo-fuzz`, Clippy, rustfmt | unit, round-trip, property, mutation/fuzz и статическая дисциплина |
-| UI QA | Vitest, Testing Library, Playwright | компоненты, пользовательские сценарии и packaged smoke tests |
-| CI | GitHub Actions: macOS, Windows, Linux | раннее обнаружение платформенных различий; macOS остаётся первым release target |
-| Упаковка | Tauri bundler; подпись и notarization macOS | единая поставка без требования установить Python или Node.js |
+| Интерфейс MVP | Rust CLI | воспроизводимые команды, удобный dry-run и минимальная поверхность до доказательства необходимости UI |
+| Доменное ядро | Rust workspace, edition 2024 | строгие типы, byte-safe обработка, один поставляемый runtime и сильная test ecosystem |
+| Задания | последовательная persistent queue | локальная модель обычно является bottleneck; пауза и resume нужны, постоянный async runtime — пока нет |
+| Данные | SQLite, `rusqlite`, foreign keys, явные migrations | локальное транзакционное состояние, backup и отсутствие отдельного сервера |
+| Сериализация | Serde | typed manifests, provider payloads, reports и provenance |
+| HTTP | узкий `reqwest` adapter | обращения только к проверенному loopback Ollama endpoint; приложение не слушает порт |
+| LLM | установленный локальный Ollama | веса уже доступны на компьютере; модель выбирается benchmark, а не брендом в коде |
+| Поиск | SQLite indexes + FTS5 | воспроизводимая база для glossary/memory; vector DB требует отдельного evidence |
+| Диагностика | `tracing` с redaction | correlation IDs и стадии без утечки сырых текстов в обычные логи |
+| QA | `cargo test`, `proptest`, `cargo-fuzz`, Clippy, rustfmt | unit, round-trip, property, mutation/fuzz и статические проверки |
+| Поставка MVP | локально собранный CLI binary | без Tauri, Node.js и Python в пользовательском runtime |
+| Research tooling | необязательные одноразовые Python-скрипты | допустимы для corpus analysis, но не становятся продуктовой архитектурой |
 
-Конкретные Rust crates, кроме перечисленных базовых, добавляются по необходимости. В частности, библиотека контекстного парсера Clausewitz/Jomini выбирается только после M1-spike на реальном корпусе; каноном является её поведение, а не имя зависимости.
+Tokio добавляется только после измеренного требования к конкурентным I/O или cancellation, которое нельзя чисто решить синхронным worker и persistent checkpoints. Tauri/React рассматриваются после стабильного M5 по отдельному ADR.
 
-## Структура исходников
-
-Предлагаемая форма monorepo:
+## Предлагаемая структура
 
 ```text
-apps/desktop/           React UI и Tauri host
-crates/domain/          типы, политики, use cases
+crates/cli/             команды, plans и reports
+crates/domain/          типы, политики и use cases
 crates/stellaris-loc/   lossless parser и renderer
-crates/context/         индекс ссылок и context signatures
-crates/translation/     memory, prompts, provider ports
-crates/quality/         validators и findings
-crates/storage/         SQLite repositories и migrations
-crates/publisher/       staging, companion artifacts, rollback
-fixtures/               маленькие обезличенные и лицензируемые cases
-docs/                   решения, спецификации, ADR
+crates/context/         индекс ссылок и context fingerprints
+crates/translation/     memory, prompts и provider port
+crates/quality/         validators, states и findings
+crates/storage/         SQLite repositories, migrations и backup
+crates/publisher/       staging, versioned artifacts и rollback
+fixtures/               synthetic/minimal licensed cases
+tools/research/         необязательные corpus/benchmark helpers
+docs/                   decisions, ADR, specs и evidence
 ```
 
-## Provider policy
+Имена crates уточняются после M1. Структура не является разрешением создавать пустой scaffolding до утверждённых контрактов.
 
-Первый обязательный adapter — Ollama. Облачный adapter не выбирается по популярности заранее: в M4 одинаковый golden corpus сравнивает качество русского, structured-output надёжность, privacy, цену и latency. После этого один adapter становится baseline, остальные остаются plugins за единым capability-интерфейсом.
+## Ollama provider policy
 
-Ядро требует от adapter:
+Единственный обязательный adapter MVP — локальный Ollama. Provider interface остаётся отделённым от домена для тестируемости, но cloud adapters не реализуются и не входят в текущую дорожную карту.
 
-- schema-constrained result либо эквивалентную строгую проверку;
-- идентификаторы units и atoms без передачи файловых путей;
-- timeout, cancel, rate limit, usage accounting и повторяемую классификацию ошибок;
-- отсутствие tool calls;
-- явное описание того, какие данные уходят за пределы компьютера.
+Перед каждым заданием adapter обязан:
 
-Модель и её версия не являются архитектурной константой. Они выбираются профилем качества и сохраняются в provenance.
+- разрешить endpoint только в loopback и запретить redirects;
+- получить локальный inventory и подтвердить выбранный tag;
+- отклонить `*-cloud`, неизвестную residency и отсутствующие локальные веса;
+- закрепить полный digest, Ollama version, model options, context size, prompt/template и schema versions;
+- запретить pull, скрытый fallback и автоматический выбор «похожей» модели;
+- проверить structured result собственной строгой схемой независимо от возможностей модели;
+- поддержать timeout, cancel и классифицированный retry без доступа модели к инструментам.
+
+Изменение digest или параметров считается изменением quality profile. Уже принятые переводы не перегенерируются автоматически.
+
+## Стартовый benchmark моделей
+
+Локальный inventory содержит несколько семейств. Для первого translation benchmark выбраны только общие модели:
+
+- GLM 4.7 Flash;
+- DeepSeek R1 32B;
+- GPT-OSS 20B.
+
+Coding-варианты Qwen не являются translation baseline, но сохраняются в inventory как установленные модели. Победитель заранее не назначается.
+
+Все кандидаты получают одинаковый стратифицированный corpus, schema и явно заданные параметры. Начальный `num_ctx` — 8–16K: длинный 64K profile не нужен типичной единице перевода и должен доказывать пользу отдельно. Оцениваются смысл, литературный русский, терминология/лор, atoms, JSON stability, скорость и память.
+
+Полный датированный inventory и сведения о компьютере находятся в [снимке локального окружения](evidence/local-environment-2026-07-17.md). Это evidence, а не вечный канон.
 
 ## Parser policy
 
-Файлы Stellaris не передаются generic YAML-библиотеке: фактический формат локализации имеет собственные правила, дубли ключей и значимую byte-level форму. Реализуется небольшой lossless lexer/CST и отдельный parser внутритекстовой разметки.
+Localisation Stellaris не передаётся generic YAML-библиотеке: фактический формат имеет собственные правила, дубли ключей, markup и значимую byte-level форму. Нужны небольшой lossless lexer/CST и отдельный typed parser внутритекстовой разметки.
 
-До M2 запрещено обещать поддержку конструкции, для которой нет fixture и round-trip теста. Контекстный parser scripts может быть основан на готовой grammar либо на консервативном lexer, но его выбор проходит сравнительный spike: coverage, сохранение исходника, diagnostics, лицензия и maintenance.
+До M2 нельзя обещать поддержку конструкции без fixture, ожидаемой классификации и round-trip test. Context parser scripts может использовать готовую grammar либо консервативный lexer; выбор проходит сравнительный M1 spike по coverage, diagnostics, лицензии и стоимости сопровождения.
 
-## Управление зависимостями и версиями
+## Версии и зависимости
 
-- Rust toolchain фиксируется `rust-toolchain.toml`, зависимости — `Cargo.lock`, frontend — lock-файлом package manager.
-- Production build воспроизводим и использует только проверенные lock-файлы.
-- Dependabot/Renovate может предлагать обновления, но parser, SQLite, Tauri и provider SDK обновляются только с полным regression corpus.
-- Version profile игры отделён от версии приложения. Новая версия Stellaris сначала проходит compatibility suite.
-- Критическая уязвимость может ускорить обновление, но не отменяет технических gates.
+- Rust toolchain фиксируется `rust-toolchain.toml`, зависимости — `Cargo.lock`.
+- Production-like проверки используют только lock-файлы и не скачивают модель автоматически.
+- Новая dependency получает назначение, license/security review и владельца обновления.
+- Version profile Stellaris отделён от версии приложения; обновление игры сначала проходит compatibility suite.
+- Parser, SQLite, filesystem и provider dependencies обновляются с полным regression corpus.
+- Private fixtures, моды, переводы и базы не передаются в облачный CI.
+
+В текущем окружении Rust toolchain ещё не установлен. M0R ничего не устанавливает; bootstrap и pinning являются явной задачей M1 после принятия baseline.
 
 ## Осознанно не выбранные альтернативы
 
 | Альтернатива | Почему не baseline |
 |---|---|
-| Python/PySide | быстрый прототип, но слабее единая byte-safe граница и сложнее воспроизводимая поставка; старый Python-код используется как источник тестовых случаев, не runtime |
-| Tauri + Python sidecar/FastAPI | два runtime, IPC, упаковка и лишняя локальная поверхность атаки без доказанной пользы |
-| Electron | больше runtime и полномочий Node.js, чем нужно локальному переводчику |
-| Полностью web-приложение | browser sandbox неудобен для больших локальных коллекций, launcher paths и атомарной публикации |
-| Microservices, Redis, Celery, PostgreSQL | не соответствуют однопользовательскому локальному продукту |
-| Generic YAML parser | не даёт нужной модели дублей, malformed-source diagnostics и lossless round trip |
-| Vector DB с первого дня | повышает сложность до появления доказанного retrieval bottleneck |
-| Жёстко заданная LLM | качество и доступность моделей меняются; фиксируется benchmark и контракт, а не бренд модели |
+| Tauri + React | UI не нужен для проверки ключевых рисков; решение откладывается до стабильного CLI |
+| Python/PySide как runtime | второй способ поставки и более слабая единая byte-safe граница; Python остаётся research tool |
+| Tauri + Python sidecar/FastAPI | два runtime, IPC и лишний listening surface без пользы для личного CLI |
+| Electron/web app | избыточны для локальной работы с filesystem и launcher artifacts |
+| Cloud LLM | противоречит принятому local-only scope |
+| Microservices, Redis, Celery, PostgreSQL | не соответствуют однопользовательскому локальному инструменту |
+| Generic YAML parser | не обеспечивает duplicate semantics и byte-identical round trip |
+| Vector DB с первого дня | усложняет систему до измеренного retrieval bottleneck |
+| Жёстко заданная модель | модель выбирается по quality evidence и фиксируется digest в конкретном профиле |
 
 ## Первые технические spikes
 
-До масштабной реализации должны быть отдельно доказаны:
+До масштабной реализации нужно отдельно доказать:
 
-1. Tauri build, подпись и доступ к выбранным каталогам на Apple Silicon macOS.
-2. Byte-identical round trip на репрезентативных локализациях.
-3. Безопасное распознавание markup и malformed строк без regex-only shortcuts.
-4. Companion descriptor/load order на реальной поддерживаемой версии Stellaris.
-5. Ollama cancellation, structured result и обработка недоступного runtime.
+1. Byte-identical round trip на репрезентативном и независимом holdout corpus.
+2. Typed markup и malformed diagnostics без regex-only shortcuts.
+3. Load order, `replace/`, duplicate-key semantics и форма RU-артефакта на реальной установке.
+4. Immutable snapshot при обновлении Workshop во время чтения.
+5. Local Ollama residency, digest pinning, cancellation и schema stability.
+6. Качество GLM/DeepSeek/GPT-OSS на одинаковой человеческой разметке.
 
-Официальные основания выбора: [Tauri 2 и кроссплатформенность](https://v2.tauri.app/), [архитектура Tauri](https://v2.tauri.app/concept/architecture/), [актуальные линии React](https://react.dev/versions), [SQLite как встраиваемая БД без отдельного процесса](https://www.sqlite.org/about.html), [Ollama API](https://docs.ollama.com/api/introduction).
-
+Справочные основания стека: [Rust Edition Guide](https://doc.rust-lang.org/edition-guide/editions/creating-a-new-project.html), [SQLite](https://www.sqlite.org/about.html), [Ollama API](https://docs.ollama.com/api/introduction) и [Ollama cloud authentication через локальный API](https://docs.ollama.com/api/authentication). Возможный Tauri UI не является текущим решением.

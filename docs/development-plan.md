@@ -1,161 +1,199 @@
 # План разработки
 
-План организован по доказательствам, а не по календарю. Каждый этап создаёт проверяемый артефакт и имеет exit criteria. Невыполненный критерий останавливает зависимые работы.
+План организован по доказательствам, а не календарю. Каждый этап создаёт проверяемые артефакты и имеет exit criteria. Невыполненный критерий останавливает зависимые работы.
 
-## P0. Подтвердить рамки проекта
+Разделы плана используют те же обозначения `M*`, что и [дорожная карта](roadmap.md).
 
-Результат:
+## M0R. Персональный local-only baseline
 
-- выбранная лицензия репозитория и политика использования тестовых модов;
-- первая поддерживаемая версия Stellaris и минимальная версия macOS;
-- 5–8 пилотных модов разных классов с разрешённым использованием для локального тестирования;
-- подтверждение стратегии «один companion на один source» и cloud opt-in;
-- начальный threat model и ADR-0001 о modular monolith.
+Зафиксировать:
 
-Exit criteria: открытые продуктовые решения не меняют устройство parser, хранения или публикации.
-
-## P1. Исследование форматов и упаковочный spike
-
-Работы:
-
-- инвентаризировать реальные варианты localisation: BOM, newline, comments, quotes, duplicate keys, version suffixes, escapes, markup и malformed sources;
-- проверить descriptors, dependencies, launcher paths и load order на реальной установке;
-- построить обезличенный fixture corpus и compatibility matrix;
-- проверить Tauri build/signing, filesystem permissions и packaged smoke на Apple Silicon;
-- сравнить варианты parser контекста scripts и зафиксировать решение ADR.
+- один владелец, текущий Apple Silicon Mac и личные текущие/будущие playsets;
+- Rust CLI как интерфейс MVP;
+- локальный SQLite workspace и проверяемый backup/export;
+- только локальный Ollama, без cloud providers и скрытого fallback;
+- четыре редакционных состояния и human-only `editorially_approved`;
+- рабочую гипотезу RU bundle per playset без превращения её в канон;
+- отсутствие обязательств по UI, Windows/Linux, beta и публичной поставке.
 
 Exit criteria:
 
-- каждая заявленная конструкция имеет fixture и ожидаемую классификацию;
-- неизвестные варианты перечислены как unsupported, а не потеряны;
-- пустой companion mod устанавливается и удаляется без изменения источника;
-- packaging spike воспроизводится из чистого checkout.
+- owner decision, ADR, canons, strategy, architecture, stack и roadmap согласованы;
+- датированный environment evidence сохранён без private mod content;
+- все открытые решения назначены конкретному M1 spike;
+- задачи M1 содержат рекомендуемую Codex model/reasoning tier.
 
-## P2. Ядро технической безопасности
+## M1A. Формат, угрозы и playset evidence
 
 Работы:
 
-- byte reader и version profiles;
-- lossless lexer/CST локализации;
+- инвентаризировать BOM, newline, comments, quotes, duplicate keys, version suffixes, escapes, markup и malformed sources;
+- проверить descriptors, dependencies, launcher paths, `replace/`, load order и реальные duplicate semantics;
+- сравнить `per-source`, `playset-bundle` и `hybrid` по read-only данным реальной установки и в изолированном disposable root;
+- определить детерминированный source order, collision policy, uninstall и rollback;
+- смоделировать Workshop update во время чтения, symlink/TOCTOU, traversal, disk-full и crash points;
+- создать threat model, format/markup specs, version profile и corpus manifest;
+- построить synthetic/minimal fixtures и независимый holdout;
+- сделать тонкий read-only research harness для inspect/parse/round-trip experiments.
+
+M1A не пишет в Stellaris, Workshop, active mod/output paths или launcher state. Если реальная активация окажется необходимой для решения, она переносится в отдельный поздний gate с явным разрешением владельца.
+
+Exit criteria:
+
+- каждая поддержанная конструкция имеет fixture и ожидаемую классификацию;
+- неизвестные варианты перечислены как unsupported, а не молча нормализованы;
+- `parse → render` byte-identical на исследовательском корпусе;
+- immutable generation либо clean abort доказаны при изменении Workshop;
+- layout кандидата детерминированно строится и удаляется только в disposable root; реальная установка остаётся непроверенной и не маскируется;
+- export policy выбрана evidence либо явно оставлена blocked;
+- threat/format/publish contracts приняты до production implementation.
+
+Отчёт завершается ровно одним verdict: `GO` или `BLOCKED`. Только `GO` может участвовать в gate M2; корректный `BLOCKED`-отчёт принимается как evidence, но не разрешает реализацию.
+
+## M1B. Feasibility качества локального Ollama
+
+Этот этап идёт параллельно с M1A и не пишет в active mod/output paths.
+
+Работы:
+
+- зафиксировать local tags, full digests, residency, Ollama version и capability probes;
+- сравнить GLM 4.7 Flash, DeepSeek R1 32B и GPT-OSS 20B без заранее назначенного победителя;
+- использовать одинаковые schema, prompt policy и явные `num_ctx` 8–16K, temperature/seed/options;
+- собрать стратифицированный corpus: UI, mechanics, narrative, dialogue, humor, gender/case, lore terms и typed atoms;
+- отделить tuning set от независимого holdout;
+- провести человеческую оценку смысла, русского текста, лора и severity; для критических категорий использовать повторную независимую разметку;
+- измерить atom/schema stability, latency, memory и долю repair/fallback;
+- проверить, помогает ли независимый model-review, а не предполагать это.
+
+Raw corpus остаётся между локальным benchmark harness, Ollama и человеком-редактором. Codex получает только taxonomy, opaque sample IDs, scores и redacted findings; prompts или excerpts с private/copyrighted текстом не публикуются.
+
+Exit criteria:
+
+- есть воспроизводимый benchmark report с exact model digests/options;
+- определён baseline model/profile либо честно зафиксировано `QUALITY_NOT_FEASIBLE`;
+- critical false accepts отсутствуют в выборке, а статистическая неопределённость и размер корпуса указаны;
+- high-risk категории и обязательная human-review policy определены;
+- ни один benchmark output не активирован как игровой перевод.
+
+Отчёт завершается ровно одним verdict: `QUALITY_FEASIBLE` или `QUALITY_NOT_FEASIBLE`. Неуспех M1B останавливает ветку до M2, даже если format evidence положителен.
+
+## M2. Safety kernel и технический CLI
+
+M2 начинается только при совместных verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE`. Принятие достоверного отрицательного отчёта не является разрешением продолжать.
+
+Работы:
+
+- byte reader, immutable generations и version profiles;
+- lossless lexer/CST;
 - typed parser внутритекстовой разметки;
 - controlled renderer только для language header и human spans;
-- diagnostics с source warning/output error/blocker;
-- round-trip, property, fuzz/mutation и golden tests;
-- path containment и source snapshot checks.
+- diagnostics `source_warning / output_error / blocker`;
+- output containment и versioned staging;
+- canonical root-disjointness checks для equality, ancestor/descendant overlap и symlink aliases;
+- команды `inspect`, `parse`, `round-trip`, `validate`, `render-dry-run`;
+- golden/holdout, property, fuzz/mutation и integration tests.
 
 Exit criteria:
 
-- `parse → render` byte-identical для 100% поддержанного fixture corpus;
-- malformed/unknown input либо сохранён как opaque, либо заблокирован с точной позицией;
-- controlled render не меняет ни одного неразрешённого байтового участка;
-- fuzz/mutation не приводит к panic, выходу за root или молчаливой потере данных;
-- исходные хэши неизменны во всех integration tests.
+- round trip идентичен для 100% заявленной taxonomy и независимого holdout;
+- malformed/unknown input сохранён opaque либо заблокирован с позицией;
+- controlled render не меняет неразрешённые байты;
+- mutation/fuzz не приводит к panic, escape from root или silent data loss;
+- source hashes неизменны во всех integration tests;
+- model output физически не может обойти renderer/validator и активировать artifact.
 
-Это первый жёсткий шлюз. До него не строится массовый LLM-конвейер.
-
-## P3. Модель проекта и инкрементальность
+## M3. Инкрементальный engine и playset publishing
 
 Работы:
 
-- discovery manifest, dependencies и stable mod identity;
-- SQLite schema/migrations для snapshots, units, contexts, jobs, findings и artifacts;
-- unit/source/context identity;
-- diff states: unchanged, new, changed, moved, deleted, context-changed, blocked;
-- persistent queue, pause/cancel/resume, idempotency;
-- staging, atomic publish, last-known-good и rollback.
+- discovery manifests, dependencies и stable mod identity;
+- SQLite schema/migrations для generations, units, contexts, jobs, findings и artifacts;
+- раздельные raw/semantic/context/policy fingerprints, stable duplicate matching и dependency/glossary selection edges для точечной инвалидации;
+- diff states и explainable invalidation;
+- persistent queue, pause/cancel/resume и idempotency;
+- deterministic playset assembly и explicit collision overrides;
+- versioned build/publish protocol, crash matrix, last-known-good и rollback;
+- exportable backup с integrity manifest и явным privacy warning, выбранное владельцем место хранения и проверяемый restore.
 
 Exit criteria:
 
-- повторный запуск неизменного корпуса создаёт ноль work units;
-- одно изменение затрагивает только доказанно зависимые units;
-- удалённый ключ исчезает из нового артефакта, не уничтожая manual history;
-- crash на каждой стадии восстанавливается без частичного publish и дублей;
-- миграция БД и rollback проверены на предыдущем schema snapshot.
+- неизменный playset создаёт ноль work units;
+- изменение затрагивает только доказанно зависимые units;
+- удаление source/key не уничтожает manual history;
+- crash на каждой стадии не оставляет частичный active artifact или дубли;
+- migrations, backup/restore и rollback проверены на предыдущем snapshot;
+- source order и все collision decisions воспроизводимы.
 
-## P4. Контекст, терминология и перевод
+## M4. Локальный translation quality engine
 
 Работы:
 
-- importer официальной английской и русской локализации из локальной установки с привязкой к версии;
-- versioned glossary, формы, aliases, source и approval workflow;
-- context graph для событий и других пилотных типов;
+- importer официальной English/Russian localisation из локальной установки с version provenance;
+- mod-specific glossary/lore packs, forms, aliases и approval history;
+- context graph для пилотных типов;
 - translation memory с context compatibility;
-- provider interface, Ollama adapter, consent и secrets;
-- benchmark облачного baseline на том же golden corpus;
-- draft → semantic/lore review → Russian editor → repair;
-- проверки entities, numbers, polarity, modality, effects и terminology.
+- Ollama adapter с digest pinning и profile enforcement;
+- pipeline `draft → machine review → findings → repair/human review`;
+- checks для entities, numbers, polarity, modality, effects, terminology и русского текста;
+- editorial queue и защита manual decisions.
 
 Exit criteria:
 
 - provider result не способен изменить code/atoms даже при adversarial input;
-- недоступная или отменённая модель не теряет состояние;
-- одинаковый текст в несовместимых контекстах не переиспользуется автоматически;
-- на вручную проверенном golden corpus нет критических semantic defects;
-- пороги confidence откалиброваны на человеческой разметке, включая false positive/negative.
+- cancel/unavailable model не теряет состояние и не подменяется другой моделью;
+- несовместимый контекст не переиспользует перевод автоматически;
+- thresholds откалиброваны на M1B corpus и holdout;
+- high-risk content попадает в human review;
+- только человек может назначить `editorially_approved`.
 
-## P5. Вертикальный CLI-срез
+## M5. Стабильный повседневный CLI-процесс
 
-Один внутренний CLI выполняет полный путь `folder → analysis → translation → validated companion → update`. Он нужен для воспроизводимых тестов и не заменяет конечный UI.
+Поддерживаемый путь:
 
-Пилотный набор обязательно включает:
+```text
+playset → inspect → plan → translate → review → dry-run build
+        → validated RU artifact → publish → in-game smoke → update/rollback
+```
 
-- маленький механический мод;
-- event-heavy narrative mod;
-- большой мод с повторяющимися терминами;
-- duplicate keys и malformed source;
-- существующую/устаревшую русскую локализацию;
-- обновление с добавлением, изменением и удалением строк;
-- хотя бы один мод с нестандартным, но поддержанным markup.
+Пилоты включают small mechanics mod, narrative/event-heavy mod, крупный glossary-heavy mod, duplicates/malformed source, существующую русскую локализацию и обновления с add/change/delete.
 
-Exit criteria: все пилоты проходят end-to-end, а blocked/fallback единицы объяснимы и не нарушают целостность компаньона.
+Exit criteria:
 
-## P6. Desktop UX
+- выбранные личные playsets проходят end-to-end;
+- blocked/fallback units объяснимы и не нарушают artifact;
+- in-game smoke подтверждает load order и отсутствие missing/broken localisation;
+- update, disk-full, отмена, restore и rollback проверены;
+- владелец может повторить процесс по документации без обхода gates;
+- финальный отчёт принят с Codex `GPT-5.6 Sol, Ultra` и человеческим литературно-лорным review.
 
-Работы:
+## Возможные решения после M5
 
-- onboarding и auto-detection;
-- folder picker и явный список source/output;
-- экран анализа до запуска;
-- прогресс по модам и стадиям, pause/cancel/resume;
-- review только для проблемных единиц, glossary decisions и manual override;
-- результаты, activation guidance, update и rollback;
-- доступный интерфейс, клавиатура, русские тексты UI и понятные ошибки.
+Только после стабильного CLI отдельный ADR может разрешить:
 
-Exit criteria: новый пользователь выполняет основной сценарий без терминала; UI не может обойти domain gates; закрытие приложения во время работы безопасно.
+- лёгкий Tauri/React UI, если CLI действительно мешает повседневной работе;
+- дополнительную платформу;
+- публичное распространение и выбор лицензии;
+- cloud provider с отдельной privacy/consent моделью.
 
-## P7. Production hardening
+Ни один из этих пунктов не является частью текущего обязательства.
 
-Работы:
+## Формат задач Codex
 
-- signed/notarized macOS packages и update policy;
-- Windows/Linux packaged smoke в CI;
-- native secret storage, privacy review и diagnostic export preview;
-- backup/restore SQLite, migration recovery, disk-space checks;
-- performance profiling на большой коллекции;
-- SBOM, dependency/license audit и release reproducibility;
-- пользовательская документация и troubleshooting.
+Каждое создаваемое задание содержит:
 
-Exit criteria: чистая установка, обновление, откат и удаление проверены; критические threat-model сценарии закрыты; release artifact воспроизводим.
+- текущий milestone и разрешённый слой работы;
+- входные evidence и запрет выхода за scope;
+- точные deliverables и exit criteria;
+- обязательные проверки и stop conditions;
+- рекомендуемые Codex model и reasoning tier по [дорожной карте](roadmap.md) и [AGENTS.md](../AGENTS.md).
 
-## P8. Закрытая beta и релизное решение
+Codex model — инструмент разработки. Она не становится runtime-моделью переводчика и не меняет local-only контракт Ollama.
 
-Beta расширяет corpus, а не функциональный scope. Собираются только обезличенные metrics и добровольные diagnostic bundles.
-
-Exit criteria для решения о публичном релизе:
-
-- ноль source mutations и технически повреждённых опубликованных artifacts;
-- все blocker/correctness defects имеют regression tests;
-- compatibility matrix подтверждена на заявленных версиях и платформах;
-- semantic/lore quality достигла откалиброванного порога;
-- известные ограничения описаны и имеют безопасный fallback;
-- поддержка и обновление version profiles реалистичны по трудозатратам.
-
-## Сквозные правила выполнения
+## Сквозные правила
 
 - Каждая задача привязана к milestone criterion или defect evidence.
-- Parser/validator changes всегда прогоняют полный corpus.
-- Generated пользовательские данные не коммитятся.
-- Новая зависимость получает объяснение, license/security проверку и владельца обновлений.
-- Документация архитектуры меняется в том же PR, что и соответствующее решение.
-- Функция, не нужная для следующего вертикального доказательства, остаётся вне scope.
-
+- Parser/validator changes прогоняют полный corpus и holdout.
+- Private пользовательские данные не коммитятся и не уходят в Codex/cloud tools. Local research helpers возвращают только metadata, hashes, redacted/aggregate evidence или synthetic fixtures после leakage check.
+- Новая dependency получает обоснование, license/security review и update owner.
+- Документация меняется вместе с решением.
+- Функция, не нужная следующему вертикальному доказательству, остаётся вне scope.
