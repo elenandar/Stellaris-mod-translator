@@ -1,0 +1,1 @@
+# Stellaris-mod-translator
