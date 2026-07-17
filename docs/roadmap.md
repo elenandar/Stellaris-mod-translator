@@ -1,75 +1,91 @@
 # Дорожная карта
 
-Roadmap показывает порядок решений, а не обещанные даты. Статус M0 станет `accepted` после принятия и слияния документационного PR; остальные этапы не начаты.
+Roadmap показывает порядок решений, а не даты. Первоначальный M0 был слит, но его desktop/public scope заменён уточнённым владельцем персональным baseline. Текущий `M0R` считается принятым только после review и merge этого remediation.
 
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
-| M0 — Decision baseline | стратегия, аудит, архитектура, стек, каноны и план | — | владелец принимает направление либо возвращает конкретные решения на пересмотр | proposed |
-| M1 — Format & threat evidence | version profile, corpus, threat model, parser/packaging spikes | M0 | формат и companion deployment доказуемы на реальной установке | not started |
-| M2 — Safety kernel | lossless CST, typed markup, controlled render, containment | M1 | 100% поддержанного корпуса проходит round-trip и adversarial gates | not started |
-| M3 — Incremental project engine | snapshots, context identity, SQLite jobs, atomic artifacts | M2 | unchanged = zero work; crash/update/delete/rollback безопасны | not started |
-| M4 — Translation quality engine | official corpus, glossary, memory, context, Ollama, review/repair | M3 | нет критических смысловых ошибок в размеченном golden corpus | not started |
-| M5 — CLI vertical slice | полный конвейер на пилотных классах модов | M4 | безопасные компаньоны создаются и обновляются end-to-end | not started |
-| M6 — Desktop workflow | folder picker, analysis, Translate all, progress, review, rollback | M5 | пользователь проходит сценарий без terminal и без обхода gates | not started |
-| M7 — Production candidate | packages, signing, privacy, recovery, CI matrix, docs | M6 | чистая установка/обновление/откат и threat review пройдены | not started |
-| M8 — Closed beta | разнообразный corpus и quality/performance calibration | M7 | выполнены beta exit criteria; принято отдельное release decision | not started |
-| M9 — Public release | подписанный стабильный продукт и version-profile process | M8 | только явное решение владельца после отчёта beta | not started |
+| M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
+| M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | in progress |
+| M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | not started |
+| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | not started |
+| M2 — Safety kernel & technical CLI | lossless CST, typed atoms, controlled render, containment | M1A, M1B | одновременно получены `GO` и `QUALITY_FEASIBLE`; taxonomy/holdout проходят technical gates | not started |
+| M3 — Incremental engine & publishing | SQLite, identity, jobs, backup, versioned artifact и rollback | M2 | unchanged = zero work; crash/update/conflict/restore безопасны | not started |
+| M4 — Local quality engine | context, glossary, memory, Ollama, review/repair и editorial states | M1B, M3 | quality thresholds и human-review policy соблюдены | not started |
+| M5 — Daily CLI workflow | личный playset end-to-end и in-game smoke | M4 | повседневный update/rollback безопасен и принят владельцем | not started |
+| M6? — Optional interface decision | только доказанное улучшение UX либо отказ от UI | M5 | отдельный owner decision и ADR | optional / not planned |
 
-## Точки управленческого решения
+## Точки решения
 
-### D0 — Начинать ли разработку
+### D0R — Принят ли персональный baseline
 
-Принимается после M0. Одобрение означает финансирование только M1–M2 как доказательства основы, а не обещание довести продукт до релиза любой ценой.
+После M0R владелец разрешает только M1A и M1B. Это не разрешение писать весь продукт или добавлять UI.
 
-### D1 — Достаточно ли понятен реальный формат
+### D1A — Достаточно ли понятны формат и candidate layout
 
-После M1 выбирается одно:
+После M1A выставляется `GO` либо `BLOCKED`. `GO` означает готовность format-ветви к совместному gate с M1B. Невозможность доказать безопасный candidate layout без записи в active paths даёт `BLOCKED`; принятие такого отчёта не разрешает M2.
 
-- продолжить к safety kernel;
-- сузить поддерживаемый профиль;
-- остановить проект, если безопасный companion deployment или parser экономически неразумны.
+### D1B — Достижимо ли качество локально
+
+После M1B выставляется `QUALITY_FEASIBLE` с baseline model/profile и разрешёнными классами текста либо `QUALITY_NOT_FEASIBLE`. Только сочетание `M1A: GO` и `M1B: QUALITY_FEASIBLE` разрешает M2; отрицательный verdict останавливает реализацию до safety kernel.
 
 ### D2 — Доказана ли техническая безопасность
 
-После M2 запрещено переходить к массовому переводу при silent data loss, неполном markup coverage или недоказанном output containment.
+M3 запрещён при silent data loss, неполной taxonomy, недоказанном containment или mixed source generation.
 
-### D3 — Достижимо ли нужное качество
+### D3 — Готов ли процесс для личной игры
 
-После M4/M5 сравниваются локальный и облачный режимы, стоимость, скорость, доля fallback и человеческая оценка. Возможные решения: продолжить desktop, оставить expert CLI, сузить типы модов или остановить продукт.
-
-### D4 — Готова ли beta к публичному продукту
-
-После M8 владелец получает evidence report: совместимость, дефекты, качество, privacy, стоимость поддержки профилей и незакрытые риски. Только этот отчёт разрешает M9.
+После M5 владелец принимает ежедневный CLI workflow, список ограничений и backup/rollback. UI не требуется для успеха MVP.
 
 ## Критический путь
 
 ```mermaid
 flowchart LR
-    A["M1: доказать формат"] --> B["M2: доказать безопасность"]
-    B --> C["M4: доказать качество"]
-    C --> D["M5: доказать end-to-end"]
-    D --> E["M6–M8: продукт и beta"]
+    A["M0R: local baseline"] --> B["M1A: format and playset evidence"]
+    A --> C["M1B: local Ollama benchmark"]
+    B --> D["M2: safety kernel and technical CLI"]
+    C --> D
+    D --> E["M3: incremental engine and RU artifact"]
+    E --> F["M4: local quality engine"]
+    F --> G["M5: daily workflow and in-game smoke"]
 ```
 
-UI, дополнительные providers, агрегированный экспорт и поддержка других игр не должны обходить этот путь.
+M1A и M1B могут идти параллельно. M4 требует и доказанного качества модели, и безопасного project engine. UI, другие платформы и cloud не обходят этот путь.
 
-## Критерии немедленной остановки и пересмотра
+## Рекомендации моделей Codex
 
-- источник был изменён хотя бы в одном тесте;
+Каждое сгенерированное задание обязано повторять выбранную строку этой таблицы. Это рекомендации для Codex-разработки, не модели Ollama.
+
+| Работа | Рекомендуемый Codex |
+|---|---|
+| M0R, M1A/M1B, threat model, benchmark methodology и acceptance | `GPT-5.6 Sol, Ultra` |
+| M2 parser/renderer/containment и M3 identity/publish/rollback | `GPT-5.6 Sol, Ultra` |
+| Ограниченная реализация после утверждённого контракта | `GPT-5.6 Sol, High` или `Max`, затем Sol Ultra для safety gate |
+| M4 semantic/lore policy и финальная редакционная оценка | `GPT-5.6 Sol, Ultra` плюс человеческое решение |
+| Механические fixtures, повторяющиеся тесты и форматирование docs | `GPT-5.6 Terra, Medium` или `High`, затем Sol review для gate-critical изменений |
+| M5 final end-to-end gate | `GPT-5.6 Sol, Ultra` |
+
+`Ultra` — название уровня рассуждения в текущей Codex-среде владельца. Если в конкретной среде уровень недоступен, задание указывает фактически выбранный ближайший максимальный уровень и не снижает acceptance criteria. По официальной модели ролей Sol предназначен для frontier-quality работы, Terra — для сбалансированных bounded workloads; самый высокий effort резервируется для действительно сложных quality-first gates: [OpenAI model guidance](https://developers.openai.com/api/docs/guides/model-guidance?model=gpt-5.6).
+
+## Немедленная остановка и пересмотр
+
+- источник изменён хотя бы в одном тесте;
+- Workshop update создаёт mixed generation;
 - parser молча теряет или нормализует неизвестные байты;
-- модель может изменить служебную структуру вне controlled renderer;
-- обновление нельзя сделать идемпотентным и откатываемым;
-- golden corpus показывает систематические критические искажения смысла без приемлемого fallback;
-- законное использование корпуса или выбранных зависимостей не подтверждено;
-- поддержка новой версии Stellaris требует ручного переписывания ядра вместо version profile.
+- модель может изменить структуру вне controlled renderer;
+- `*-cloud`, remote или unknown-residency модель принимается как локальная;
+- конфликт load order разрешается недетерминированно;
+- crash оставляет частично активный artifact;
+- backup/restore не сохраняет manual/editorial work;
+- holdout показывает критические false accepts или систематически плохой русский без безопасного fallback;
+- следующий этап требует ослабить канон вместо предоставить evidence.
 
-## Что не планируется до M5
+## Не планируется до M5
 
-- визуальная полировка beyond минимального test harness;
+- desktop UI и визуальная полировка;
+- Windows/Linux;
 - Steam Workshop publishing;
-- командная синхронизация;
-- собственный model runtime;
-- плагины для других игр;
+- cloud providers, аккаунты или синхронизация;
+- другой game profile;
 - vector database;
-- микросервисы или удалённая backend-инфраструктура.
-
+- микросервисы или удалённая инфраструктура;
+- публичная beta и release packaging.

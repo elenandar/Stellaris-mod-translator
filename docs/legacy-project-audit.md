@@ -4,15 +4,15 @@
 
 ## Вердикт
 
-Старый проект — полезный инженерный прототип, но не фундамент нового приложения. Из него следует сохранить требования и тестовые уроки, а не кодовую архитектуру. Главная ценность — дисциплина «сначала структура, затем перевод, затем валидация» и журнал реальных дефектов. Главный предел — строковый Python-конвейер на регулярных выражениях, ручной Copilot-сценарий и кэш без достаточного контекста.
+Старый проект — полезный инженерный прототип, но не фундамент нового локального инструмента. Из него следует сохранить требования и тестовые уроки, а не кодовую архитектуру. Главная ценность — дисциплина «сначала структура, затем перевод, затем валидация» и журнал реальных дефектов. Главный предел — строковый Python-конвейер на регулярных выражениях, ручной Copilot-сценарий и кэш без достаточного контекста.
 
 Новый проект не копирует старый код. Каждое заимствованное правило ниже принято потому, что выдерживает независимую проверку.
 
 ## Что было проверено
 
 - документация и правила: [`README.md`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/README.md), [`translation_rules.md`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/translation_rules.md), [`known_issues.md`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/known_issues.md);
-- основные стадии: [`scan.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/scan.py), [`rebuild_skeleton.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/rebuild_skeleton.py), [`extract_todo.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/extract_todo.py), [`apply_translations.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/apply_translations.py), [`validate.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/validate.py);
-- автоматизация и состояние: [`translate_batches.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/translate_batches.py), [`translate_collection.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/translate_collection.py), [`translation_cache.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/translation_cache.py);
+- основные стадии: [`stellaris_loc_scan.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/stellaris_loc_scan.py), [`stellaris_loc_rebuild_skeleton.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/stellaris_loc_rebuild_skeleton.py), [`stellaris_loc_extract_todo.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/stellaris_loc_extract_todo.py), [`stellaris_loc_apply_translations.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/stellaris_loc_apply_translations.py), [`stellaris_loc_validate.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/stellaris_loc_validate.py);
+- автоматизация и состояние: [`stellaris_loc_translate_batches.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/stellaris_loc_translate_batches.py), [`stellaris_loc_translate_collection.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/stellaris_loc_translate_collection.py), [`stellaris_loc_translation_cache.py`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/tools/stellaris_loc_translation_cache.py);
 - тесты и четыре последовательных аудита, включая [`final_translation_audit3.md`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/reports/final_translation_audit3.md) и [`final_translation_audit4.md`](https://github.com/elenandar/Stellaris_mods/blob/7f0b1b654f3cf0d53a3f2d3e251eb3645f30bba6/reports/final_translation_audit4.md).
 
 Аудит был статическим: код, тесты и сохранённые отчёты изучены, но старый конвейер не принимался как эталон и не запускался на пользовательской коллекции.
@@ -21,11 +21,11 @@
 
 | Идея старого проекта | Решение | Как она выглядит в новом проекте |
 |---|---|---|
-| Исходный мод только для чтения | Принять | Двойная проверка путей, хэш исходного снимка до и после задания, запись только в staging и управляемый каталог компаньонов |
+| Исходный мод только для чтения | Принять и усилить | Immutable generation фактически прочитанных байтов либо clean abort при изменении; запись только в versioned staging и управляемый output root |
 | Стадии `scan → skeleton → TODO → batches → apply → validate` | Принять принцип, заменить реализацию | Устойчивое задание `discover → parse → contextualize → translate → review → validate → publish` с сохранённым состоянием и откатом |
 | Маскирование `$…$`, `[…]`, `£…£`, `§…` и escape-последовательностей | Заменить | Типизированное дерево разметки и непрозрачные атомы; модель не получает редактируемый синтаксис |
 | Точное сравнение количества защищённых конструкций | Принять и усилить | Сравнение типа, значения, парности и допустимого положения; неизвестная конструкция блокирует единицу |
-| Учёт повторяющихся ключей через occurrence index | Принять | Стабильная идентичность `mod + path + key + occurrence`; дубликаты источника — диагностируемый факт, новые дубликаты результата — ошибка |
+| Учёт повторяющихся ключей через occurrence index | Принять факт дубля, заменить идентичность | Все occurrences сохраняются для диагностики, но позиционный index нестабилен. Matching использует path/key, raw и semantic fingerprints, ограниченный соседний контекст и явный ambiguity blocker |
 | UTF-8 BOM, заголовок языка и скрытый `U+FEFF` как отдельные проверки | Принять | Профиль формата по версии игры, byte-level тесты и ровно одна допустимая сигнатура |
 | SQLite-кэш перевода | Принять концепцию, заменить ключ | Память перевода с исходным хэшем, контекстной сигнатурой, версией глоссария, происхождением и статусом одобрения |
 | Глоссарий и очередь кандидатов | Принять | Структурированные термины с версией игры, доменом, формами, источником и историей решения |
@@ -36,8 +36,8 @@
 | Перестраивать skeleton с английскими значениями поверх существующего результата | Отклонить | Инкрементальный diff, сохранение ручных правок и последней исправной версии |
 | Передавать модели весь глоссарий и все правила в каждом batch | Отклонить | Выборка только релевантных терминов, соседних реплик и лор-контекста |
 | Запрет на любое перемещение placeholders | Заменить | Неподвижны только действительно фиксированные конструкции; разрешённые атомы можно переставлять для русской грамматики, не изменяя их |
-| Copilot Agent как основной runtime | Отклонить | Самостоятельное desktop-приложение с адаптерами моделей; IDE не является частью пользовательского процесса |
-| Python-скрипты и отдельный API-процесс как продуктовая архитектура | Отклонить | Единый Tauri/Rust modular monolith без локального listening-порта и второго runtime |
+| Copilot Agent как основной runtime | Отклонить | Самостоятельный локальный Rust CLI с Ollama; IDE не является частью переводческого runtime |
+| Python-скрипты и отдельный API-процесс как продуктовая архитектура | Отклонить как runtime | Единый Rust modular monolith без собственного listening-порта; Python допустим только для disposable research/corpus tooling |
 | `Errors: 0` как достаточное доказательство готовности | Отклонить | Структурный, семантический, терминологический и литературный уровни качества измеряются отдельно |
 
 ## Что доказали реальные аудиты
@@ -50,7 +50,6 @@
 
 ## Итоговый перенос
 
-Переносятся десять инженерных требований: неизменность источника, разделение стадий, точные структурные инварианты, occurrence identity, BOM/header hygiene, dry-run, классификация source warning и output error, постоянное состояние заданий, регрессионный журнал и независимый финальный аудит.
+Переносятся десять инженерных требований: неизменность источника, разделение стадий, точные структурные инварианты, duplicate-occurrence disambiguation, BOM/header hygiene, dry-run, классификация source warning и output error, постоянное состояние заданий, регрессионный журнал и независимый финальный аудит.
 
-Не переносятся старый parser, формат TODO/cache, способ сборки output, Copilot-ориентированный процесс, Python runtime и предположение, что структурная чистота означает качественный перевод.
-
+Не переносятся старый parser, формат TODO/cache, способ сборки output, Copilot-ориентированный процесс, bundled Python runtime и предположение, что структурная чистота означает качественный перевод.

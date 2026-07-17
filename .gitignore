@@ -33,15 +33,19 @@ __pycache__/
 # Runtime and user data: never commit
 runtime/
 workspaces/
+workspace/
 staging/
 artifacts/
 output/
+exports/
+backups/
 translations/
 batches/
 cache/
 logs/
 diagnostics/
 reports/generated/
+benchmarks/private/
 fixtures/private/
 mods/
 fresh_mods/
@@ -49,6 +53,11 @@ fresh_mods/
 *.sqlite3
 *.sqlite-wal
 *.sqlite-shm
+*.sqlite-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal
+*.db
 *.db-wal
 *.db-shm
-
+*.db-journal

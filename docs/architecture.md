@@ -2,90 +2,114 @@
 
 ## Архитектурный стиль
 
-Продукт строится как **модульный монолит**: одно desktop-приложение Tauri, один Rust-процесс, одна локальная SQLite-база. React отвечает только за интерфейс. Доменное ядро не зависит от UI и вызывается также из внутреннего CLI для тестов и диагностики.
+Система строится как модульный монолит: один Rust CLI-процесс, одно доменное ядро и одна локальная SQLite-база. CLI является adapter над ядром. Tauri/React могут быть добавлены позже как необязательный интерфейс без изменения parser, storage и publisher.
 
-Отдельный Python runtime, локальный HTTP-сервер, Redis, Celery и микросервисы не нужны. Граница модулей обеспечивается Rust crates и типизированными интерфейсами, а не сетевыми протоколами.
+В поставляемом MVP нет собственного backend, listening-порта, облачного сервиса или bundled Python runtime. Установленный Ollama — отдельная локальная зависимость, доступная только через узкий loopback-adapter. Одноразовые Python-инструменты допустимы для исследования корпуса, но не входят в пользовательский runtime.
 
 ```mermaid
 flowchart TB
-    UI["React UI"] --> Host["Tauri host и команды"]
-    Host --> Core["Rust domain core"]
+    CLI["Rust CLI"] --> Core["Rust domain core"]
     Core --> DB[("SQLite")]
-    Core --> Models["Ollama / разрешённый API"]
-    Core --> Stage["Staging → companion mods"]
+    Core --> Ollama["Local Ollama on loopback"]
+    Core --> Stage["Staging → managed RU artifact"]
 ```
 
 ## Модули
 
 | Модуль | Ответственность | Чего не делает |
 |---|---|---|
-| `app-shell` | окна, dialogs, разрешения, lifecycle, системные пути, события UI | не переводит и не разбирает локализацию |
-| `workspace` | обнаружение установок и модов, canonical paths, version profile, source snapshots | не пишет в исходные каталоги |
-| `stellaris-loc` | byte-level чтение, lossless CST, typed markup, точечный render | не вызывает модель |
-| `context` | ссылки из scripts, соседние строки, тип сущности, speaker/event chain, context signature | не изменяет script-файлы |
-| `translation` | выбор терминов, memory retrieval, provider adapters, draft/review/repair | не получает права записи в файловую систему |
-| `quality` | структурные, семантические, терминологические и языковые findings | не исправляет структуру без повторной проверки |
-| `storage` | SQLite repositories, SQL migrations, jobs, provenance, last-known-good | не хранит секреты в открытом виде |
-| `publisher` | staging, полная валидация, descriptor/profile, atomic publish, rollback | не публикует частичный результат |
+| `cli` | команды, человекочитаемые планы и отчёты, подтверждение опасных переходов | не реализует parser, quality policy или прямую запись в источники |
+| `workspace` | установки, manifests, canonical roots, version profiles, immutable source generations | не пишет в исходные каталоги |
+| `stellaris-loc` | byte-level чтение, lossless CST, typed markup и controlled render | не вызывает модель |
+| `context` | ссылки из scripts, тип сущности, speaker/event chain, соседние единицы и fingerprints | не изменяет script-файлы |
+| `translation` | glossary/memory retrieval, локальный provider port, draft/review/repair | не получает файловых инструментов |
+| `quality` | structural, semantic, lore/terminology и Russian-language findings | не выдаёт машинный текст за редакционно одобренный |
+| `storage` | SQLite migrations, jobs, units, provenance, backups и artifacts | не хранит сырые тексты в обычных логах |
+| `publisher` | staging, полная проверка, versioned output, activation и rollback | не активирует частичный или непроверенный результат |
 
-Зависимости направлены внутрь: UI и провайдеры зависят от доменных контрактов, но parser и validator не знают о React, Ollama или конкретном облаке.
+Зависимости направлены внутрь: CLI, Ollama adapter и будущий UI зависят от доменных контрактов. Parser, validator и модель данных не знают о конкретном интерфейсе или названии LLM.
 
 ## Безопасный конвейер
 
-1. **Discover.** Пользовательский выбор превращается в явный manifest. Все пути canonicalize; symlink и выход за разрешённые корни отклоняются.
-2. **Snapshot.** Для каждого исходного файла фиксируются относительный путь, размер, кодировка и криптографический хэш. Каталог источника открывается только на чтение.
-3. **Parse.** Локализация разбирается в concrete syntax tree, сохраняющий BOM, переводы строк, пробелы, комментарии, порядок, дубли ключей, суффикс версии и исходные escapes.
-4. **Atomize.** Внутри значения строится typed markup tree. Переменные, scripted localisation, icons, format spans и escapes становятся непрозрачными атомами. Неизвестная конструкция получает finding и не передаётся как редактируемый текст.
-5. **Contextualize.** Из выбранного мода и его зависимостей собирается минимальный контекст: тип объекта, связанные ключи, соседние реплики, speaker, triggers/effects только как данные и релевантные термины.
-6. **Plan.** Diff engine классифицирует единицы как unchanged, new, changed, moved, deleted, context-changed или blocked. Unchanged не вызывает модель.
-7. **Translate.** Модель получает JSON-схему с человеческими сегментами и идентификаторами атомов. Текст мода всегда помечен как недоверенные данные, не как инструкция. У модели нет инструментов и доступа к файлам.
-8. **Review.** Независимый проход проверяет смысл и русский язык. Повторная попытка получает конкретные findings; это не слепой retry того же prompt.
-9. **Render.** Только разрешённые текстовые spans заменяются в копии CST. Заголовок и путь формируются по version profile.
-10. **Validate.** Проверяются round-trip invariants, ключи, occurrences, atoms, числа, encoding, coverage, семантика и output containment. Затем повторно сверяются исходные хэши.
-11. **Publish.** Полный компаньон собирается во временном каталоге на том же файловом томе, затем атомарно переключается. Предыдущая версия остаётся last-known-good.
+1. **Discover.** Выбранные каталоги превращаются в явный playset manifest. Пути проверяются относительно разрешённых roots; canonical staging/output roots не могут совпадать, содержать или находиться внутри source, Workshop, game и immutable-snapshot roots. Любой overlap, symlink, traversal или неоднозначная принадлежность блокирует задание.
+2. **Snapshot.** Файл читается один раз, а фактически прочитанные байты, metadata и hash сохраняются как immutable content-addressed generation. Если стабильное чтение невозможно или Workshop меняет источник, задание прерывается и строит новый generation.
+3. **Parse.** Localisation разбирается в concrete syntax tree, сохраняющий BOM, newline, пробелы, комментарии, порядок, дубли ключей, version suffix и исходные escapes.
+4. **Atomize.** Переменные, scripted localisation, icons, format spans и escapes становятся типизированными непрозрачными атомами. Неизвестная конструкция получает blocker и не передаётся как редактируемый текст.
+5. **Contextualize.** Из immutable generation выбранного playset собирается минимальный контекст: тип объекта, связанные ключи, speaker, соседние реплики, зависимости и релевантные термины.
+6. **Plan.** Diff engine классифицирует units как `unchanged`, `new`, `changed`, `moved`, `deleted`, `context_changed`, `policy_changed`, `ambiguous` или `blocked`.
+7. **Translate.** Выбранная локальная модель получает schema-bound payload с человеческими сегментами и atom IDs. Текст мода помечается как недоверенные данные. Tool calls и доступ к файлам отсутствуют.
+8. **Review.** Независимые проверки формируют findings. Repair получает конкретный defect contract; слепой повтор того же prompt запрещён.
+9. **Render.** Только разрешённые human spans заменяются в копии CST. Заголовок, путь и output layout задаются version/export profile.
+10. **Validate.** Проверяются round-trip invariants, keys, occurrences, atoms, numbers, encoding, coverage, semantics и output containment. Source generation повторно подтверждается перед публикацией.
+11. **Build.** Полный кандидат собирается в новом versioned staging directory и получает manifest, hashes и validation report.
+12. **Publish.** Platform-specific protocol активирует только проверенный version. Предыдущий last-known-good сохраняется до успешного smoke; при неясной семантике файловой системы операция останавливается.
 
-## Формальная модель единицы
+`Build` и `Publish` — разные операции. Проект не обещает универсальную атомарную замену непустого каталога одной командой файловой системы; конкретный протокол и crash matrix фиксируются после M1 spike.
 
-Минимальная идентичность перевода не равна тексту строки.
+## Идентичность и инвалидация
+
+Текст строки недостаточен для идентичности перевода. При этом parser version не должен притворяться изменением исходного текста, а positional occurrence index не является устойчивым ID.
 
 ```text
-unit_id = hash(mod_stable_id, relative_path, localisation_key, occurrence_index)
-source_revision = hash(raw_source_value, parser_profile_version)
-context_signature = hash(entity_type, references, neighbours, dependency_profile)
+document_id = hash(mod_stable_id, normalized_relative_path)
+raw_source_hash = hash(exact_source_bytes)
+semantic_source_fingerprint = hash(key, parsed_human_spans, typed_atoms)
+context_fingerprint = hash(normalized_entity_context, bounded_neighbours, relevant_dependency_slices)
+policy_fingerprint = hash(version_profile, selected_glossary_entries, applicable_quality_rules)
 ```
 
-Запись перевода содержит исходную ревизию, контекстную сигнатуру, версию официального корпуса и глоссария, provider/model, версии prompt и validators, статус review и ручное происхождение. Перенос перевода между разными контекстами разрешён только как кандидат и повторно проверяется.
+`parser_version`, полные dependency generations, glossary version и quality-profile version хранятся отдельными полями provenance. Fingerprints включают только доказанно релевантные slices, фактически выбранные glossary entries и применимые rules. Reparse или нерелевантное глобальное изменение может потребовать audit, но не объявляет автоматически каждую строку новой либо требующей LLM-work.
 
-## Данные и состояние
+Все duplicate occurrences сохраняются как факты источника. Stable matching использует path/key, raw и semantic fingerprints, ограниченный соседний контекст и явную диагностику неоднозначности. До подтверждения фактической load-order семантики движка ни одно совпадение не угадывается.
+
+## Состояние и резервное копирование
 
 SQLite хранит:
 
-- установки игры и version profiles;
-- исходные моды, зависимости и snapshots;
-- документы, units, occurrences, contexts и findings;
-- глоссарий с формами, доменом и provenance;
-- translation memory и manual overrides;
+- установки, playsets и version profiles;
+- source mods, dependencies и immutable generations;
+- documents, units, occurrences, contexts и findings;
+- glossary entries, forms, aliases, lore decisions и provenance;
+- translation memory, manual overrides и editorial states;
 - persistent jobs, attempts, checkpoints и usage;
-- опубликованные artifacts и last-known-good.
+- versioned artifacts, activation history и last-known-good.
 
-Пользовательские моды и полные тексты не попадают в Git. Сырые тексты не пишутся в обычные логи. Экспорт диагностического пакета требует явного действия и показывает состав до сохранения.
+Принятые переводы и решения являются пользовательскими данными, а не расходным кэшем. Система предоставляет проверяемый export/backup и restore до первого массового использования. Репозиторий не является резервной копией пользовательского workspace.
 
-## Публикация компаньона
+## Local Ollama boundary
 
-Для каждого источника поддерживается один app-managed companion mod. Он содержит только русскую локализацию, descriptor/dependency metadata и manifest происхождения; логика исходного мода не копируется. Существующая авторская русская локализация не дублируется по умолчанию. Удалённые исходные ключи удаляются из следующего артефакта, а ручные решения остаются в истории для возможного восстановления.
+MVP допускает только provider с доказанной локальной residency:
 
-Конкретные descriptor-поля, каталоги launcher и правила load order принадлежат version profile. Они должны быть подтверждены на реальной установке в M1, а не зашиты по памяти.
+- endpoint обязан разрешаться в loopback (`127.0.0.1` или `::1`) без redirect;
+- tag должен существовать в локальном inventory до начала задания;
+- `*-cloud`, remote endpoint, неизвестный tag или неизвестная residency отклоняются;
+- приложение не выполняет pull и не подбирает замену автоматически;
+- перед запуском фиксируются полный model digest, Ollama version, options, context size, prompt/template и schema versions;
+- изменение digest или значимого параметра создаёт новый quality profile и требует релевантного benchmark/review;
+- ответ модели никогда не является инструкцией для системы и проходит typed validation.
+
+Loopback endpoint сам по себе не доказывает локальную обработку, поэтому проверяются и endpoint, и конкретная модель. Дополнительная глобальная настройка Ollama local-only может использоваться как defense in depth после M1 threat review, но не заменяет проверки приложения.
+
+## Форма выходного артефакта
+
+Внутренняя идентичность, история, glossary и provenance всегда разделены по source mod. Форма экспорта является сменной versioned policy:
+
+- `per-source` — отдельный companion на каждый мод;
+- `playset-bundle` — один управляемый RU bundle для выбранного playset;
+- `hybrid` — bundle с отдельными исключениями.
+
+Рабочая гипотеза MVP — один RU bundle на playset, чтобы не создавать десятки launcher entries. M1 обязан проверить load order, `replace/`, cross-mod duplicate keys, удаление, отключение источника и rollback. Неоднозначный конфликт блокирует публикацию до явного правила победителя.
 
 ## Границы доверия
 
-- исходный мод, его строки, имена файлов и descriptor считаются недоверенными;
-- canonical path обязан оставаться внутри выбранного source root или app-managed output root;
-- provider не может инициировать команды, выбирать пути или менять структуру;
-- облаку отправляется минимальная единица только после opt-in; ключ хранится в системном хранилище секретов;
-- неизвестный синтаксис и неоднозначная структура fail closed;
-- никакой результат модели не публикуется напрямую: только parse, typed validation и controlled render.
+- исходный мод, descriptor, строки, имена файлов и зависимости недоверенны;
+- операции выполняются над immutable generation, а не над меняющимся Workshop-каталогом;
+- запись разрешена только в новый staging version и управляемый output root, которые доказанно disjoint со всеми source/game/snapshot roots;
+- Ollama не может выбирать пути, инициировать команды или менять структуру;
+- cloud и remote providers отсутствуют в MVP;
+- неизвестный синтаксис и неоднозначный load order fail closed;
+- публикация требует отдельного технического gate, а `editorially_approved` — человеческого решения.
 
-## Эволюция без переделки основы
+## Эволюция
 
-Provider adapters, version profiles, validators и exporters являются расширяемыми портами. Встраиваемый local runtime, агрегированный пакет или профиль другой игры допустимы позже, если не ослабляют каноны. Разделение на сервисы возможно только после измеренного ограничения модульного монолита и отдельного ADR.
-
+Version profiles, validators, context extractors и export policies являются расширяемыми портами. Tauri UI, другая платформа или cloud provider возможны только после стабильного M5 и отдельного ADR, если они не ослабляют каноны и действительно решают измеренную проблему.
