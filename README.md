@@ -6,9 +6,9 @@
 
 ## Статус
 
-Реализация ещё не начата. Текущий этап `M0R` исправляет первоначальный архитектурный baseline после независимого аудита и уточнения владельца: это личный local-only проект, а не публичное desktop-приложение.
+Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Текущий `M1A` находится на review; это evidence-этап, а не начало product CLI.
 
-После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`) и изолированный benchmark качества локальных моделей (`M1B`). Только verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; массовый перевод и active publish остаются запрещены до последующих gates M3/M4.
+После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, in review) и изолированный benchmark качества локальных моделей (`M1B`, not started). Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; массовый перевод и active publish остаются запрещены до последующих gates M3/M4.
 
 ## Контракт MVP
 
@@ -57,12 +57,16 @@
 - [План разработки](docs/development-plan.md)
 - [Дорожная карта](docs/roadmap.md)
 - [Снимок локального окружения](docs/evidence/local-environment-2026-07-17.md)
+- [Модель угроз M1A](docs/threat-model.md)
+- [Спецификация формата localisation](docs/specs/localisation-format.md)
+- [Taxonomy markup](docs/specs/markup-taxonomy.md)
+- [Контракт candidate artifact и publish boundary](docs/specs/artifact-and-publish-contract.md)
+- [Политика корпуса M1A](docs/corpus-policy.md)
+- [Version profile Stellaris 4.4.6](docs/version-profiles/stellaris-4.4.6.md)
+- [Итоговое evidence M1A](docs/evidence/m1a-format-playset-2026-07-17.md)
 
 ## Следующий шлюз
 
-Следующий шаг — не UI и не массовая генерация. Нужно параллельно доказать:
+Следующий шаг — owner review [M1A evidence](docs/evidence/m1a-format-playset-2026-07-17.md). Текущий report честно завершён `BLOCKED`: byte/containment evidence собрано, но profile coverage и effective load-order/collision policy недостаточны для `GO`. Это не разрешает active experiment либо M2.
 
-- `M1A`: lossless-разбор, threat model, read-only evidence реального load order и изолированную симуляцию RU-артефакта без установки в игру;
-- `M1B`: достижимость нужного смыслового, литературного и лорного качества на стратифицированном корпусе с установленными локальными моделями.
-
-Только положительные verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` разрешают перейти к safety kernel. `BLOCKED` или `QUALITY_NOT_FEASIBLE` останавливают ветку без M2, даже если сам отчёт корректен и принят как evidence.
+`M1B` остаётся отдельным допустимым evidence milestone и не меняет M1A verdict. Только позднее принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешат safety kernel. `BLOCKED` или `QUALITY_NOT_FEASIBLE` останавливают соответствующую ветвь даже при принятом отрицательном отчёте.
