@@ -1,6 +1,6 @@
 # ADR-0001: персональный local-first CLI
 
-- Статус: принят для M0R; становится baseline репозитория после merge
+- Статус: accepted baseline — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2)
 - Дата: 17 июля 2026 года
 - Владелец решения: владелец репозитория
 

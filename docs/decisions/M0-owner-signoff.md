@@ -1,7 +1,7 @@
 # Решение владельца M0
 
 - Дата: 17 июля 2026 года
-- Статус: рамки подтверждены владельцем; baseline M0R становится действующим после merge его PR
+- Статус: accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2)
 - Область: продуктовая стратегия и границы разработки
 
 ## Подтверждённые вводные владельца
@@ -59,6 +59,6 @@ MVP реализует один adapter для loopback Ollama и моделей
 
 ## Граница полномочий после M0R
 
-Merge M0R разрешает только evidence-работы M1A и M1B. Он не разрешает массовый перевод, запись в active game/mod paths, production publishing, UI development или cloud integration.
+Принятый M0R разрешает только evidence-работы M1A и M1B. Он не разрешает массовый перевод, запись в active game/mod paths, production publishing, UI development или cloud integration.
 
 Codex и другие cloud development tools не получают raw/private/copyrighted localisation. M1 использует только metadata, hashes, redacted summaries и synthetic/minimal fixtures; любое исключение требует отдельного явного consent владельца.

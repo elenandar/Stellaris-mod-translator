@@ -1,0 +1,343 @@
+{
+  "schema": "m1a-synthetic-format-cases-v1",
+  "cases": [
+    {
+      "id": "bom-lf-matrix",
+      "utf8": "\ufeffl_synthetic:\n# synthetic comment\n\n synthetic_key:0 \"Synthetic $SYN_TOKEN$ [syn.scope] £syn_icon£ §YSynthetic§!\"\n synthetic_empty:1 \"\"\n synthetic_key:2 \"Duplicate \\\"quoted\\\" value\"\n",
+      "expected": {
+        "blank_lines": 1,
+        "bom_at_start": true,
+        "comment_lines": 1,
+        "duplicate_key_groups": 1,
+        "duplicate_key_occurrences": 2,
+        "empty_value_occurrences": 1,
+        "entry_lines": 3,
+        "escape_occurrences": 2,
+        "final_newline": true,
+        "hidden_bom_count": 0,
+        "language_header_lines": 1,
+        "malformed_lines": 0,
+        "newline_style": "LF",
+        "opaque_constructs": 0,
+        "quoted_value_occurrences": 3,
+        "unknown_lines": 0,
+        "utf8_valid": true,
+        "version_suffix_occurrences": 3,
+        "markup": {
+          "formatting_spans": 1,
+          "icons": 1,
+          "placeholders": 1,
+          "scripted_localisation": 1,
+          "unknown_or_ambiguous": 0
+        }
+      }
+    },
+    {
+      "id": "crlf-no-final-newline",
+      "utf8": "l_synthetic:\r\n synthetic_crlf:0 \"Synthetic CRLF\"",
+      "expected": {
+        "bom_at_start": false,
+        "entry_lines": 1,
+        "final_newline": false,
+        "language_header_lines": 1,
+        "line_count": 2,
+        "newline_style": "CRLF",
+        "opaque_constructs": 0,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "mixed-newlines",
+      "utf8": "l_synthetic:\r\n synthetic_mixed:0 \"Synthetic\"\n# synthetic\r",
+      "expected": {
+        "comment_lines": 1,
+        "entry_lines": 1,
+        "final_newline": true,
+        "language_header_lines": 1,
+        "line_count": 3,
+        "newline_style": "mixed",
+        "opaque_constructs": 0,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "unknown-markup-is-opaque",
+      "utf8": "l_synthetic:\n? synthetic_unknown\n synthetic_bad:0 \"Unclosed $SYN_TOKEN\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "malformed_lines": 0,
+        "opaque_constructs": 2,
+        "unknown_lines": 1,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 1
+        }
+      }
+    },
+    {
+      "id": "malformed-entry-is-opaque",
+      "utf8": "l_synthetic:\n synthetic_bad:0 \"Unclosed\n",
+      "expected": {
+        "entry_lines": 0,
+        "malformed_lines": 1,
+        "opaque_constructs": 1,
+        "unknown_lines": 0,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "hidden-bom",
+      "utf8": "l_synthetic:\n\ufeff synthetic_hidden:0 \"Synthetic\"\n",
+      "expected": {
+        "bom_at_start": false,
+        "hidden_bom_count": 1,
+        "opaque_constructs": 1,
+        "unknown_lines": 1,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "escaped-markup-is-ambiguous",
+      "utf8": "l_synthetic:\n synthetic_escape:0 \"Synthetic \\$escaped\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "escape_occurrences": 1,
+        "opaque_constructs": 2,
+        "unknown_escape_occurrences": 1,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 1
+        }
+      }
+    },
+    {
+      "id": "fixture-backed-escapes",
+      "utf8": "l_synthetic:\n synthetic_escapes:0 \"Line\\nquote\\\"slash\\\\\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "escape_occurrences": 3,
+        "escaped_backslash_occurrences": 1,
+        "escaped_newline_occurrences": 1,
+        "escaped_quote_occurrences": 1,
+        "malformed_lines": 0,
+        "opaque_constructs": 0,
+        "unknown_escape_occurrences": 0,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "unknown-escape-is-opaque",
+      "utf8": "l_synthetic:\n synthetic_unknown_escape:0 \"Synthetic \\q\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "escape_occurrences": 1,
+        "opaque_constructs": 1,
+        "unknown_escape_occurrences": 1,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "unknown-formatting-code-is-opaque",
+      "utf8": "l_synthetic:\n synthetic_unknown_format:0 \"§QSynthetic§!\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "opaque_constructs": 2,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 2
+        }
+      }
+    },
+    {
+      "id": "adjacent-atoms-empty-human-span",
+      "utf8": "l_synthetic:\n synthetic_atoms:0 \"$SYN_A$£syn_b£[syn.c]§YS§!\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "opaque_constructs": 0,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 1,
+          "icons": 1,
+          "placeholders": 1,
+          "scripted_localisation": 1,
+          "unknown_or_ambiguous": 0
+        }
+      }
+    },
+    {
+      "id": "trailing-comment-is-unsupported",
+      "utf8": "l_synthetic:\n synthetic_trailing:0 \"Synthetic\" # unsupported\n",
+      "expected": {
+        "entry_lines": 0,
+        "malformed_lines": 1,
+        "opaque_constructs": 1,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "record-variants-positive",
+      "utf8": "l_synthetic:\n\t# synthetic comment\n \t\n\tsynthetic_record: \t\"Synthetic # text value\"\t\n",
+      "expected": {
+        "blank_lines": 1,
+        "comment_lines": 1,
+        "entry_lines": 1,
+        "malformed_lines": 0,
+        "opaque_constructs": 0,
+        "quoted_value_occurrences": 1,
+        "unknown_lines": 0,
+        "utf8_valid": true,
+        "version_suffix_occurrences": 0,
+        "whitespace_lines": 3
+      }
+    },
+    {
+      "id": "record-malformed-siblings",
+      "utf8": "l_synthetic:\n synthetic_suffix:x \"Synthetic\"\n synthetic_unquoted:0 Synthetic\n synthetic_multiline:0 \"Synthetic\n continuation\"\n",
+      "expected": {
+        "entry_lines": 0,
+        "malformed_lines": 3,
+        "opaque_constructs": 4,
+        "unknown_lines": 1,
+        "utf8_valid": true,
+        "whitespace_lines": 4
+      }
+    },
+    {
+      "id": "empty-delimiters-are-opaque",
+      "utf8": "l_synthetic:\n synthetic_empty_dollar:0 \"$$\"\n synthetic_empty_bracket:0 \"[]\"\n synthetic_empty_icon:0 \"££\"\n",
+      "expected": {
+        "entry_lines": 3,
+        "opaque_constructs": 3,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 3
+        }
+      }
+    },
+    {
+      "id": "unbalanced-and-orphan-delimiters",
+      "utf8": "l_synthetic:\n synthetic_open_bracket:0 \"[syn.scope\"\n synthetic_orphan_bracket:0 \"syn.scope]\"\n synthetic_open_icon:0 \"£syn_icon\"\n",
+      "expected": {
+        "entry_lines": 3,
+        "opaque_constructs": 3,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 3
+        }
+      }
+    },
+    {
+      "id": "nested-and-crossing-atoms",
+      "utf8": "l_synthetic:\n synthetic_nested:0 \"[syn[inner]]\"\n synthetic_cross_dollar:0 \"$SYN[scope$]\"\n synthetic_cross_icon:0 \"£syn[scope£]\"\n",
+      "expected": {
+        "entry_lines": 3,
+        "opaque_constructs": 6,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 6
+        }
+      }
+    },
+    {
+      "id": "formatting-state-errors",
+      "utf8": "l_synthetic:\n synthetic_orphan_reset:0 \"§!Synthetic\"\n synthetic_unclosed_format:0 \"§YSynthetic\"\n synthetic_bare_format:0 \"Synthetic§\"\n",
+      "expected": {
+        "entry_lines": 3,
+        "opaque_constructs": 3,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 3
+        }
+      }
+    },
+    {
+      "id": "formatting-crossing",
+      "utf8": "l_synthetic:\n synthetic_format_cross:0 \"§Y$SYN§!_TOKEN$\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "opaque_constructs": 2,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 2
+        }
+      }
+    },
+    {
+      "id": "formatting-nested-balanced",
+      "utf8": "l_synthetic:\n synthetic_nested_format:0 \"§YOuter §Yinner§! outer§!\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "opaque_constructs": 0,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 2,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 0
+        }
+      }
+    },
+    {
+      "id": "delimiter-like-unicode-is-text",
+      "utf8": "l_synthetic:\n synthetic_unicode_delimiters:0 \"Synthetic ＄token＄ ［scope］ ￡icon￡ ﹨n\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "escape_occurrences": 0,
+        "opaque_constructs": 0,
+        "unknown_escape_occurrences": 0,
+        "utf8_valid": true,
+        "markup": {
+          "formatting_spans": 0,
+          "icons": 0,
+          "placeholders": 0,
+          "scripted_localisation": 0,
+          "unknown_or_ambiguous": 0
+        }
+      }
+    },
+    {
+      "id": "invalid-utf8",
+      "hex": "fffe00",
+      "expected": {
+        "line_count": 1,
+        "newline_style": "none",
+        "opaque_constructs": 1,
+        "unknown_lines": 1,
+        "utf8_valid": false
+      }
+    }
+  ]
+}
