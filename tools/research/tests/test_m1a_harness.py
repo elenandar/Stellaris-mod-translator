@@ -626,6 +626,86 @@ class CandidateProtocolTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "SNAPSHOT_BLOB_MISMATCH")
             self.assertEqual(harness.candidate_state(seal), "empty")
 
+    def test_malformed_snapshot_blobs_fail_closed_before_write(self) -> None:
+        blobs = self._blobs()
+        blob = blobs[0]
+        inventory = blob.inventory
+        stale_inventory_hash = (
+            ("0" if inventory.sha256[0] != "0" else "1")
+            + inventory.sha256[1:]
+        )
+        cases = (
+            ("snapshot-wrong-type", object()),
+            ("data-str", replace(blob, _data="synthetic-not-bytes")),
+            ("data-mutable", replace(blob, _data=bytearray(blob.data))),
+            ("data-object", replace(blob, _data=object())),
+            ("inventory-none", replace(blob, inventory=None)),
+            ("inventory-wrong-type", replace(blob, inventory={})),
+            ("boolean-byte-count", replace(blob, byte_count=True)),
+            (
+                "boolean-inventory-byte-count",
+                replace(blob, inventory=replace(inventory, byte_count=True)),
+            ),
+            (
+                "stale-inventory-size",
+                replace(
+                    blob,
+                    inventory=replace(
+                        inventory,
+                        byte_count=inventory.byte_count + 1,
+                    ),
+                ),
+            ),
+            (
+                "stale-inventory-hash",
+                replace(
+                    blob,
+                    inventory=replace(inventory, sha256=stale_inventory_hash),
+                ),
+            ),
+            ("malformed-content-hash", replace(blob, sha256="g" * 64)),
+            (
+                "malformed-source-generation",
+                replace(blob, generation_sha256="G" * 64),
+            ),
+            (
+                "stale-source-generation",
+                replace(
+                    blob,
+                    generation_sha256=(
+                        ("0" if blob.generation_sha256[0] != "0" else "1")
+                        + blob.generation_sha256[1:]
+                    ),
+                ),
+            ),
+            (
+                "stale-generation-signature-size",
+                replace(
+                    blob,
+                    _generation_signature=replace(
+                        blob._generation_signature,
+                        size=blob.byte_count + 1,
+                    ),
+                ),
+            ),
+            (
+                "malformed-content-generation",
+                replace(blob, content_generation_sha256="0" * 63),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            for index, (case_name, tampered_blob) in enumerate(cases):
+                with self.subTest(case=case_name):
+                    seal = self._sealed_output(base, f"malformed-blob-{index}")
+                    with self.assertRaises(harness.HarnessError) as raised:
+                        harness.build_candidate(seal, (tampered_blob, blobs[1]))
+                    self.assertEqual(
+                        raised.exception.code,
+                        "SNAPSHOT_BLOB_MISMATCH",
+                    )
+                    self.assertEqual(harness.candidate_state(seal), "empty")
+
     def test_complete_manifest_rejects_generation_unbound_from_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             seal = self._sealed_output(Path(temporary).resolve(), "bad-manifest")
@@ -654,6 +734,49 @@ class CandidateProtocolTests(unittest.TestCase):
                 encoding="ascii",
             )
             self.assertEqual(harness.candidate_state(seal), "incomplete")
+
+    def test_complete_manifest_rejects_non_integer_source_positions(self) -> None:
+        cases = (
+            ("false", 0, False),
+            ("true", 1, True),
+            ("zero-float", 0, 0.0),
+            ("one-float", 1, 1.0),
+            ("negative", 0, -1),
+            ("out-of-range", 0, 2),
+            ("missing", 0, None),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            for case_index, (case_name, record_index, position) in enumerate(cases):
+                with self.subTest(case=case_name):
+                    seal = self._sealed_output(base, f"bad-position-{case_index}")
+                    harness.build_candidate(seal, self._blobs())
+                    manifest_path = seal.canonical / harness.MANIFEST_NAME
+                    manifest = json.loads(manifest_path.read_text("ascii"))
+                    if case_name == "missing":
+                        del manifest["source_order"][record_index]["position"]
+                    else:
+                        manifest["source_order"][record_index]["position"] = position
+                    encoded_order = json.dumps(
+                        manifest["source_order"],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=True,
+                    ).encode("ascii")
+                    manifest["source_order_digest"] = hashlib.sha256(
+                        encoded_order
+                    ).hexdigest()
+                    manifest_path.write_text(
+                        json.dumps(
+                            manifest,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=True,
+                        )
+                        + "\n",
+                        encoding="ascii",
+                    )
+                    self.assertEqual(harness.candidate_state(seal), "incomplete")
 
     def test_provenance_less_manifest_is_never_complete(self) -> None:
         payload = b"synthetic-payload"

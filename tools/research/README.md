@@ -80,11 +80,30 @@ always returns `CROSS_FILE_GENERATION_COHERENCE_UNPROVEN`.
 
 A discovered launcher database is read only as bytes for the generation
 manifest and is never opened through SQLite; schema/order semantics remain
-unproven. Real local-mod `path` values are not followed by this M1A helper. The
-scan reports exact-line, long structured-token, descriptor/value, and
-private-path match counts only; it never returns a match. Discovery and the
-repository leakage walk remain path-based between operations, so protection
-against an arbitrary concurrent same-UID actor is not claimed and
+unproven. Real local-mod `path` values are not followed by this M1A helper.
+
+Before role-specific parsing, every observed private input contributes an exact
+digest when nonempty plus physical-line and long structured-token fingerprints.
+This includes localisation, descriptors, active-load/playset, version,
+launcher-database and Steam discovery metadata. Invalid UTF-8/binary data stays
+byte-level. Only the first public localisation language-header line after an
+optional BOM is excluded from line fingerprints; metadata and later
+header-shaped lines receive no exception. Parsed private values and paths remain
+defense in depth. Public schema v2 returns only input/fingerprint denominators,
+typed match counts and booleans; any match yields controlled
+`LEAKAGE_DETECTED`, `status=blocked` and a non-zero CLI exit without returning a
+fragment, digest, filename or path.
+
+Write evidence is an exact field mapping, not five prose domains compressed
+into four numbers: `containment.source_write_attempts` covers registered game
+and Workshop source roots; `containment.launcher_write_attempts` covers launcher
+roots; `containment.active_path_write_attempts` covers Documents/active roots;
+`launcher.source_writes` states that launcher metadata/database has no write
+entrypoint; and `candidate.active_path_writes` states candidate writes stayed in
+disposable roots. All five are protocol-level zero counters/claims, not an
+OS-wide syscall audit. Discovery and the repository leakage walk remain
+path-based between operations, so protection against an arbitrary concurrent
+same-UID actor is not claimed and
 `CONCURRENT_SAME_UID_PATH_RACE_UNPROVEN` remains a blocker.
 
 Run the synthetic-only suite with:

@@ -27,7 +27,8 @@ Helper читает файл как bytes из уже открытого non-sym
 | invalid UTF-8 | `utf8_invalid` | opaque whole-file blocker; не печатать offending bytes |
 | только LF | `newline_lf` | сохранить каждый terminator |
 | только CRLF | `newline_crlf` | сохранить каждый terminator |
-| LF и CRLF | `newline_mixed` | сохранить, но block |
+| только bare CR | `newline_cr` | сохранить byte-identical, но block transform eligibility |
+| два или более вида из CR, LF и CRLF | `newline_mixed` | сохранить, но block |
 | последний record без newline | `final_newline_missing` | сохранить отсутствие terminator |
 
 Round trip реализован как возврат исходного immutable whole-file byte buffer. Декодированный text используется только для aggregate classification; renderer M1A не реконструирует строку и не выполняет повторное кодирование.
@@ -64,6 +65,8 @@ Research scanner движется слева направо и не исполь
 кроме terminator CR, LF или CRLF запрещены NUL, C0/C1 control characters и
 unsupported Unicode line separators. Та же проверка используется при извлечении
 opaque key hashes, поэтому opaque/malformed line не влияет на duplicate metrics.
+Physical records разделяются только CR, LF и CRLF. Unicode и legacy line
+separators остаются bytes внутри текущего opaque record и не создают новую line.
 
 Key временно используется только как локальный counting token и не попадает в output. Whole-file buffer сохраняет две одинаковые entries в исходном порядке, но M1A helper не публикует occurrence positions и не связывает collision с effective source order. Он считает intra-file duplicate groups/occurrences, same-source cross-file groups/occurrences и cross-source candidate collisions через domain-separated SHA-256.
 
@@ -108,9 +111,9 @@ ordinary/replace role не разделяют grouping. Поэтому counters 
 
 ## Malformed и unknown
 
-Следующие случаи fail closed: header не первый; несколько headers; invalid UTF-8; hidden BOM; mixed newline; non-decimal suffix; unquoted value; непарная quote; trailing syntax; неизвестный markup; physical multiline value. Helper может продолжить aggregate inventory других файлов, но run не может дать profile-wide transform eligibility.
+Следующие случаи fail closed: header не первый; несколько headers; invalid UTF-8; hidden BOM; bare CR; mixed newline; non-decimal suffix; unquoted value; непарная quote; trailing syntax; неизвестный markup; physical multiline value. Helper может продолжить aggregate inventory других файлов, но run не может дать profile-wide transform eligibility.
 
-Текущий helper публикует aggregate counters и top-level stable blocker codes. Per-record diagnostic codes, severity и occurrence positions относятся к будущему M2 contract. Ни один output не содержит filename, key, line, source excerpt или raw exception message.
+Текущий helper публикует aggregate counters и top-level stable blocker codes. Per-record diagnostic codes, severity и occurrence positions относятся к будущему M2 contract. Ни один collector output не содержит private/source filename, key, line, source excerpt или raw exception message.
 
 ## Round-trip invariant
 
@@ -142,7 +145,8 @@ Research fixtures находятся в [`fixtures/m1a`](../../fixtures/m1a/) и
 |---|---|
 | `bom-lf-matrix` | start BOM, LF, header/comment/blank, quoted/versioned/empty/duplicate entries и базовые atoms |
 | `crlf-no-final-newline` | CRLF и отсутствие final newline |
-| `mixed-newlines` | mixed classification с будущим profile blocker |
+| `bare-cr` | pure CR сохраняется byte-identical и остаётся transform blocker при валидном BOM/header |
+| `mixed-newlines` | комбинация CRLF, LF и CR классифицируется как mixed blocker |
 | `unknown-markup-is-opaque` | unknown line и unbalanced placeholder |
 | `malformed-entry-is-opaque` | unclosed quoted value |
 | `hidden-bom` | interior `U+FEFF` |

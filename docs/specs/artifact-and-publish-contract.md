@@ -19,7 +19,14 @@ Public evidence ограничено:
 
 ## Root containment
 
-До любой записи builder получает полный набор зарегистрированных roots: game, Workshop, source mods, launcher state и candidate output. M1A не создаёт raw snapshot на диске; отдельный snapshot root в этом разделе является только будущим условным требованием. Для каждого существующего root выполняются:
+До любой записи collector регистрирует как protected roots обнаруженные game,
+Workshop, Documents/active и launcher roots; synthetic candidate builder отдельно
+добавляет fixture root. Private local-mod `path` values M1A намеренно не follow-ит,
+поэтому их content roots не заявляются защищёнными или прочитанными. Candidate
+output — отдельный sealed disposable write root, а не ещё один protected input.
+M1A не создаёт raw snapshot на диске; отдельный snapshot root в этом разделе
+является только будущим условным требованием. Для каждого существующего root
+выполняются:
 
 1. absolute lexical validation: пустой path, NUL и unresolved `..` отклоняются;
 2. canonical resolution существующих ancestors без следования создаваемому leaf;
@@ -103,6 +110,14 @@ effective-engine-order evidence version
 ```
 
 Future production builder должен блокироваться при duplicate position, missing source, dependency cycle, order/dependency contradiction, unknown disabled state, generation mismatch или отсутствии доказанного effective winner для collision. M1A helper фиксирует только explicit synthetic source-order array/digest и aggregate dependency counts; он не строит или валидирует dependency graph. Filesystem enumeration никогда не считается effective source order.
+
+В synthetic M1A manifest `position` имеет exact JSON-integer contract: `bool` и
+float запрещены даже при числовом равенстве, а records обязаны образовывать
+непрерывный диапазон `0..file_count-1`. До path processing и первой candidate
+write каждый `SnapshotBlob` проверяется как exact immutable bytes/inventory
+shape; byte count, content hash, observer/content generations и inventory
+identity должны быть согласованы, иначе наружу выходит только
+`SNAPSHOT_BLOB_MISMATCH`.
 
 Read-only launcher metadata способно доказать сохранённую конфигурацию, но без versioned schema/runtime evidence не доказывает фактическую engine precedence. Download/install order Workshop также не считается mod load order.
 

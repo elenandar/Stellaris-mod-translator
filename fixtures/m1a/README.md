@@ -5,11 +5,12 @@ minimal.  No game, Workshop, launcher, private translation, or prior-project
 file was copied to create these fixtures.
 
 `format-cases.json` stores exact byte cases as escaped UTF-8 text or hex so BOM,
-CRLF, mixed-newline, missing-final-newline, and invalid-UTF-8 evidence survives
-Git and editor newline conversion.  Each case carries the expected aggregate
-classification used by the research-only tests.
+bare CR, CRLF, mixed-newline, missing-final-newline, and invalid-UTF-8 evidence
+survives Git and editor newline conversion.  Each case carries the expected
+aggregate classification used by the research-only tests.
 
-The manifest contains 26 cases, including isolated record siblings, empty,
+The manifest contains 27 cases, including isolated bare-CR classification,
+record siblings, empty,
 unbalanced, orphan and crossing delimiters, formatting-state failures, nested
 fixture-backed formatting, delimiter-like Unicode text, unsupported physical
 line separators, missing value separators, control characters, and an empty

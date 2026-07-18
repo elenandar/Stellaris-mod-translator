@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,23 @@ from tools.research import m1a_local_probe as probe
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_ROOT = REPOSITORY_ROOT / "fixtures" / "m1a"
+LEAKAGE_KEYS = {
+    "checked_repository_files",
+    "private_input_file_count",
+    "nonempty_private_input_file_count",
+    "source_file_fingerprint_count",
+    "source_line_fingerprint_count",
+    "source_token_fingerprint_count",
+    "private_identifier_count",
+    "match_count",
+    "exact_file_match_count",
+    "exact_line_match_count",
+    "token_match_count",
+    "private_value_match_count",
+    "passed",
+    "minimum_line_bytes",
+    "minimum_token_bytes",
+}
 
 
 def _fixture_bytes(case: dict) -> bytes:
@@ -86,6 +104,21 @@ class LocalProbeTests(unittest.TestCase):
         (launcher / "launcher-v2.sqlite").write_bytes(b"synthetic-not-opened-as-sqlite")
         return home
 
+    def _fingerprints_for(
+        self,
+        data: bytes,
+        *,
+        role: str = "official",
+    ) -> probe._PrivateInputFingerprints:
+        path_id = "synthetic-path-id"
+        located = probe.LocatedFile(
+            role=role,
+            source_id="synthetic-source-id",
+            path=Path("/synthetic/private-input"),
+            path_id=path_id,
+        )
+        return probe._private_input_fingerprints((located,), {path_id: data})
+
     def test_full_synthetic_collection_is_redacted_and_stable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -106,6 +139,15 @@ class LocalProbeTests(unittest.TestCase):
             self.assertEqual(result["corpus"]["roundtrip_failure_count"], 0)
             self.assertTrue(result["candidate"]["identical"])
             self.assertTrue(result["leakage"]["passed"])
+            self.assertEqual(set(result["leakage"]), LEAKAGE_KEYS)
+            self.assertEqual(
+                result["leakage"]["private_input_file_count"],
+                result["corpus"]["observed_file_count_including_metadata"],
+            )
+            self.assertEqual(
+                result["leakage"]["nonempty_private_input_file_count"],
+                result["corpus"]["observed_file_count_including_metadata"],
+            )
             self.assertIn(
                 "CROSS_FILE_GENERATION_COHERENCE_UNPROVEN",
                 result["blockers"],
@@ -238,6 +280,44 @@ class LocalProbeTests(unittest.TestCase):
                 self.assertEqual(inventory.entry_lines, 2)
                 self.assertEqual(len(probe._entry_key_hashes(payload)), 2)
 
+    def test_bare_cr_is_byte_preserved_and_blocks_transform_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            home = self._synthetic_home(root)
+            repository = self._synthetic_repository(root)
+            candidate_parent = root / "candidate-parent"
+            candidate_parent.mkdir()
+            official = (
+                home
+                / "Library"
+                / "Application Support"
+                / "Steam"
+                / "steamapps"
+                / "common"
+                / "Stellaris"
+                / "localisation"
+                / "english"
+                / "official.yml"
+            )
+            payload = (
+                probe.harness.UTF8_BOM
+                + b'l_english:\r synthetic_cr:0 "Synthetic CR"\r'
+            )
+            official.write_bytes(payload)
+            self.assertEqual(
+                probe.harness.inspect_bytes(payload).render_identity(),
+                payload,
+            )
+            result = probe.collect_evidence(
+                home=home,
+                repository_root=repository,
+                candidate_temporary_parent=candidate_parent,
+            )
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["inventory"]["newline_styles"]["CR"], 1)
+            self.assertGreaterEqual(result["format_blocker_count"], 1)
+            self.assertIn("FORMAT_PROFILE_HAS_BLOCKERS", result["blockers"])
+
     def test_schema_v2_covers_leakage_and_controlled_failures(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -256,10 +336,189 @@ class LocalProbeTests(unittest.TestCase):
             self.assertEqual(result["schema"], "m1a-local-redacted-evidence-v2")
             self.assertEqual(result["status"], "blocked")
             self.assertEqual(result["code"], "LEAKAGE_DETECTED")
+            self.assertEqual(set(result["leakage"]), LEAKAGE_KEYS)
         self.assertEqual(
             probe._controlled_failure("SYNTHETIC_FAILURE")["schema"],
             "m1a-local-redacted-evidence-v2",
         )
+
+    def test_all_observed_private_roles_are_fingerprinted_before_parsing(self) -> None:
+        cases = (
+            (
+                "invalid_utf8_descriptor",
+                "workshop_descriptor",
+                b"\xff\xfePRIVATE_SYNTHETIC_DESCRIPTOR_BINARY",
+            ),
+            (
+                "malformed_unquoted_descriptor",
+                "workshop_descriptor",
+                b"name=PRIVATE_SYNTHETIC_UNQUOTED_DESCRIPTOR\n",
+            ),
+            (
+                "invalid_active_load_json",
+                "active_load",
+                b'{"enabled_mods":[PRIVATE_SYNTHETIC_ACTIVE_LOAD',
+            ),
+            (
+                "exact_version_metadata",
+                "version_metadata",
+                b'{"rawVersion":"v4.4.6","checksum":"fdde"}',
+            ),
+            (
+                "launcher_database_binary",
+                "launcher_database",
+                b"\x00\xffPRIVATE_SYNTHETIC_LAUNCHER_DATABASE_BINARY\x00",
+            ),
+            (
+                "steam_discovery_metadata",
+                "steam_library_metadata",
+                b"\xffPRIVATE_SYNTHETIC_DISCOVERY_METADATA",
+            ),
+        )
+        for case_name, role, payload in cases:
+            with self.subTest(case=case_name):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary).resolve()
+                    home = self._synthetic_home(root)
+                    repository = self._synthetic_repository(root)
+                    candidate_parent = root / "candidate-parent"
+                    candidate_parent.mkdir()
+                    steamapps = (
+                        home
+                        / "Library"
+                        / "Application Support"
+                        / "Steam"
+                        / "steamapps"
+                    )
+                    paths = {
+                        "workshop_descriptor": (
+                            steamapps
+                            / "workshop"
+                            / "content"
+                            / "281990"
+                            / "opaque-source"
+                            / "descriptor.mod"
+                        ),
+                        "active_load": (
+                            home
+                            / "Documents"
+                            / "Paradox Interactive"
+                            / "Stellaris"
+                            / "dlc_load.json"
+                        ),
+                        "version_metadata": (
+                            steamapps
+                            / "common"
+                            / "Stellaris"
+                            / "launcher-settings.json"
+                        ),
+                        "launcher_database": (
+                            home
+                            / "Library"
+                            / "Application Support"
+                            / "Paradox Interactive"
+                            / "launcher-v2"
+                            / "launcher-v2.sqlite"
+                        ),
+                        "steam_library_metadata": steamapps / "libraryfolders.vdf",
+                    }
+                    private_input = paths[role]
+                    private_input.write_bytes(payload)
+                    (repository / (case_name + ".bin")).write_bytes(payload)
+                    result = probe.collect_evidence(
+                        home=home,
+                        repository_root=repository,
+                        candidate_temporary_parent=candidate_parent,
+                    )
+                    serialized = json.dumps(result, sort_keys=True)
+                    self.assertEqual(result["status"], "blocked")
+                    self.assertEqual(result["code"], "LEAKAGE_DETECTED")
+                    self.assertEqual(set(result["leakage"]), LEAKAGE_KEYS)
+                    self.assertGreaterEqual(
+                        result["leakage"]["exact_file_match_count"],
+                        1,
+                    )
+                    self.assertNotIn("PRIVATE_SYNTHETIC", serialized)
+                    self.assertNotIn(payload.hex(), serialized)
+                    self.assertNotIn(str(home), serialized)
+                    self.assertNotIn(str(repository), serialized)
+
+    def test_language_header_line_exception_is_localisation_only(self) -> None:
+        header = b"l_synthetic:\n"
+        bom_header = probe.harness.UTF8_BOM + header
+        digest = __import__("hashlib").sha256(b"l_synthetic:").digest()
+        localisation = self._fingerprints_for(header, role="official")
+        bom_localisation = self._fingerprints_for(bom_header, role="official")
+        metadata = self._fingerprints_for(header, role="version_metadata")
+        bom_metadata = self._fingerprints_for(
+            bom_header,
+            role="version_metadata",
+        )
+        later_header = self._fingerprints_for(
+            b"l_synthetic:\nl_private_later:\n",
+            role="official",
+        )
+        later_digest = __import__("hashlib").sha256(b"l_private_later:").digest()
+        self.assertNotIn(digest, localisation.line_hashes)
+        self.assertFalse(bom_localisation.line_hashes)
+        self.assertIn(later_digest, later_header.line_hashes)
+        self.assertIn(digest, metadata.line_hashes)
+        self.assertTrue(bom_metadata.line_hashes)
+        self.assertEqual(localisation.file_hashes, metadata.file_hashes)
+
+    def test_invalid_utf8_long_token_leak_is_detected_without_replacement(self) -> None:
+        token = (
+            b"PRIVATE_SYNTHETIC_BINARY_TOKEN_"
+            b"0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+        )
+        private_data = b"\xffbinary-prefix " + token + b" binary-suffix\x00"
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary).resolve()
+            (repository / "partial.bin").write_bytes(b"repository " + token + b" tail")
+            result = probe._leakage_evidence(
+                repository,
+                self._fingerprints_for(private_data, role="launcher_database"),
+                set(),
+            )
+        serialized = json.dumps(result, sort_keys=True)
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["exact_file_match_count"], 0)
+        self.assertGreaterEqual(result["token_match_count"], 1)
+        self.assertNotIn(token.decode("ascii"), serialized)
+
+    def test_leakage_cli_exit_is_nonzero_and_serialized_output_is_redacted(self) -> None:
+        marker = "PRIVATE_SYNTHETIC_LEAKAGE_OUTPUT_MARKER"
+        leakage = {
+            "checked_repository_files": 1,
+            "private_input_file_count": 1,
+            "nonempty_private_input_file_count": 1,
+            "source_file_fingerprint_count": 1,
+            "source_line_fingerprint_count": 1,
+            "source_token_fingerprint_count": 0,
+            "private_identifier_count": 0,
+            "match_count": 1,
+            "exact_file_match_count": 1,
+            "exact_line_match_count": 0,
+            "token_match_count": 0,
+            "private_value_match_count": 0,
+            "passed": False,
+            "minimum_line_bytes": probe.MIN_PRIVATE_LINE_BYTES,
+            "minimum_token_bytes": probe.MIN_PRIVATE_TOKEN_BYTES,
+        }
+        evidence = {
+            "schema": probe.SCHEMA,
+            "status": "blocked",
+            "code": "LEAKAGE_DETECTED",
+            "leakage": leakage,
+        }
+        output = io.StringIO()
+        with mock.patch.object(probe, "collect_evidence", return_value=evidence):
+            with mock.patch.object(sys, "stdout", output):
+                exit_code = probe.main(["collect"])
+        serialized = output.getvalue()
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(json.loads(serialized), evidence)
+        self.assertNotIn(marker, serialized)
 
     def test_leakage_result_contains_only_counts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -271,7 +530,14 @@ class LocalProbeTests(unittest.TestCase):
                 .sha256(b"PRIVATE_SEQUENCE_FOR_BOOLEAN_ONLY")
                 .digest()
             }
-            result = probe._leakage_evidence(root, source_hashes, set(), set())
+            fingerprints = probe._PrivateInputFingerprints(
+                observed_file_count=1,
+                nonempty_file_count=1,
+                file_hashes=frozenset(),
+                line_hashes=frozenset(source_hashes),
+                token_hashes=frozenset(),
+            )
+            result = probe._leakage_evidence(root, fingerprints, set())
             serialized = json.dumps(result, sort_keys=True)
             self.assertFalse(result["passed"])
             self.assertEqual(result["match_count"], 1)
@@ -303,8 +569,7 @@ class LocalProbeTests(unittest.TestCase):
             source = b"SHORT_LEAK\nsource PRIVATE_TOKEN_FRAGMENT_WITH_LONG_SUFFIX_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ tail\n"
             result = probe._leakage_evidence(
                 root,
-                probe._line_fingerprints(source),
-                probe._token_fingerprints(source),
+                self._fingerprints_for(source),
                 set(),
             )
             self.assertFalse(result["passed"])
@@ -414,8 +679,7 @@ class LocalProbeTests(unittest.TestCase):
             (repository / "path.bin").write_bytes(str(home).encode("utf-8"))
             result = probe._leakage_evidence(
                 repository,
-                set(),
-                set(),
+                probe._private_input_fingerprints((), {}),
                 set(discovery.private_path_values),
             )
             self.assertFalse(result["passed"])
@@ -437,7 +701,7 @@ class LocalProbeTests(unittest.TestCase):
         self.assertEqual(output["code"], "INVALID_ARGUMENTS")
         self.assertEqual(output["schema"], "m1a-local-redacted-evidence-v2")
 
-    def test_discovery_rejects_relative_library_and_workshop_symlink(self) -> None:
+    def test_discovery_blocks_relative_library_and_rejects_workshop_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             home = root / "home"
@@ -446,9 +710,13 @@ class LocalProbeTests(unittest.TestCase):
             (steamapps / "libraryfolders.vdf").write_text(
                 '"path" "relative/library"\n', encoding="utf-8"
             )
-            with self.assertRaises(probe.ProbeError) as raised:
-                probe.discover(home)
-            self.assertEqual(raised.exception.code, "STEAM_LIBRARY_METADATA_INVALID")
+            discovery = probe.discover(home)
+            self.assertFalse(discovery.steam_library_metadata_valid)
+            self.assertEqual(len(discovery.discovery_metadata_files), 1)
+            self.assertEqual(
+                discovery.discovery_metadata_fingerprints.observed_file_count,
+                1,
+            )
 
             (steamapps / "libraryfolders.vdf").unlink()
             workshop = steamapps / "workshop" / "content" / "281990"

@@ -40,7 +40,8 @@ Equality, ancestor/descendant overlap, symlink/device-inode alias, unresolved tr
 | invalid UTF-8 | `utf8_invalid` | whole-file opaque blocker |
 | LF | `newline_lf` | classified exact |
 | CRLF | `newline_crlf` | classified exact |
-| mixed newline | `newline_mixed` | exact round trip, blocker |
+| bare CR | `newline_cr` | byte-identical round trip, transform blocker |
+| два или более вида из CR, LF и CRLF | `newline_mixed` | exact round trip, blocker |
 | missing final newline | `final_newline_missing` | classified exact; отсутствие сохраняется |
 | first-line language header | `language_header` | required; value не публикуется из private corpus |
 | comments/blank/space/tab | aggregate line classes | whole-file bytes exact; record objects не materialize |
@@ -51,6 +52,9 @@ Equality, ancestor/descendant overlap, symlink/device-inode alias, unresolved tr
 | malformed/unknown line | aggregate counter | opaque blocker, no repair; per-record codes остаются M2 |
 
 Format contract полностью определён в [localisation-format.md](../specs/localisation-format.md). `classified exact` не означает permission to translate.
+Physical line boundaries существуют только для CR, LF и CRLF; Unicode/legacy
+separators не разделяют records. `mixed` означает любую комбинацию двух или
+более из этих трёх newline kinds.
 
 ## Markup profile
 
@@ -99,7 +103,7 @@ Public guide также описывает `\t`, `[[` и icon frame syntax; до
 Profile fail closed для:
 
 - любого markup/escape, не имеющего fixture и expected classification;
-- malformed quoting, multiline quoted value, hidden BOM, invalid UTF-8 и mixed newline;
+- malformed quoting, multiline quoted value, hidden BOM, invalid UTF-8, bare CR и mixed newline;
 - неизвестного descriptor/launcher schema и любой dependency graph, пока identity/cycle/missing semantics не доказаны;
 - ambiguous path identity, hardlink alias или duplicate relative path;
 - arbitrary concurrent same-UID path/ancestor substitution, пока traversal и authorization не descriptor-rooted;

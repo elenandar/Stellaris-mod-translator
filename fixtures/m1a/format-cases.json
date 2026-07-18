@@ -47,6 +47,20 @@
       }
     },
     {
+      "id": "bare-cr",
+      "utf8": "\ufeffl_synthetic:\r synthetic_cr:0 \"Synthetic CR\"\r",
+      "expected": {
+        "bom_at_start": true,
+        "entry_lines": 1,
+        "final_newline": true,
+        "language_header_lines": 1,
+        "line_count": 2,
+        "newline_style": "CR",
+        "opaque_constructs": 0,
+        "utf8_valid": true
+      }
+    },
+    {
       "id": "mixed-newlines",
       "utf8": "l_synthetic:\r\n synthetic_mixed:0 \"Synthetic\"\n# synthetic\r",
       "expected": {

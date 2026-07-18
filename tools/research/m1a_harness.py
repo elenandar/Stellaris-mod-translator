@@ -687,6 +687,7 @@ class StableRead:
     sha256: str
     generation_sha256: str
     _identity: Tuple[int, int] = field(repr=False)
+    _generation_signature: _GenerationSignature = field(repr=False)
     _data: bytes = field(repr=False)
 
     @property
@@ -769,6 +770,7 @@ def read_stable_file(
             sha256=digest,
             generation_sha256=opened.opaque_digest(digest),
             _identity=(opened.device, opened.inode),
+            _generation_signature=opened,
             _data=first,
         )
     except HarnessError:
@@ -829,6 +831,7 @@ class SnapshotBlob:
     generation_sha256: str
     content_generation_sha256: str
     inventory: FormatInventory
+    _generation_signature: _GenerationSignature = field(repr=False)
     _data: bytes = field(repr=False)
 
     @property
@@ -930,6 +933,7 @@ def snapshot_sources(
                     stable.byte_count, stable.sha256
                 ),
                 inventory=document.inventory,
+                _generation_signature=stable._generation_signature,
                 _data=stable.data,
             )
         )
@@ -1264,20 +1268,110 @@ def _candidate_source_id(relative_path: str) -> str:
 
 
 def _validate_snapshot_blob(blob: SnapshotBlob) -> None:
-    data = blob.data
-    digest = hashlib.sha256(data).hexdigest()
-    if (
-        not isinstance(blob.byte_count, int)
-        or isinstance(blob.byte_count, bool)
-        or blob.byte_count != len(data)
-        or not isinstance(blob.sha256, str)
-        or re.fullmatch(r"[0-9a-f]{64}", blob.sha256) is None
-        or blob.sha256 != digest
-        or blob.content_generation_sha256
-        != _content_generation_sha256(len(data), digest)
-        or blob.inventory.byte_count != len(data)
-        or blob.inventory.sha256 != digest
-    ):
+    if type(blob) is not SnapshotBlob:
+        raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+    try:
+        data = blob._data
+        inventory = blob.inventory
+        generation_signature = blob._generation_signature
+        if (
+            type(data) is not bytes
+            or type(inventory) is not FormatInventory
+            or type(generation_signature) is not _GenerationSignature
+        ):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        inventory_counts = (
+            inventory.byte_count,
+            inventory.hidden_bom_count,
+            inventory.line_count,
+            inventory.language_header_lines,
+            inventory.comment_lines,
+            inventory.blank_lines,
+            inventory.whitespace_lines,
+            inventory.entry_lines,
+            inventory.version_suffix_occurrences,
+            inventory.quoted_value_occurrences,
+            inventory.escape_occurrences,
+            inventory.escaped_newline_occurrences,
+            inventory.escaped_quote_occurrences,
+            inventory.escaped_backslash_occurrences,
+            inventory.unknown_escape_occurrences,
+            inventory.empty_value_occurrences,
+            inventory.duplicate_key_groups,
+            inventory.duplicate_key_occurrences,
+            inventory.malformed_lines,
+            inventory.unknown_lines,
+            inventory.opaque_constructs,
+        )
+        if (
+            type(blob.opaque_source_id) is not str
+            or re.fullmatch(r"src-[0-9a-f]{16}", blob.opaque_source_id) is None
+            or type(blob.relative_path) is not str
+            or type(blob.byte_count) is not int
+            or blob.byte_count < 0
+            or type(blob.sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", blob.sha256) is None
+            or type(blob.generation_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", blob.generation_sha256) is None
+            or type(blob.content_generation_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", blob.content_generation_sha256) is None
+            or type(inventory.sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", inventory.sha256) is None
+            or type(inventory.utf8_valid) is not bool
+            or type(inventory.bom_at_start) is not bool
+            or type(inventory.final_newline) is not bool
+            or type(inventory.newline_style) is not str
+            or inventory.newline_style
+            not in {"CR", "CRLF", "LF", "mixed", "none"}
+            or any(type(value) is not int or value < 0 for value in inventory_counts)
+            or type(inventory.markup) is not MarkupCounts
+        ):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        markup_counts = (
+            inventory.markup.placeholders,
+            inventory.markup.icons,
+            inventory.markup.formatting_spans,
+            inventory.markup.scripted_localisation,
+            inventory.markup.unknown_or_ambiguous,
+        )
+        if any(type(value) is not int or value < 0 for value in markup_counts):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        signature_values = (
+            generation_signature.device,
+            generation_signature.inode,
+            generation_signature.mode,
+            generation_signature.size,
+            generation_signature.mtime_ns,
+            generation_signature.ctime_ns,
+        )
+        if (
+            any(type(value) is not int for value in signature_values)
+            or generation_signature.device < 0
+            or generation_signature.inode < 0
+            or generation_signature.mode != stat.S_IFREG
+            or generation_signature.size < 0
+        ):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        digest = hashlib.sha256(data).hexdigest()
+        if (
+            blob.byte_count != len(data)
+            or blob.sha256 != digest
+            or blob.content_generation_sha256
+            != _content_generation_sha256(len(data), digest)
+            or generation_signature.size != len(data)
+            or blob.generation_sha256 != generation_signature.opaque_digest(digest)
+            or inventory.byte_count != len(data)
+            or inventory.sha256 != digest
+        ):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+    except HarnessError:
+        raise
+    except (AttributeError, TypeError, ValueError):
         raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
 
 
@@ -1508,8 +1602,12 @@ def _manifest_describes_complete_tree(root_fd: int) -> bool:
                 return False
             generation = record.get("generation")
             opaque_id = record.get("opaque_id")
+            position = record.get("position")
             if (
-                record.get("position") != index
+                type(position) is not int
+                or position < 0
+                or position >= file_count
+                or position != index
                 or not isinstance(generation, str)
                 or re.fullmatch(r"[0-9a-f]{64}", generation) is None
                 or not isinstance(opaque_id, str)
@@ -1670,6 +1768,7 @@ def build_candidate(
     path_keys: List[Tuple[str, ...]] = []
     parent_spellings: Dict[Tuple[str, ...], Tuple[str, ...]] = {}
     for blob in blobs:
+        _validate_snapshot_blob(blob)
         normalised, collision_key = _normalise_relative_path(blob.relative_path)
         if normalised != blob.relative_path or collision_key in seen:
             raise HarnessError("DUPLICATE_RELATIVE_PATH")
