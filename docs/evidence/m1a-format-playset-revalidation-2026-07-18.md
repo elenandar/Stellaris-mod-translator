@@ -120,15 +120,16 @@ localisation keys или values в Git или PR не сохраняются. Re
 | Observed files including metadata | `8 098` |
 | Round-trip pass / failure | `7 971` / `0` |
 | Pre/post manifests equal | `true` |
-| Content/topology generation SHA-256 | `aa64e51eb9ff06921ef4e21a4fdfb5ceb46745f3622690d0726cd0a55cfdb559` |
+| Content/topology generation SHA-256 | `a19929ef0ed147066fe193dfc9acde31e6059a5589a7d7f94494726ed2415f21` |
 | Intra-file duplicate groups / occurrences | `973` / `2 050` |
 | Same-source cross-file groups / occurrences | `283 704` / `2 746 988` |
 | Cross-source groups / occurrences | `2 804` / `35 174` |
 | Synthetic candidate manifest / tree SHA-256 | `46f50f997b9ac46024d5f94213319fe1f8005eba88e960788b6c78d84e804dfb` / `7718d952a307f7e77de375079e65907b971bcd24f063e4353ea5fed073f48225` |
 | Leakage passed / match count | `true` / `0` |
-| Leakage private inputs / nonempty inputs | `FINAL_COLLECTOR_REQUIRED` |
-| Whole-file / line / token fingerprints | `FINAL_COLLECTOR_REQUIRED` |
-| Checked repository files | `FINAL_COLLECTOR_REQUIRED` |
+| Leakage private inputs / nonempty inputs | `8 098` / `8 098` |
+| Whole-file / line / token fingerprints | `8 083` / `2 057 356` / `51 992` unique digests |
+| Parsed private/path identifiers | `16 402` |
+| Checked repository files | `41` |
 | Blockers | `CONCURRENT_SAME_UID_PATH_RACE_UNPROVEN`, `CROSS_FILE_GENERATION_COHERENCE_UNPROVEN`, `DEPENDENCY_GRAPH_UNPROVEN`, `EFFECTIVE_LOAD_ORDER_UNPROVEN`, `EXPORT_POLICY_UNRESOLVED`, `FORMAT_PROFILE_HAS_BLOCKERS`, `GAME_VERSION_UNVERIFIED`, `LAUNCHER_DB_METADATA_UNAVAILABLE`, `LOCAL_SOURCE_CONTENT_NOT_FOLLOWED`, `REPLACE_LAYER_SEMANTICS_UNPROVEN` |
 
 `status=ok` означает только успешное завершение aggregate collection. Наличие
