@@ -6,9 +6,9 @@
 
 ## Статус
 
-Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Текущий `M1A` находится на review; это evidence-этап, а не начало product CLI.
+Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) слит как [`2b51879`](https://github.com/elenandar/Stellaris-mod-translator/commit/2b51879d8e358cf5412f3a6792f33c71ae79d863); текущий verdict остаётся `M1A: BLOCKED`, а hardening follow-up проходит review. Это evidence-этап, а не начало product CLI.
 
-После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, in review) и изолированный benchmark качества локальных моделей (`M1B`, not started). Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; массовый перевод и active publish остаются запрещены до последующих gates M3/M4.
+После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`, not started). Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас M2, массовый перевод и active publish запрещены.
 
 ## Контракт MVP
 
@@ -64,9 +64,10 @@ Production-реализация ещё не начата. Персональны
 - [Политика корпуса M1A](docs/corpus-policy.md)
 - [Version profile Stellaris 4.4.6](docs/version-profiles/stellaris-4.4.6.md)
 - [Итоговое evidence M1A](docs/evidence/m1a-format-playset-2026-07-17.md)
+- [Hardening revalidation M1A, 18 июля](docs/evidence/m1a-format-playset-revalidation-2026-07-18.md)
 
 ## Следующий шлюз
 
-Следующий шаг — owner review [M1A evidence](docs/evidence/m1a-format-playset-2026-07-17.md). Текущий report честно завершён `BLOCKED`: byte/containment evidence собрано, но profile coverage и effective load-order/collision policy недостаточны для `GO`. Это не разрешает active experiment либо M2.
+Следующий шаг — owner review [hardening revalidation](docs/evidence/m1a-format-playset-revalidation-2026-07-18.md). Исторический report 17 июля и повторная проверка 18 июля честно сохраняют `BLOCKED`: byte/containment evidence собрано, но atomic cross-file coherence, arbitrary same-UID path-race protection и effective load-order/collision policy недостаточны для `GO`. Это не разрешает active experiment либо M2.
 
 `M1B` остаётся отдельным допустимым evidence milestone и не меняет M1A verdict. Только позднее принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешат safety kernel. `BLOCKED` или `QUALITY_NOT_FEASIBLE` останавливают соответствующую ветвь даже при принятом отрицательном отчёте.

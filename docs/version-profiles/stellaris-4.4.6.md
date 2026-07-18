@@ -1,8 +1,9 @@
 # Version profile: Stellaris 4.4.6
 
 - Profile ID: `stellaris-4.4.6`
-- Статус: `M1A — in review`; transformation/export не разрешены
-- Дата evidence: 17 июля 2026 года
+- Статус: `M1A — BLOCKED`; evidence PR #3 merged, transformation/export не разрешены
+- Исходная дата evidence: 17 июля 2026 года
+- Hardening revalidation: 18 июля 2026 года
 - Game version: `Pegasus v4.4.6 (fdde)`
 - Platform: Apple Silicon `arm64`, macOS `26.5.2` (`25F84`)
 
@@ -12,7 +13,7 @@
 
 Эти два источника подтверждают identity версии, но не grammar/load-order contract. [Paradox-hosted localisation guide](https://stellaris.paradoxwikis.com/Localisation_modding) используется только как candidate taxonomy: части страницы помечены как проверенные на более старой версии. Profile принимает конструкцию лишь после synthetic fixture, expected classification и локального aggregate census.
 
-Полные hashes helper, fixture tree, sanitized run и итогового report фиксируются после final validation в разделе «Evidence identities» ниже; raw source paths, per-file corpus hashes и corpus bytes не публикуются.
+Исходные hashes helper, fixture tree, sanitized run и report от 17 июля сохранены как исторический snapshot ниже. Текущие schema v2 identities и результаты hardening фиксируются в [revalidation от 18 июля](../evidence/m1a-format-playset-revalidation-2026-07-18.md); raw source paths, per-file corpus hashes и corpus bytes не публикуются.
 
 ## Scope roots
 
@@ -23,7 +24,7 @@ Profile различает identities, а не сохраняет абсолют
 | game localisation | read-only | count/bytes/generation digest |
 | Workshop sources | read-only | count/bytes/opaque source generation digest |
 | launcher/playset metadata | read-only stable byte read | schema flags/counts/order digest либо blocker |
-| accepted generation | immutable bytes только в process memory | aggregate content/topology digest; raw disk snapshot отсутствует |
+| accepted generation | immutable per-file bytes только в process memory | два последовательных aggregate content/topology digest; equality не доказывает atomic cross-file snapshot |
 | research candidate | отдельный disposable root | logical manifest/tree digest; удаляется после run |
 | repository | только M1A docs/helper/synthetic fixtures | normal Git diff после leakage check |
 
@@ -83,7 +84,7 @@ Public guide также описывает `\t`, `[[` и icon frame syntax; до
 
 ## Workshop generation
 
-[Steamworks](https://partner.steamgames.com/doc/features/workshop/implementation) документирует auto-update и removal после unsubscribe. Profile поэтому не считает Workshop directory immutable. M1A принимает фактически прочитанные bytes только в память и делает whole-run clean abort при identity/size/content/topology mismatch; future content-addressed disk copy потребует отдельного contract. Steam install/download order не является playset/load order.
+[Steamworks](https://partner.steamgames.com/doc/features/workshop/implementation) документирует auto-update и removal после unsubscribe. Profile поэтому не считает Workshop directory immutable. M1A принимает фактически прочитанные per-file bytes только в память и делает whole-run clean abort при обнаруженном identity/size/content/topology mismatch. Два равных последовательных manifest не исключают transient/ABA cross-file change, поэтому `CROSS_FILE_GENERATION_COHERENCE_UNPROVEN` остаётся blocker; future content-addressed disk copy потребует отдельного contract. Steam install/download order не является playset/load order.
 
 ## Candidate/export profile
 
@@ -101,6 +102,8 @@ Profile fail closed для:
 - malformed quoting, multiline quoted value, hidden BOM, invalid UTF-8 и mixed newline;
 - неизвестного descriptor/launcher schema и любой dependency graph, пока identity/cycle/missing semantics не доказаны;
 - ambiguous path identity, hardlink alias или duplicate relative path;
+- arbitrary concurrent same-UID path/ancestor substitution, пока traversal и authorization не descriptor-rooted;
+- atomic cross-file source generation, пока нет snapshot/lock/source-generation contract;
 - cross-mod duplicate без доказанного effective winner;
 - interaction `replace_path`/`localisation/replace`/playset order без current-version evidence;
 - active publish, game smoke и rollback;
@@ -121,9 +124,9 @@ Profile и все candidate manifests становятся stale при любо
 
 После invalidation нужен новый sanitized census и full regression suite. Silent fallback на ближайший profile запрещён.
 
-## Evidence identities
+## Initial evidence identities — 17 июля 2026 года
 
-Все file identities ниже — SHA-256 exact repository bytes из privacy-safe validation run. Local generation и candidate identities имеют domain-separated schema, описанную в research contracts; raw paths и per-source hashes не публикуются.
+Все identities ниже относятся только к исходному privacy-safe validation run 17 июля и не описывают текущие worktree bytes после hardening. Local generation и candidate identities имеют domain-separated schema, описанную в research contracts; raw paths и per-source hashes не публикуются. Актуальные final identities публикуются только в датированном revalidation после стабилизации всех bytes.
 
 | Artifact | SHA-256 / identity |
 |---|---|
@@ -144,3 +147,5 @@ Profile и все candidate manifests становятся stale при любо
 | Synthetic candidate manifest | `46f50f997b9ac46024d5f94213319fe1f8005eba88e960788b6c78d84e804dfb` |
 | Independently observed synthetic candidate tree | `7718d952a307f7e77de375079e65907b971bcd24f063e4353ea5fed073f48225` |
 | `docs/evidence/m1a-format-playset-2026-07-17.md` | `59a5eede28c334c33017c6dca010e74284b15453162226265f6002325bdc948b` |
+
+Текущий набор identities и schema decision: [M1A hardening revalidation, 18 июля 2026 года](../evidence/m1a-format-playset-revalidation-2026-07-18.md).

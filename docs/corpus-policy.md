@@ -1,7 +1,7 @@
 # Политика корпуса M1A
 
-- Статус: `M1A — in review`
-- Дата: 17 июля 2026 года
+- Статус: `M1A — BLOCKED`; evidence PR #3 merged, hardening revalidation in review
+- Исходная дата: 17 июля 2026 года; hardening revalidation: 18 июля 2026 года
 - Владелец raw corpus: владелец репозитория
 
 ## Назначение
@@ -24,7 +24,7 @@ Raw классов O/P запрещён в prompts, subagent messages, stdout/st
 M1A использует два разных слоя evidence:
 
 1. **Synthetic conformance set.** По одному минимальному fixture на каждую заявленную конструкцию и отдельные malformed/unknown/adversarial cases. Fixtures доступны review и задают ожидаемую классификацию.
-2. **Локальный census.** Helper перечисляет все подходящие localisation files в auto-discovered game и Workshop roots и анализирует каждый файл. Private `path` из local outer descriptors не follow-ится; такой source явно исключается из denominator и создаёт blocker. Это census объявленного scope текущей generation, а не статистическая экстраполяция.
+2. **Локальный census.** Helper перечисляет все подходящие localisation files в auto-discovered game и Workshop roots и анализирует каждый файл. Private `path` из local outer descriptors не follow-ится; такой source явно исключается из denominator и создаёт blocker. Это census объявленного scope двух совпавших последовательных observations, а не статистическая экстраполяция и не атомарный cross-file snapshot. `CROSS_FILE_GENERATION_COHERENCE_UNPROVEN` сохраняется при `pre_post_manifest_equal=true`.
 
 Для дополнительной cross-check census детерминированно делится по первому байту SHA-256 фактически прочитанных bytes: значения `0..51` образуют holdout, остальные — development cohort. Это не статистически независимая внешняя выборка: тот же scanner обрабатывает оба cohort. Evidence публикует cohort-level counts/inventory/round-trip failures, но не membership. Любое изменение taxonomy после просмотра holdout требует нового version profile и полного run.
 
@@ -68,7 +68,7 @@ Stdout — один JSON document с фиксированными полями. 
 4. возвращает только denominators, match counts по типу и `passed`;
 5. завершает проверку non-zero при любом match, unreadable candidate или невозможности построить source fingerprints.
 
-Public language-header lines исключены из exact-line fingerprints, чтобы grammar token не давал ложный match. Проверка ловит короткую полную строку и длинный lexical fragment, но не является математическим доказательством отсутствия каждого возможного короткого substring. Поэтому после scan файлы явно stage-ятся без дальнейшего редактирования, выполняется полный cached-diff review, а PR body берётся из уже просканированного файла. Любой post-scan byte change требует повторного scan.
+Public language-header lines исключены из exact-line fingerprints, чтобы grammar token не давал ложный match. Проверка ловит короткую полную строку и длинный lexical fragment, но не является математическим доказательством отсутствия каждого возможного короткого substring. Repository walk отвергает наблюдаемые symlink entries, но остаётся path-based между operations и не доказывает защиту от arbitrary concurrent same-UID process; это фиксируется `CONCURRENT_SAME_UID_PATH_RACE_UNPROVEN`. Поэтому после scan файлы явно stage-ятся без дальнейшего редактирования, выполняется полный cached-diff review, а PR body берётся из уже просканированного файла. Любой post-scan byte change требует повторного scan.
 
 ## Web и внешние источники
 

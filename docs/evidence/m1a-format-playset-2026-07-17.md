@@ -1,5 +1,10 @@
 # M1A — format and playset evidence, 17 июля 2026 года
 
+> Это исторический отчёт исходного run 17 июля: его counts, test total и hashes
+> не переписаны задним числом. Evidence PR #3 впоследствии слит как
+> `2b51879d8e358cf5412f3a6792f33c71ae79d863`; текущий hardening и повторная
+> validation зафиксированы в [addendum от 18 июля](m1a-format-playset-revalidation-2026-07-18.md).
+
 ## 1. Repository, base и evidence head
 
 | Поле | Значение |

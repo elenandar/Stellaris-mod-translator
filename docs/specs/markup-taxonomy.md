@@ -1,6 +1,6 @@
 # Research taxonomy markup Stellaris
 
-- Статус: `M1A — in review`
+- Статус: `M1A — BLOCKED`; evidence PR #3 merged, hardening revalidation in review
 - Profile: [`stellaris-4.4.6`](../version-profiles/stellaris-4.4.6.md)
 - Связанный byte contract: [localisation format](localisation-format.md)
 

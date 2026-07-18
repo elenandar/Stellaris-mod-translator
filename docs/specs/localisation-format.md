@@ -1,6 +1,6 @@
 # Research-спецификация формата localisation
 
-- Статус: `M1A — in review`
+- Статус: `M1A — BLOCKED`; evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) merged, hardening revalidation in review
 - Profile: [`stellaris-4.4.6`](../version-profiles/stellaris-4.4.6.md)
 - Реализация: только byte-preserving helper в [`tools/research`](../../tools/research/)
 
@@ -60,7 +60,12 @@ Research scanner движется слева направо и не исполь
 6. передаёт decoded value markup classifier, не меняя сохранённый raw buffer;
 7. требует, чтобы остаток состоял только из горизонтального whitespace.
 
-Key временно используется только как локальный counting token и не попадает в output. Whole-file buffer сохраняет две одинаковые entries в исходном порядке, но M1A helper не публикует occurrence positions и не связывает collision с effective source order. Он считает intra-file duplicate groups/occurrences, а local probe — aggregate cross-source candidate collisions через domain-separated SHA-256.
+До entry classification вся physical line проверяется общим fail-closed guard:
+кроме terminator CR, LF или CRLF запрещены NUL, C0/C1 control characters и
+unsupported Unicode line separators. Та же проверка используется при извлечении
+opaque key hashes, поэтому opaque/malformed line не влияет на duplicate metrics.
+
+Key временно используется только как локальный counting token и не попадает в output. Whole-file buffer сохраняет две одинаковые entries в исходном порядке, но M1A helper не публикует occurrence positions и не связывает collision с effective source order. Он считает intra-file duplicate groups/occurrences, same-source cross-file groups/occurrences и cross-source candidate collisions через domain-separated SHA-256.
 
 ## Quotes, escapes и пустые значения
 
@@ -92,6 +97,12 @@ Key временно используется только как локальн
 - duplicates между файлами одного source диагностируются отдельно;
 - cross-source duplicates считаются по opaque key hashes, но не связываются с effective engine order;
 - collision winner остаётся export/load-order contract, а не побочным эффектом parser map.
+
+Эти три оси пересекаются и не являются partition: одна occurrence может входить
+в intra-file, same-source cross-file и cross-source counters одновременно;
+same-source group считается отдельно для каждого source. Language и
+ordinary/replace role не разделяют grouping. Поэтому counters нельзя суммировать
+или интерпретировать как effective winner.
 
 Если engine winner не доказан для текущего profile, candidate build с затронутой collision получает blocker.
 
@@ -150,6 +161,10 @@ Research fixtures находятся в [`fixtures/m1a`](../../fixtures/m1a/) и
 | `formatting-crossing` | formatting/placeholder crossing блокируется |
 | `formatting-nested-balanced` | fixture-backed nested `§Y...§!` counts |
 | `delimiter-like-unicode-is-text` | похожие Unicode glyphs остаются ordinary text |
+| `unsupported-line-separator-is-opaque` | non-CR/LF separator остаётся внутри opaque physical line |
+| `missing-value-separator-is-malformed` | между suffix/colon и quoted value обязателен space либо tab |
+| `control-character-is-opaque` | NUL/control-bearing line не становится entry и не даёт key hash |
+| `empty-language-header-is-unknown` | пустой `l_:` не принимается как language header |
 | `invalid-utf8` | whole-file opaque bytes |
 
 Все cases проходят единый test `test_fixture_classifications_and_identity_round_trip`; expected fields проверяются рекурсивно, а `render_identity()` сравнивается с исходными bytes. Отдельный table-driven test изолирует каждый ambiguous delimiter и исключает компенсацию grouped counters. Suite в целом покрывает positive classes и malformed siblings; M1A не утверждает, что каждый positive atom хранится отдельным file fixture.

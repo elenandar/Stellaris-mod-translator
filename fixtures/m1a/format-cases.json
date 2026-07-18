@@ -329,6 +329,57 @@
       }
     },
     {
+      "id": "unsupported-line-separator-is-opaque",
+      "utf8": "l_synthetic:\n# synthetic comment\u2028 synthetic_hidden_entry:0 \"Synthetic\"\n",
+      "expected": {
+        "comment_lines": 0,
+        "entry_lines": 0,
+        "language_header_lines": 1,
+        "line_count": 2,
+        "newline_style": "LF",
+        "opaque_constructs": 1,
+        "unknown_lines": 1,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "missing-value-separator-is-malformed",
+      "utf8": "l_synthetic:\n synthetic_suffix:0\"Synthetic\"\n synthetic_no_suffix:\"Synthetic\"\n",
+      "expected": {
+        "entry_lines": 0,
+        "language_header_lines": 1,
+        "line_count": 3,
+        "malformed_lines": 2,
+        "opaque_constructs": 2,
+        "unknown_lines": 0,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "control-character-is-opaque",
+      "utf8": "l_synthetic:\n synthetic_control:0 \"Synthetic\u0000value\"\n",
+      "expected": {
+        "entry_lines": 0,
+        "language_header_lines": 1,
+        "line_count": 2,
+        "opaque_constructs": 1,
+        "unknown_lines": 1,
+        "utf8_valid": true
+      }
+    },
+    {
+      "id": "empty-language-header-is-unknown",
+      "utf8": "l_:\n synthetic_value:0 \"Synthetic\"\n",
+      "expected": {
+        "entry_lines": 1,
+        "language_header_lines": 0,
+        "line_count": 2,
+        "opaque_constructs": 1,
+        "unknown_lines": 1,
+        "utf8_valid": true
+      }
+    },
+    {
       "id": "invalid-utf8",
       "hex": "fffe00",
       "expected": {

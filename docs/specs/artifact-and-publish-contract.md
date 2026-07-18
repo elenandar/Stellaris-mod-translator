@@ -1,6 +1,6 @@
 # Контракт candidate artifact и publish boundary
 
-- Статус: `M1A — in review`
+- Статус: `M1A — BLOCKED`; evidence PR #3 merged, hardening revalidation in review
 - Export policy: **не выбрана**
 - Active publish: **не исследовался и запрещён этой задачей**
 
@@ -84,7 +84,7 @@ Collision record может содержать только opaque key ID, order
 5. Перечитать фактические payload bytes через root descriptor, отклонить hardlinks/extra entries и вычислить отдельный observed payload-tree hash.
 6. На partial write/disk-full/process crash оставить root incomplete; silent retry внутри того же logical build запрещён.
 7. Записать staged canonical manifest, снова проверить payload tree, затем переименовать manifest последним и `fsync` root descriptor.
-8. После commit перечитать manifest и payload tree; при повторном вызове complete candidate полностью сверить actual bytes без rewrite.
+8. После commit перечитать manifest и payload tree, пересчитать каждый content `generation` из заявленных `size` и payload SHA-256; при повторном вызове complete candidate полностью сверить actual bytes без rewrite.
 9. Повторить сборку в другом disposable root и сравнить независимые manifest и payload-tree hashes.
 
 M1A fault injection проверяет process-stop ordering и выполняет file/root `fsync`, но не является power-loss certification. Last-known-good и active switch относятся к M3. Теоретическая гонка с произвольным concurrent same-UID process остаётся residual threat; M1A candidate root должен быть private disposable root.
