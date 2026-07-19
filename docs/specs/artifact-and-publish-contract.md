@@ -1,6 +1,6 @@
 # Контракт candidate artifact и publish boundary
 
-- Статус: `M1A — in review`
+- Статус: `M1A — BLOCKED`; evidence PR #3 merged, hardening revalidation in review
 - Export policy: **не выбрана**
 - Active publish: **не исследовался и запрещён этой задачей**
 
@@ -19,7 +19,14 @@ Public evidence ограничено:
 
 ## Root containment
 
-До любой записи builder получает полный набор зарегистрированных roots: game, Workshop, source mods, launcher state и candidate output. M1A не создаёт raw snapshot на диске; отдельный snapshot root в этом разделе является только будущим условным требованием. Для каждого существующего root выполняются:
+До любой записи collector регистрирует как protected roots обнаруженные game,
+Workshop, Documents/active и launcher roots; synthetic candidate builder отдельно
+добавляет fixture root. Private local-mod `path` values M1A намеренно не follow-ит,
+поэтому их content roots не заявляются защищёнными или прочитанными. Candidate
+output — отдельный sealed disposable write root, а не ещё один protected input.
+M1A не создаёт raw snapshot на диске; отдельный snapshot root в этом разделе
+является только будущим условным требованием. Для каждого существующего root
+выполняются:
 
 1. absolute lexical validation: пустой path, NUL и unresolved `..` отклоняются;
 2. canonical resolution существующих ancestors без следования создаваемому leaf;
@@ -43,7 +50,7 @@ candidate-root/
 
 - Candidate root создаётся и удаляется владельцем `TemporaryDirectory`; helper не имеет cleanup API для произвольного path.
 - Payload в M1A создаётся только из synthetic fixture bytes. Physical layout намеренно плоский: это не game-ready tree и не accepted export layout.
-- Logical relative paths хранятся только в manifest и заранее проверены на traversal, ancestry/type conflict, casefold и Unicode-normalization collisions. Physical storage names генерируются builder-ом.
+- Logical relative paths хранятся только в manifest и заранее проверены на strict UTF-8 encodability, traversal, ancestry/type conflict, casefold и Unicode-normalization collisions. Unpaired surrogate отклоняется как controlled `INVALID_RELATIVE_PATH` до source read, candidate layout и write; корректный non-ASCII UTF-8 не запрещается. Physical storage names генерируются builder-ом.
 - `manifest.json` записывается canonical JSON после payload и является единственным completion marker.
 - Candidate без manifest, с staged manifest, лишним file, несовпадающим manifest или неизвестным schema считается incomplete и не может перейти к publish.
 
@@ -79,12 +86,12 @@ Collision record может содержать только opaque key ID, order
 
 1. Verify roots и создать новый empty candidate root.
 2. Проверить immutable input generation и explicit source order.
-3. Отклонить duplicate/ambiguous relative paths до первого read/write; semantic key collisions остаются отдельным export-policy blocker.
+3. Отклонить не кодируемые строго в UTF-8, duplicate либо ambiguous relative paths до первого source read и candidate layout/write; semantic key collisions остаются отдельным export-policy blocker.
 4. Писать плоские payload names только непосредственно через sealed root descriptor, exclusive create и `O_NOFOLLOW` там, где его предоставляет platform; nested output directories запрещены M1A protocol.
 5. Перечитать фактические payload bytes через root descriptor, отклонить hardlinks/extra entries и вычислить отдельный observed payload-tree hash.
 6. На partial write/disk-full/process crash оставить root incomplete; silent retry внутри того же logical build запрещён.
 7. Записать staged canonical manifest, снова проверить payload tree, затем переименовать manifest последним и `fsync` root descriptor.
-8. После commit перечитать manifest и payload tree; при повторном вызове complete candidate полностью сверить actual bytes без rewrite.
+8. После commit перечитать manifest и payload tree, пересчитать каждый content `generation` из заявленных `size` и payload SHA-256; при повторном вызове complete candidate полностью сверить actual bytes без rewrite.
 9. Повторить сборку в другом disposable root и сравнить независимые manifest и payload-tree hashes.
 
 M1A fault injection проверяет process-stop ordering и выполняет file/root `fsync`, но не является power-loss certification. Last-known-good и active switch относятся к M3. Теоретическая гонка с произвольным concurrent same-UID process остаётся residual threat; M1A candidate root должен быть private disposable root.
@@ -103,6 +110,14 @@ effective-engine-order evidence version
 ```
 
 Future production builder должен блокироваться при duplicate position, missing source, dependency cycle, order/dependency contradiction, unknown disabled state, generation mismatch или отсутствии доказанного effective winner для collision. M1A helper фиксирует только explicit synthetic source-order array/digest и aggregate dependency counts; он не строит или валидирует dependency graph. Filesystem enumeration никогда не считается effective source order.
+
+В synthetic M1A manifest `position` имеет exact JSON-integer contract: `bool` и
+float запрещены даже при числовом равенстве, а records обязаны образовывать
+непрерывный диапазон `0..file_count-1`. До path processing и первой candidate
+write каждый `SnapshotBlob` проверяется как exact immutable bytes/inventory
+shape; byte count, content hash, observer/content generations и inventory
+identity должны быть согласованы, иначе наружу выходит только
+`SNAPSHOT_BLOB_MISMATCH`.
 
 Read-only launcher metadata способно доказать сохранённую конфигурацию, но без versioned schema/runtime evidence не доказывает фактическую engine precedence. Download/install order Workshop также не считается mod load order.
 

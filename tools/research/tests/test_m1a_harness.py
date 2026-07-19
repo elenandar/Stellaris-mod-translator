@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from tools.research import m1a_harness as harness
 
@@ -109,6 +111,41 @@ class FormatInventoryTests(unittest.TestCase):
                 self.assertEqual(inventory.markup.icons, 0)
                 self.assertEqual(inventory.markup.scripted_localisation, 0)
                 self.assertEqual(inventory.markup.formatting_spans, 0)
+
+    def test_non_crlf_line_separators_never_create_valid_records(self) -> None:
+        separators = ("\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
+        for separator in separators:
+            with self.subTest(codepoint=ord(separator)):
+                source = (
+                    "l_synthetic:\n# synthetic comment"
+                    + separator
+                    + ' synthetic_hidden:0 "Synthetic"\n'
+                ).encode("utf-8")
+                document = harness.inspect_bytes(source)
+                inventory = document.inventory
+                self.assertEqual(document.render_identity(), source)
+                self.assertEqual(inventory.line_count, 2)
+                self.assertEqual(inventory.language_header_lines, 1)
+                self.assertEqual(inventory.comment_lines, 0)
+                self.assertEqual(inventory.entry_lines, 0)
+                self.assertEqual(inventory.unknown_lines, 1)
+                self.assertEqual(inventory.opaque_constructs, 1)
+
+    def test_control_characters_never_enter_valid_records(self) -> None:
+        controls = ("\x00", "\x01", "\x08", "\x1b", "\x7f", "\x80", "\x9f")
+        for control in controls:
+            with self.subTest(codepoint=ord(control)):
+                source = (
+                    'l_synthetic:\n synthetic_control:0 "before'
+                    + control
+                    + 'after"\n'
+                ).encode("utf-8")
+                document = harness.inspect_bytes(source)
+                inventory = document.inventory
+                self.assertEqual(document.render_identity(), source)
+                self.assertEqual(inventory.entry_lines, 0)
+                self.assertEqual(inventory.unknown_lines, 1)
+                self.assertEqual(inventory.opaque_constructs, 1)
 
 
 class StableReadTests(unittest.TestCase):
@@ -216,6 +253,64 @@ class StableReadTests(unittest.TestCase):
                 harness.snapshot_sources(requests)
             self.assertEqual(raised.exception.code, "DUPLICATE_RELATIVE_PATH")
 
+    def test_ambiguous_relative_spellings_abort_before_any_read(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            source = self._source(root)
+            calls = 0
+
+            def hook_factory(_index: int):
+                nonlocal calls
+                calls += 1
+                return None
+
+            for relative_path in (
+                "./opaque.yml",
+                "opaque//nested.yml",
+                "opaque/./nested.yml",
+                "opaque/",
+            ):
+                with self.subTest(relative_path=relative_path):
+                    with self.assertRaises(harness.HarnessError) as raised:
+                        harness.snapshot_sources(
+                            (harness.SourceRequest(source, relative_path),),
+                            hook_factory=hook_factory,
+                        )
+                    self.assertEqual(raised.exception.code, "INVALID_RELATIVE_PATH")
+            self.assertEqual(calls, 0)
+
+    def test_non_utf8_relative_paths_abort_before_any_read(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            source = self._source(root)
+            calls = 0
+
+            def hook_factory(_index: int):
+                nonlocal calls
+                calls += 1
+                return None
+
+            for case, relative_path in (
+                ("high-surrogate", "opaque/high-\ud800.yml"),
+                ("low-surrogate", "opaque/low-\udfff.yml"),
+            ):
+                with self.subTest(case=case):
+                    with self.assertRaises(harness.HarnessError) as raised:
+                        harness.snapshot_sources(
+                            (harness.SourceRequest(source, relative_path),),
+                            hook_factory=hook_factory,
+                        )
+                    self.assertEqual(raised.exception.code, "INVALID_RELATIVE_PATH")
+            self.assertEqual(calls, 0)
+
+    def test_embedded_nul_source_path_is_controlled(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            ambiguous = Path(str(root / "bad") + "\x00leaf")
+            with self.assertRaises(harness.HarnessError) as raised:
+                harness.read_stable_file(ambiguous)
+            self.assertEqual(raised.exception.code, "AMBIGUOUS_SOURCE_PATH")
+
     def test_observed_hardlink_source_identity_alias_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -228,6 +323,33 @@ class StableReadTests(unittest.TestCase):
             ]
             with self.assertRaises(harness.HarnessError) as raised:
                 harness.snapshot_sources(requests)
+            self.assertEqual(raised.exception.code, "SOURCE_IDENTITY_ALIAS")
+
+    def test_hardlink_alias_inserted_after_preflight_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            first = self._source(root, b"synthetic-first")
+            second = root / "second.bin"
+            second.write_bytes(b"synthetic-second")
+            substituted = False
+
+            def hook_factory(index: int):
+                nonlocal substituted
+                if index == 1 and not substituted:
+                    second.unlink()
+                    os.link(str(first), str(second))
+                    substituted = True
+                return None
+
+            with self.assertRaises(harness.HarnessError) as raised:
+                harness.snapshot_sources(
+                    (
+                        harness.SourceRequest(first, "opaque/first.yml"),
+                        harness.SourceRequest(second, "opaque/second.yml"),
+                    ),
+                    hook_factory=hook_factory,
+                )
+            self.assertTrue(substituted)
             self.assertEqual(raised.exception.code, "SOURCE_IDENTITY_ALIAS")
 
 
@@ -281,6 +403,11 @@ class RootContainmentTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "AMBIGUOUS_ROOT_PATH")
             with self.assertRaises(harness.HarnessError) as raised:
                 harness.seal_disposable_root(Path("relative-output"), [protected])
+            self.assertEqual(raised.exception.code, "AMBIGUOUS_ROOT_PATH")
+
+            embedded_nul = Path(str(output) + "\x00alias")
+            with self.assertRaises(harness.HarnessError) as raised:
+                harness.seal_disposable_root(embedded_nul, [protected])
             self.assertEqual(raised.exception.code, "AMBIGUOUS_ROOT_PATH")
 
     def test_symlink_root_alias_fails_closed(self) -> None:
@@ -510,6 +637,318 @@ class CandidateProtocolTests(unittest.TestCase):
                 self.assertEqual(raised.exception.code, expected)
                 self.assertEqual(harness.candidate_state(seal), "empty")
 
+    def test_candidate_non_utf8_paths_abort_before_layout_or_write(self) -> None:
+        blobs = self._blobs()
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            for index, (case, relative_path) in enumerate(
+                (
+                    ("high-surrogate", "localisation/high-\ud800.yml"),
+                    ("low-surrogate", "localisation/low-\udfff.yml"),
+                )
+            ):
+                with self.subTest(case=case):
+                    seal = self._sealed_output(base, f"non-utf8-{index}")
+                    candidate_blobs = (
+                        replace(blobs[0], relative_path=relative_path),
+                        blobs[1],
+                    )
+                    protocol_events = []
+                    with mock.patch.object(
+                        harness,
+                        "_candidate_layout",
+                        wraps=harness._candidate_layout,
+                    ) as candidate_layout:
+                        with self.assertRaises(harness.HarnessError) as raised:
+                            harness.build_candidate(
+                                seal,
+                                candidate_blobs,
+                                hook=lambda event, item: protocol_events.append(
+                                    (event, item)
+                                ),
+                            )
+                    self.assertEqual(
+                        raised.exception.code,
+                        "INVALID_RELATIVE_PATH",
+                    )
+                    candidate_layout.assert_not_called()
+                    self.assertEqual(protocol_events, [])
+                    self.assertEqual(tuple(seal.canonical.iterdir()), ())
+                    self.assertEqual(harness.candidate_state(seal), "empty")
+
+                    for internal_boundary in (
+                        harness._validate_snapshot_blob,
+                        lambda blob: harness._candidate_layout((blob,)),
+                    ):
+                        with self.assertRaises(harness.HarnessError) as internal:
+                            internal_boundary(candidate_blobs[0])
+                        self.assertEqual(
+                            internal.exception.code,
+                            "INVALID_RELATIVE_PATH",
+                        )
+
+    def test_candidate_accepts_strict_utf8_non_ascii_path(self) -> None:
+        unicode_path = "localisation/синтетика-é.yml"
+        candidate_blobs = harness.snapshot_sources(
+            (
+                harness.SourceRequest(
+                    self.source_root / "source-a.yml",
+                    unicode_path,
+                ),
+                self.requests[1],
+            )
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            seal = self._sealed_output(Path(temporary).resolve(), "unicode-path")
+            result = harness.build_candidate(seal, candidate_blobs)
+            manifest = json.loads(
+                (seal.canonical / harness.MANIFEST_NAME).read_text("ascii")
+            )
+            self.assertFalse(result.reused)
+            self.assertEqual(harness.candidate_state(seal), "complete")
+            self.assertIn(
+                unicode_path,
+                [record["logical_path"] for record in manifest["files"]],
+            )
+
+    def test_tampered_content_generation_aborts_before_write(self) -> None:
+        blobs = self._blobs()
+        tampered = (
+            replace(blobs[0], content_generation_sha256="0" * 64),
+            blobs[1],
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            seal = self._sealed_output(Path(temporary).resolve(), "bad-generation")
+            with self.assertRaises(harness.HarnessError) as raised:
+                harness.build_candidate(seal, tampered)
+            self.assertEqual(raised.exception.code, "SNAPSHOT_BLOB_MISMATCH")
+            self.assertEqual(harness.candidate_state(seal), "empty")
+
+    def test_malformed_snapshot_blobs_fail_closed_before_write(self) -> None:
+        blobs = self._blobs()
+        blob = blobs[0]
+        inventory = blob.inventory
+        stale_inventory_hash = (
+            ("0" if inventory.sha256[0] != "0" else "1")
+            + inventory.sha256[1:]
+        )
+        cases = (
+            ("snapshot-wrong-type", object()),
+            ("data-str", replace(blob, _data="synthetic-not-bytes")),
+            ("data-mutable", replace(blob, _data=bytearray(blob.data))),
+            ("data-object", replace(blob, _data=object())),
+            ("inventory-none", replace(blob, inventory=None)),
+            ("inventory-wrong-type", replace(blob, inventory={})),
+            ("boolean-byte-count", replace(blob, byte_count=True)),
+            (
+                "boolean-inventory-byte-count",
+                replace(blob, inventory=replace(inventory, byte_count=True)),
+            ),
+            (
+                "stale-inventory-size",
+                replace(
+                    blob,
+                    inventory=replace(
+                        inventory,
+                        byte_count=inventory.byte_count + 1,
+                    ),
+                ),
+            ),
+            (
+                "stale-inventory-hash",
+                replace(
+                    blob,
+                    inventory=replace(inventory, sha256=stale_inventory_hash),
+                ),
+            ),
+            ("malformed-content-hash", replace(blob, sha256="g" * 64)),
+            (
+                "malformed-source-generation",
+                replace(blob, generation_sha256="G" * 64),
+            ),
+            (
+                "stale-source-generation",
+                replace(
+                    blob,
+                    generation_sha256=(
+                        ("0" if blob.generation_sha256[0] != "0" else "1")
+                        + blob.generation_sha256[1:]
+                    ),
+                ),
+            ),
+            (
+                "stale-generation-signature-size",
+                replace(
+                    blob,
+                    _generation_signature=replace(
+                        blob._generation_signature,
+                        size=blob.byte_count + 1,
+                    ),
+                ),
+            ),
+            (
+                "malformed-content-generation",
+                replace(blob, content_generation_sha256="0" * 63),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            for index, (case_name, tampered_blob) in enumerate(cases):
+                with self.subTest(case=case_name):
+                    seal = self._sealed_output(base, f"malformed-blob-{index}")
+                    with self.assertRaises(harness.HarnessError) as raised:
+                        harness.build_candidate(seal, (tampered_blob, blobs[1]))
+                    self.assertEqual(
+                        raised.exception.code,
+                        "SNAPSHOT_BLOB_MISMATCH",
+                    )
+                    self.assertEqual(harness.candidate_state(seal), "empty")
+
+    def test_complete_manifest_rejects_generation_unbound_from_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            seal = self._sealed_output(Path(temporary).resolve(), "bad-manifest")
+            harness.build_candidate(seal, self._blobs())
+            manifest_path = seal.canonical / harness.MANIFEST_NAME
+            manifest = json.loads(manifest_path.read_text("ascii"))
+            for record in manifest["files"]:
+                record["generation"] = "0" * 64
+            for record in manifest["source_order"]:
+                record["generation"] = "0" * 64
+            encoded_order = json.dumps(
+                manifest["source_order"],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ).encode("ascii")
+            manifest["source_order_digest"] = hashlib.sha256(encoded_order).hexdigest()
+            manifest_path.write_text(
+                json.dumps(
+                    manifest,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                )
+                + "\n",
+                encoding="ascii",
+            )
+            self.assertEqual(harness.candidate_state(seal), "incomplete")
+
+    def test_complete_manifest_rejects_non_integer_source_positions(self) -> None:
+        cases = (
+            ("false", 0, False),
+            ("true", 1, True),
+            ("zero-float", 0, 0.0),
+            ("one-float", 1, 1.0),
+            ("negative", 0, -1),
+            ("out-of-range", 0, 2),
+            ("missing", 0, None),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            for case_index, (case_name, record_index, position) in enumerate(cases):
+                with self.subTest(case=case_name):
+                    seal = self._sealed_output(base, f"bad-position-{case_index}")
+                    harness.build_candidate(seal, self._blobs())
+                    manifest_path = seal.canonical / harness.MANIFEST_NAME
+                    manifest = json.loads(manifest_path.read_text("ascii"))
+                    if case_name == "missing":
+                        del manifest["source_order"][record_index]["position"]
+                    else:
+                        manifest["source_order"][record_index]["position"] = position
+                    encoded_order = json.dumps(
+                        manifest["source_order"],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=True,
+                    ).encode("ascii")
+                    manifest["source_order_digest"] = hashlib.sha256(
+                        encoded_order
+                    ).hexdigest()
+                    manifest_path.write_text(
+                        json.dumps(
+                            manifest,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=True,
+                        )
+                        + "\n",
+                        encoding="ascii",
+                    )
+                    self.assertEqual(harness.candidate_state(seal), "incomplete")
+
+    def test_provenance_less_manifest_is_never_complete(self) -> None:
+        payload = b"synthetic-payload"
+        digest = __import__("hashlib").sha256(payload).hexdigest()
+        with tempfile.TemporaryDirectory() as temporary:
+            seal = self._sealed_output(Path(temporary).resolve(), "weak-manifest")
+            (seal.canonical / "payload-000000.bin").write_bytes(payload)
+            weak_manifest = {
+                "schema": harness.CANDIDATE_SCHEMA,
+                "file_count": 1,
+                "files": [
+                    {
+                        "logical_path": "localisation/synthetic.yml",
+                        "sha256": digest,
+                        "size": len(payload),
+                        "storage": "payload-000000.bin",
+                    }
+                ],
+            }
+            (seal.canonical / harness.MANIFEST_NAME).write_text(
+                json.dumps(weak_manifest, sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="ascii",
+            )
+            self.assertEqual(harness.candidate_state(seal), "incomplete")
+
+    def test_deep_manifest_is_incomplete_without_mutating_candidate(self) -> None:
+        deep_manifest = b"[" * 2000 + b"]" * 2000
+        self.assertLess(len(deep_manifest), harness.DEFAULT_MAX_SOURCE_BYTES)
+        with self.assertRaises(RecursionError):
+            json.loads(deep_manifest.decode("ascii"))
+
+        def root_bytes(seal: harness.DisposableRootSeal) -> tuple:
+            return tuple(
+                (path.name, path.read_bytes())
+                for path in sorted(
+                    seal.canonical.iterdir(),
+                    key=lambda item: item.name.encode("utf-8"),
+                )
+            )
+
+        blobs = self._blobs()
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            deep_seal = self._sealed_output(base, "deep-manifest")
+            (deep_seal.canonical / harness.MANIFEST_NAME).write_bytes(deep_manifest)
+            deep_before = root_bytes(deep_seal)
+
+            self.assertEqual(harness.candidate_state(deep_seal), "incomplete")
+            self.assertEqual(root_bytes(deep_seal), deep_before)
+            with self.assertRaises(harness.HarnessError) as raised:
+                harness.build_candidate(deep_seal, blobs)
+            self.assertEqual(raised.exception.code, "INCOMPLETE_BUILD_PRESENT")
+            self.assertEqual(root_bytes(deep_seal), deep_before)
+
+            malformed_seal = self._sealed_output(base, "malformed-manifest")
+            (malformed_seal.canonical / harness.MANIFEST_NAME).write_bytes(b"{")
+            malformed_before = root_bytes(malformed_seal)
+            self.assertEqual(harness.candidate_state(malformed_seal), "incomplete")
+            self.assertEqual(root_bytes(malformed_seal), malformed_before)
+            with mock.patch.object(
+                harness.json,
+                "loads",
+                side_effect=RuntimeError("synthetic programming error"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    harness.candidate_state(malformed_seal)
+            self.assertEqual(root_bytes(malformed_seal), malformed_before)
+
+            complete_seal = self._sealed_output(base, "complete-manifest")
+            harness.build_candidate(complete_seal, blobs)
+            complete_before = root_bytes(complete_seal)
+            self.assertEqual(harness.candidate_state(complete_seal), "complete")
+            self.assertEqual(root_bytes(complete_seal), complete_before)
+
     def test_precommit_crash_points_never_create_completion_manifest(self) -> None:
         blobs = self._blobs()
         checkpoints = (
@@ -570,6 +1009,71 @@ class CandidateProtocolTests(unittest.TestCase):
                 harness.build_candidate(seal, blobs, hook=disk_full)
             self.assertEqual(raised.exception.code, "DISK_FULL")
             self.assertEqual(harness.candidate_state(seal), "incomplete")
+
+    def test_partial_payload_write_disk_full_is_incomplete(self) -> None:
+        blobs = self._blobs()
+        real_write = os.write
+        calls = 0
+
+        def partial_then_full(fd: int, data: bytes) -> int:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return real_write(fd, data[: max(1, len(data) // 2)])
+            raise OSError(errno.ENOSPC, "synthetic partial-write disk full")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            seal = self._sealed_output(Path(temporary).resolve(), "partial-write")
+            with mock.patch.object(harness.os, "write", side_effect=partial_then_full):
+                with self.assertRaises(harness.HarnessError) as raised:
+                    harness.build_candidate(seal, blobs)
+            self.assertEqual(raised.exception.code, "DISK_FULL")
+            self.assertEqual(harness.candidate_state(seal), "incomplete")
+
+    def test_manifest_rename_disk_full_is_incomplete(self) -> None:
+        blobs = self._blobs()
+        with tempfile.TemporaryDirectory() as temporary:
+            seal = self._sealed_output(Path(temporary).resolve(), "rename-disk-full")
+            with mock.patch.object(
+                harness.os,
+                "replace",
+                side_effect=OSError(errno.ENOSPC, "synthetic rename disk full"),
+            ):
+                with self.assertRaises(harness.HarnessError) as raised:
+                    harness.build_candidate(seal, blobs)
+            self.assertEqual(raised.exception.code, "DISK_FULL")
+            self.assertEqual(harness.candidate_state(seal), "incomplete")
+
+    def test_final_root_fsync_failure_is_recoverable_complete(self) -> None:
+        blobs = self._blobs()
+        real_fsync = os.fsync
+        injected = False
+        with tempfile.TemporaryDirectory() as temporary:
+            seal = self._sealed_output(Path(temporary).resolve(), "final-fsync")
+
+            def fail_final_root_fsync(fd: int) -> None:
+                nonlocal injected
+                if (
+                    not injected
+                    and (seal.canonical / harness.MANIFEST_NAME).exists()
+                    and not (seal.canonical / harness.STAGED_MANIFEST_NAME).exists()
+                ):
+                    injected = True
+                    raise OSError(errno.ENOSPC, "synthetic final fsync disk full")
+                real_fsync(fd)
+
+            with mock.patch.object(
+                harness.os,
+                "fsync",
+                side_effect=fail_final_root_fsync,
+            ):
+                with self.assertRaises(harness.HarnessError) as raised:
+                    harness.build_candidate(seal, blobs)
+            self.assertTrue(injected)
+            self.assertEqual(raised.exception.code, "DISK_FULL")
+            self.assertEqual(harness.candidate_state(seal), "complete")
+            recovered = harness.build_candidate(seal, blobs)
+            self.assertTrue(recovered.reused)
 
     def test_flat_payload_symlink_substitution_aborts_before_external_write(self) -> None:
         blobs = self._blobs()

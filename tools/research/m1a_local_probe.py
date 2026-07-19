@@ -23,7 +23,7 @@ import re
 import stat
 import sys
 import tempfile
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -31,7 +31,7 @@ if __package__ in (None, ""):
 from tools.research import m1a_harness as harness
 
 
-SCHEMA = "m1a-local-redacted-evidence-v1"
+SCHEMA = "m1a-local-redacted-evidence-v2"
 EXPECTED_VERSION = "4.4.6"
 EXPECTED_CHECKSUM = "fdde"
 STEAM_APP_ID = "281990"
@@ -42,6 +42,8 @@ MAX_OBSERVED_FILE_BYTES = 64 * 1024 * 1024
 PUBLIC_BLOCKERS = frozenset(
     {
         "ACTIVE_ORDER_METADATA_UNAVAILABLE",
+        "CONCURRENT_SAME_UID_PATH_RACE_UNPROVEN",
+        "CROSS_FILE_GENERATION_COHERENCE_UNPROVEN",
         "DEPENDENCY_GRAPH_UNPROVEN",
         "DESCRIPTOR_SCHEMA_UNSUPPORTED",
         "EFFECTIVE_LOAD_ORDER_UNPROVEN",
@@ -53,6 +55,7 @@ PUBLIC_BLOCKERS = frozenset(
         "LAUNCHER_DB_METADATA_UNAVAILABLE",
         "LOCAL_SOURCE_CONTENT_NOT_FOLLOWED",
         "REPLACE_LAYER_SEMANTICS_UNPROVEN",
+        "STEAM_LIBRARY_METADATA_INVALID",
         "WORKSHOP_ROOT_UNAVAILABLE",
     }
 )
@@ -104,6 +107,15 @@ class LocatedFile:
 
 
 @dataclass(frozen=True)
+class _PrivateInputFingerprints:
+    observed_file_count: int
+    nonempty_file_count: int
+    file_hashes: FrozenSet[bytes] = field(repr=False)
+    line_hashes: FrozenSet[bytes] = field(repr=False)
+    token_hashes: FrozenSet[bytes] = field(repr=False)
+
+
+@dataclass(frozen=True)
 class Discovery:
     game_roots: Tuple[Path, ...] = field(repr=False)
     workshop_roots: Tuple[Path, ...] = field(repr=False)
@@ -115,7 +127,12 @@ class Discovery:
     version_files: Tuple[LocatedFile, ...] = field(repr=False)
     launcher_databases: Tuple[LocatedFile, ...] = field(repr=False)
     discovery_metadata_files: Tuple[LocatedFile, ...] = field(repr=False)
+    discovery_metadata_reads: Tuple[Tuple[str, harness.StableRead], ...] = field(
+        repr=False
+    )
+    discovery_metadata_fingerprints: _PrivateInputFingerprints = field(repr=False)
     private_path_values: Tuple[bytes, ...] = field(repr=False)
+    steam_library_metadata_valid: bool
     workshop_source_ids: Tuple[str, ...]
     workshop_source_count: int
     local_descriptor_count: int
@@ -179,13 +196,17 @@ def _add_private_path(values: Set[bytes], path: Path) -> None:
 
 
 def _absolute_unaliased(path: Path, expected_mode: str) -> Optional[Path]:
-    if not path.is_absolute() or ".." in path.parts:
+    if (
+        not path.is_absolute()
+        or ".." in path.parts
+        or "\x00" in os.fspath(path)
+    ):
         raise ProbeError("AMBIGUOUS_SOURCE_PATH")
     try:
         metadata = os.lstat(str(path))
     except FileNotFoundError:
         return None
-    except OSError:
+    except (OSError, ValueError):
         raise ProbeError("SOURCE_ENUMERATION_FAILED")
     try:
         current = Path(path.anchor)
@@ -250,29 +271,52 @@ def _quoted_values(line: str) -> Tuple[str, ...]:
 
 def _steamapps_candidates(
     home: Path,
-) -> Tuple[Tuple[Path, ...], Tuple[Path, ...], Tuple[bytes, ...]]:
+) -> Tuple[
+    Tuple[Path, ...],
+    Tuple[Tuple[Path, harness.StableRead], ...],
+    Tuple[bytes, ...],
+    bool,
+    _PrivateInputFingerprints,
+]:
     default = home / "Library" / "Application Support" / "Steam" / "steamapps"
     candidates: Dict[str, Path] = {str(default): default}
-    metadata_files: List[Path] = []
+    metadata_reads: List[Tuple[Path, harness.StableRead]] = []
     private_path_values: Set[bytes] = set()
+    metadata_valid = True
+    file_hashes: Set[bytes] = set()
+    line_hashes: Set[bytes] = set()
+    token_hashes: Set[bytes] = set()
+    nonempty_file_count = 0
     library_file = _regular_file(default / "libraryfolders.vdf")
     if library_file is not None:
-        metadata_files.append(library_file)
         stable = harness.read_stable_file(
             library_file,
             max_bytes=8 * 1024 * 1024,
         )
+        metadata_reads.append((library_file, stable))
+        if stable.data:
+            nonempty_file_count = 1
+            file_hashes.add(hashlib.sha256(stable.data).digest())
+        line_hashes.update(_line_fingerprints(stable.data))
+        token_hashes.update(_token_fingerprints(stable.data))
         try:
             text = stable.data.decode("utf-8")
         except UnicodeDecodeError:
-            raise ProbeError("STEAM_LIBRARY_METADATA_INVALID")
-        for line in text.splitlines():
-            values = _quoted_values(line)
-            if len(values) >= 2 and values[0].casefold() == "path":
-                library_root = Path(values[1])
-                if not library_root.is_absolute() or ".." in library_root.parts:
-                    raise ProbeError("STEAM_LIBRARY_METADATA_INVALID")
-                encoded = os.fsencode(values[1])
+            metadata_valid = False
+            text = None
+        parsed_libraries: List[Tuple[Path, bytes]] = []
+        if text is not None:
+            for line in text.splitlines():
+                values = _quoted_values(line)
+                if len(values) >= 2 and values[0].casefold() == "path":
+                    library_root = Path(values[1])
+                    if not library_root.is_absolute() or ".." in library_root.parts:
+                        metadata_valid = False
+                        parsed_libraries = []
+                        break
+                    parsed_libraries.append((library_root, os.fsencode(values[1])))
+        if metadata_valid:
+            for library_root, encoded in parsed_libraries:
                 _add_private_path_value(private_path_values, encoded)
                 candidate = library_root / "steamapps"
                 candidates[str(candidate)] = candidate
@@ -283,8 +327,16 @@ def _steamapps_candidates(
             found[str(canonical)] = canonical
     return (
         tuple(found[key] for key in sorted(found)),
-        tuple(metadata_files),
+        tuple(metadata_reads),
         tuple(sorted(private_path_values)),
+        metadata_valid,
+        _PrivateInputFingerprints(
+            observed_file_count=len(metadata_reads),
+            nonempty_file_count=nonempty_file_count,
+            file_hashes=frozenset(file_hashes),
+            line_hashes=frozenset(line_hashes),
+            token_hashes=frozenset(token_hashes),
+        ),
     )
 
 
@@ -339,7 +391,14 @@ def _located(role: str, source: Path, path: Path) -> LocatedFile:
 
 
 def discover(home: Path) -> Discovery:
-    steamapps, steam_metadata, discovered_private_paths = _steamapps_candidates(home)
+    (
+        steamapps,
+        steam_metadata_reads,
+        discovered_private_paths,
+        steam_library_metadata_valid,
+        discovery_metadata_fingerprints,
+    ) = _steamapps_candidates(home)
+    steam_metadata_paths = tuple(path for path, _stable in steam_metadata_reads)
     game_roots: List[Path] = []
     workshop_roots: List[Path] = []
     localisation: List[LocatedFile] = []
@@ -475,8 +534,12 @@ def discover(home: Path) -> Discovery:
             path=path,
             path_id=_path_id(path),
         )
-        for path in steam_metadata
+        for path in steam_metadata_paths
     )
+    discovery_metadata = unique_files(discovery_metadata)
+    discovery_read_by_path = {
+        _path_id(path): stable for path, stable in steam_metadata_reads
+    }
 
     for located in (
         localisation
@@ -494,7 +557,7 @@ def discover(home: Path) -> Discovery:
     private_paths.extend(workshop_roots)
     private_paths.extend(documents_roots)
     private_paths.extend(launcher_roots)
-    private_paths.extend(steam_metadata)
+    private_paths.extend(steam_metadata_paths)
     private_paths.extend(
         located.path
         for located in (
@@ -518,8 +581,14 @@ def discover(home: Path) -> Discovery:
         active_load_files=unique_files(active_load_files),
         version_files=unique_files(version_files),
         launcher_databases=unique_files(launcher_databases),
-        discovery_metadata_files=unique_files(discovery_metadata),
+        discovery_metadata_files=discovery_metadata,
+        discovery_metadata_reads=tuple(
+            (located.path_id, discovery_read_by_path[located.path_id])
+            for located in discovery_metadata
+        ),
+        discovery_metadata_fingerprints=discovery_metadata_fingerprints,
         private_path_values=tuple(sorted(private_path_values)),
+        steam_library_metadata_valid=steam_library_metadata_valid,
         workshop_source_ids=tuple(sorted(workshop_source_ids)),
         workshop_source_count=workshop_source_count,
         local_descriptor_count=local_descriptor_count,
@@ -584,7 +653,8 @@ def _header_class(data: bytes, header_line_count: int) -> str:
     if header_line_count != 1:
         return "missing_or_multiple"
     payload = data[len(harness.UTF8_BOM) :] if data.startswith(harness.UTF8_BOM) else data
-    first = payload.splitlines()[0].strip() if payload.splitlines() else b""
+    physical_lines = harness._split_physical_lines(payload)
+    first = physical_lines[0].rstrip(b"\r\n").strip() if physical_lines else b""
     if first == b"l_english:":
         return "english"
     if first == b"l_russian:":
@@ -592,14 +662,14 @@ def _header_class(data: bytes, header_line_count: int) -> str:
     if (
         first.startswith(b"l_")
         and first.endswith(b":")
-        and first[:-1]
+        and first[2:-1]
         and all(
             byte < 128
             and (
                 chr(byte).isalnum()
                 or chr(byte) in "_.-"
             )
-            for byte in first[:-1]
+            for byte in first[2:-1]
         )
     ):
         return "other"
@@ -608,26 +678,22 @@ def _header_class(data: bytes, header_line_count: int) -> str:
 
 def _entry_key_hashes(data: bytes) -> Tuple[str, ...]:
     try:
-        text = data.decode("utf-8")
+        data.decode("utf-8")
     except UnicodeDecodeError:
         return ()
     keys: List[str] = []
-    for index, line in enumerate(text.splitlines()):
+    for index, raw_line in enumerate(harness._split_physical_lines(data)):
+        line = harness._strip_line_ending(raw_line.decode("utf-8"))
         if index == 0 and line.startswith("\ufeff"):
             line = line[1:]
-        stripped = line.lstrip(" \t")
-        if stripped == line or not stripped or stripped.startswith("#"):
+        if harness._has_unsupported_line_codepoint(line):
             continue
-        colon = stripped.find(":")
-        if colon <= 0:
+        observation = harness._observe_entry(line)
+        if observation.unknown or observation.malformed or observation.key is None:
             continue
-        key = stripped[:colon]
-        if all(
-            character.isascii()
-            and (character.isalnum() or character in "_.-")
-            for character in key
-        ):
-            keys.append(_opaque("localisation-key", key.encode("utf-8")))
+        keys.append(
+            _opaque("localisation-key", observation.key.encode("utf-8"))
+        )
     return tuple(keys)
 
 
@@ -636,13 +702,30 @@ _UNICODE_PRIVATE_TOKEN = re.compile(r"[\w][\w.:'’-]*", re.UNICODE)
 _PUBLIC_HEADER_LINE = re.compile(rb"l_[A-Za-z0-9_.-]+:")
 
 
-def _line_fingerprints(data: bytes) -> Set[bytes]:
+def _line_fingerprints(
+    data: bytes,
+    *,
+    exclude_public_language_header: bool = False,
+) -> Set[bytes]:
     result: Set[bytes] = set()
-    for line in data.splitlines():
-        stripped = line.strip()
+    for index, line in enumerate(harness._split_physical_lines(data)):
+        if line.endswith(b"\r\n"):
+            physical_line = line[:-2]
+        elif line.endswith((b"\r", b"\n")):
+            physical_line = line[:-1]
+        else:
+            physical_line = line
+        stripped = physical_line.strip()
+        header_candidate = physical_line
+        if index == 0 and header_candidate.startswith(harness.UTF8_BOM):
+            header_candidate = header_candidate[len(harness.UTF8_BOM) :]
         if (
             len(stripped) >= MIN_PRIVATE_LINE_BYTES
-            and _PUBLIC_HEADER_LINE.fullmatch(stripped) is None
+            and not (
+                exclude_public_language_header
+                and index == 0
+                and _PUBLIC_HEADER_LINE.fullmatch(header_candidate) is not None
+            )
         ):
             result.add(hashlib.sha256(stripped).digest())
     return result
@@ -674,6 +757,53 @@ def _token_fingerprints(data: bytes) -> Set[bytes]:
             ):
                 result.add(hashlib.sha256(encoded).digest())
     return result
+
+
+def _private_input_fingerprints(
+    expected_files: Sequence[LocatedFile],
+    raw_by_path: Dict[str, bytes],
+    *,
+    preparsed: Optional[_PrivateInputFingerprints] = None,
+) -> _PrivateInputFingerprints:
+    file_hashes: Set[bytes] = set()
+    line_hashes: Set[bytes] = set()
+    token_hashes: Set[bytes] = set()
+    nonempty_file_count = 0
+    localisation_roles = {
+        "official",
+        "official_replace",
+        "workshop",
+        "workshop_replace",
+    }
+    for located in expected_files:
+        data = raw_by_path.get(located.path_id)
+        if not isinstance(data, bytes):
+            raise ProbeError("SOURCE_UNAVAILABLE")
+        if data:
+            nonempty_file_count += 1
+            file_hashes.add(hashlib.sha256(data).digest())
+        line_hashes.update(
+            _line_fingerprints(
+                data,
+                exclude_public_language_header=located.role in localisation_roles,
+            )
+        )
+        token_hashes.update(_token_fingerprints(data))
+    if preparsed is not None and (
+        preparsed.observed_file_count > len(expected_files)
+        or preparsed.nonempty_file_count > nonempty_file_count
+        or not preparsed.file_hashes.issubset(file_hashes)
+        or not preparsed.line_hashes.issubset(line_hashes)
+        or not preparsed.token_hashes.issubset(token_hashes)
+    ):
+        raise ProbeError("GENERATION_MISMATCH")
+    return _PrivateInputFingerprints(
+        observed_file_count=len(expected_files),
+        nonempty_file_count=nonempty_file_count,
+        file_hashes=frozenset(file_hashes),
+        line_hashes=frozenset(line_hashes),
+        token_hashes=frozenset(token_hashes),
+    )
 
 
 def _quoted_values_checked(value: str) -> Tuple[Tuple[str, ...], str, bool]:
@@ -914,30 +1044,25 @@ def _active_load_evidence(data: bytes, private_values: Set[bytes]) -> Dict[str, 
 
 def _version_matches(data: bytes) -> bool:
     try:
-        value = json.loads(data.decode("utf-8"))
+        parsed = json.loads(
+            data.decode("utf-8"),
+            object_pairs_hook=lambda pairs: _JsonObject(tuple(pairs)),
+        )
     except (UnicodeDecodeError, json.JSONDecodeError):
         return False
-    if not isinstance(value, dict):
+    if not isinstance(parsed, _JsonObject) or _json_has_duplicate_keys(parsed):
         return False
-    version_values = [
-        value.get(field)
-        for field in ("rawVersion", "gameVersion", "version")
-        if isinstance(value.get(field), str)
-    ]
-    checksum_values = [
-        value.get(field)
-        for field in ("checksum", "gameChecksum")
-        if isinstance(value.get(field), str)
-    ]
-    version_ok = any(
-        candidate.strip().casefold().removeprefix("v") == EXPECTED_VERSION
-        for candidate in version_values
+    value = dict(parsed.pairs)
+    if set(value) != {"rawVersion", "checksum"}:
+        return False
+    version = value.get("rawVersion")
+    checksum = value.get("checksum")
+    return (
+        isinstance(version, str)
+        and isinstance(checksum, str)
+        and version.strip().casefold().removeprefix("v") == EXPECTED_VERSION
+        and checksum.strip().casefold() == EXPECTED_CHECKSUM
     )
-    checksum_ok = any(
-        candidate.strip().casefold() == EXPECTED_CHECKSUM
-        for candidate in checksum_values
-    )
-    return version_ok and checksum_ok
 
 
 def _manifest_digest(records: Sequence[Dict[str, Any]]) -> str:
@@ -973,6 +1098,7 @@ def _discovery_topology_digest(discovery: Discovery) -> str:
             )
     value = {
         "local_descriptor_count": discovery.local_descriptor_count,
+        "steam_library_metadata_valid": discovery.steam_library_metadata_valid,
         "observed": [
             {"path_id": item.path_id, "role": item.role, "source_id": item.source_id}
             for item in discovery.observed_files
@@ -1003,13 +1129,23 @@ def _repository_files(root: Path) -> Tuple[Path, ...]:
     excluded = {".git", "__pycache__", ".venv", ".pytest_cache", ".ruff_cache"}
     found: List[Path] = []
     try:
-        for current, directories, files in os.walk(str(root), followlinks=False):
-            directories[:] = [directory for directory in directories if directory not in excluded]
-            current_path = Path(current)
-            for filename in files:
-                candidate = current_path / filename
-                metadata = os.lstat(str(candidate))
-                if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        stack = [root]
+        while stack:
+            current = stack.pop()
+            with os.scandir(str(current)) as iterator:
+                entries = sorted(
+                    tuple(iterator), key=lambda item: os.fsencode(item.name)
+                )
+            for entry in entries:
+                candidate = current / entry.name
+                metadata = entry.stat(follow_symlinks=False)
+                if stat.S_ISLNK(metadata.st_mode):
+                    raise ProbeError("REPOSITORY_SCAN_FAILED")
+                if stat.S_ISDIR(metadata.st_mode):
+                    if entry.name not in excluded:
+                        stack.append(candidate)
+                    continue
+                if not stat.S_ISREG(metadata.st_mode):
                     raise ProbeError("REPOSITORY_SCAN_FAILED")
                 if metadata.st_size > 16 * 1024 * 1024:
                     raise ProbeError("REPOSITORY_SCAN_LIMIT")
@@ -1023,8 +1159,7 @@ def _repository_files(root: Path) -> Tuple[Path, ...]:
 
 def _leakage_evidence(
     repository_root: Path,
-    source_line_hashes: Set[bytes],
-    source_token_hashes: Set[bytes],
+    fingerprints: _PrivateInputFingerprints,
     private_values: Set[bytes],
 ) -> Dict[str, Any]:
     match_tokens: Set[bytes] = set()
@@ -1038,24 +1173,34 @@ def _leakage_evidence(
         except harness.HarnessError:
             raise ProbeError("REPOSITORY_SCAN_FAILED")
         checked_files += 1
-        for line in data.splitlines():
-            stripped = line.strip()
+        if data:
+            digest = hashlib.sha256(data).digest()
+            if digest in fingerprints.file_hashes:
+                match_tokens.add(b"file\0" + digest)
+        for line in harness._split_physical_lines(data):
+            stripped = line.rstrip(b"\r\n").strip()
             if len(stripped) >= MIN_PRIVATE_LINE_BYTES:
                 digest = hashlib.sha256(stripped).digest()
-                if digest in source_line_hashes:
+                if digest in fingerprints.line_hashes:
                     match_tokens.add(b"line\0" + digest)
         for digest in _token_fingerprints(data):
-            if digest in source_token_hashes:
+            if digest in fingerprints.token_hashes:
                 match_tokens.add(b"token\0" + digest)
         for value in private_values:
             if value in data:
                 match_tokens.add(b"value\0" + hashlib.sha256(value).digest())
     return {
         "checked_repository_files": checked_files,
-        "source_line_fingerprint_count": len(source_line_hashes),
-        "source_token_fingerprint_count": len(source_token_hashes),
+        "private_input_file_count": fingerprints.observed_file_count,
+        "nonempty_private_input_file_count": fingerprints.nonempty_file_count,
+        "source_file_fingerprint_count": len(fingerprints.file_hashes),
+        "source_line_fingerprint_count": len(fingerprints.line_hashes),
+        "source_token_fingerprint_count": len(fingerprints.token_hashes),
         "private_identifier_count": len(private_values),
         "match_count": len(match_tokens),
+        "exact_file_match_count": sum(
+            token.startswith(b"file\0") for token in match_tokens
+        ),
         "exact_line_match_count": sum(
             token.startswith(b"line\0") for token in match_tokens
         ),
@@ -1130,6 +1275,8 @@ def collect_evidence(
 ) -> Dict[str, Any]:
     first_discovery = discover(home)
     blockers: Set[str] = {
+        "CONCURRENT_SAME_UID_PATH_RACE_UNPROVEN",
+        "CROSS_FILE_GENERATION_COHERENCE_UNPROVEN",
         "EFFECTIVE_LOAD_ORDER_UNPROVEN",
         "EXPORT_POLICY_UNRESOLVED",
         "REPLACE_LAYER_SEMANTICS_UNPROVEN",
@@ -1138,6 +1285,8 @@ def collect_evidence(
         blockers.add("GAME_ROOT_UNAVAILABLE")
     if not first_discovery.workshop_roots:
         blockers.add("WORKSHOP_ROOT_UNAVAILABLE")
+    if not first_discovery.steam_library_metadata_valid:
+        blockers.add("STEAM_LIBRARY_METADATA_INVALID")
     if not first_discovery.active_load_files:
         blockers.add("ACTIVE_ORDER_METADATA_UNAVAILABLE")
     if first_discovery.local_descriptor_count:
@@ -1149,9 +1298,11 @@ def collect_evidence(
 
     expected_files = first_discovery.observed_files
     identities: Dict[Tuple[int, int], bool] = {}
+    opened_identities: Dict[Tuple[int, int], bool] = {}
     first_records: List[Dict[str, Any]] = []
-    first_stable: Dict[str, Tuple[str, str, int]] = {}
+    first_stable: Dict[str, Tuple[str, str, int, Tuple[int, int]]] = {}
     raw_by_path: Dict[str, bytes] = {}
+    preparsed_reads = dict(first_discovery.discovery_metadata_reads)
     for located in expected_files:
         try:
             metadata = os.lstat(str(located.path))
@@ -1165,10 +1316,25 @@ def collect_evidence(
             located.path,
             max_bytes=MAX_OBSERVED_FILE_BYTES,
         )
+        if stable.identity in opened_identities:
+            raise ProbeError("SOURCE_IDENTITY_ALIAS")
+        if stable.identity != identity:
+            raise ProbeError("GENERATION_MISMATCH")
+        preparsed = preparsed_reads.get(located.path_id)
+        if preparsed is not None and (
+            stable.sha256 != preparsed.sha256
+            or stable.generation_sha256 != preparsed.generation_sha256
+            or stable.byte_count != preparsed.byte_count
+            or stable.identity != preparsed.identity
+            or stable.data != preparsed.data
+        ):
+            raise ProbeError("GENERATION_MISMATCH")
+        opened_identities[stable.identity] = True
         first_stable[located.path_id] = (
             stable.sha256,
             stable.generation_sha256,
             stable.byte_count,
+            stable.identity,
         )
         raw_by_path[located.path_id] = stable.data
         first_records.append(
@@ -1181,6 +1347,12 @@ def collect_evidence(
                 "size": stable.byte_count,
             }
         )
+
+    fingerprints = _private_input_fingerprints(
+        expected_files,
+        raw_by_path,
+        preparsed=first_discovery.discovery_metadata_fingerprints,
+    )
 
     inventory = _empty_inventory()
     headers = {
@@ -1208,8 +1380,8 @@ def collect_evidence(
     roundtrip_failures = 0
     key_sources: Dict[str, Set[str]] = {}
     key_occurrences: Dict[str, int] = {}
-    source_line_hashes: Set[bytes] = set()
-    source_token_hashes: Set[bytes] = set()
+    key_source_files: Dict[Tuple[str, str], Set[str]] = {}
+    key_source_occurrences: Dict[Tuple[str, str], int] = {}
     private_values: Set[bytes] = set(first_discovery.private_path_values)
     descriptor_total = {
         "descriptor_count": 0,
@@ -1270,8 +1442,11 @@ def collect_evidence(
             for key_hash in _entry_key_hashes(data):
                 key_sources.setdefault(key_hash, set()).add(located.source_id)
                 key_occurrences[key_hash] = key_occurrences.get(key_hash, 0) + 1
-            source_line_hashes.update(_line_fingerprints(data))
-            source_token_hashes.update(_token_fingerprints(data))
+                source_key = (key_hash, located.source_id)
+                key_source_files.setdefault(source_key, set()).add(located.path_id)
+                key_source_occurrences[source_key] = (
+                    key_source_occurrences.get(source_key, 0) + 1
+                )
         elif "descriptor" in located.role:
             item = _descriptor_evidence(data, private_values)
             _merge_descriptor_evidence(descriptor_total, item)
@@ -1321,12 +1496,31 @@ def collect_evidence(
     ]:
         raise ProbeError("GENERATION_MISMATCH")
     second_records: List[Dict[str, Any]] = []
+    second_identities: Dict[Tuple[int, int], bool] = {}
+    second_preparsed_reads = dict(second_discovery.discovery_metadata_reads)
     for located in second_discovery.observed_files:
         stable = harness.read_stable_file(
             located.path,
             max_bytes=MAX_OBSERVED_FILE_BYTES,
         )
-        observed = (stable.sha256, stable.generation_sha256, stable.byte_count)
+        if stable.identity in second_identities:
+            raise ProbeError("SOURCE_IDENTITY_ALIAS")
+        second_identities[stable.identity] = True
+        preparsed = second_preparsed_reads.get(located.path_id)
+        if preparsed is not None and (
+            stable.sha256 != preparsed.sha256
+            or stable.generation_sha256 != preparsed.generation_sha256
+            or stable.byte_count != preparsed.byte_count
+            or stable.identity != preparsed.identity
+            or stable.data != preparsed.data
+        ):
+            raise ProbeError("GENERATION_MISMATCH")
+        observed = (
+            stable.sha256,
+            stable.generation_sha256,
+            stable.byte_count,
+            stable.identity,
+        )
         if first_stable.get(located.path_id) != observed:
             raise ProbeError("GENERATION_MISMATCH")
         second_records.append(
@@ -1349,10 +1543,17 @@ def collect_evidence(
         for key, sources in key_sources.items()
         if len(sources) > 1
     )
+    same_source_cross_file_groups = sum(
+        len(paths) > 1 for paths in key_source_files.values()
+    )
+    same_source_cross_file_occurrences = sum(
+        key_source_occurrences[source_key]
+        for source_key, paths in key_source_files.items()
+        if len(paths) > 1
+    )
     leakage = _leakage_evidence(
         repository_root,
-        source_line_hashes,
-        source_token_hashes,
+        fingerprints,
         private_values,
     )
     if not leakage["passed"]:
@@ -1398,6 +1599,8 @@ def collect_evidence(
         "inventory": inventory,
         "language_headers": headers,
         "duplicates": {
+            "same_source_cross_file_key_groups": same_source_cross_file_groups,
+            "same_source_cross_file_occurrences": same_source_cross_file_occurrences,
             "cross_source_key_groups": cross_source_groups,
             "cross_source_occurrences": cross_source_occurrences,
         },

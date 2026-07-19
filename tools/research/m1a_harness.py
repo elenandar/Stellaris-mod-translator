@@ -38,6 +38,18 @@ CANDIDATE_SCHEMA = "m1a-research-candidate-v1"
 CONTENT_GENERATION_SCHEMA = "m1a-content-generation-v1"
 CANDIDATE_SOURCE_SCHEMA = "m1a-candidate-source-v1"
 _FORMATTING_CODE_ALLOWLIST = frozenset({"Y"})
+_UNSUPPORTED_LINE_SEPARATORS = frozenset(
+    {
+        "\x0b",  # vertical tab
+        "\x0c",  # form feed
+        "\x1c",  # file separator
+        "\x1d",  # group separator
+        "\x1e",  # record separator
+        "\x85",  # next line
+        "\u2028",  # line separator
+        "\u2029",  # paragraph separator
+    }
+)
 
 _ERROR_CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
@@ -196,6 +208,52 @@ def _newline_style(data: bytes) -> str:
     return "CR"
 
 
+def _split_physical_lines(data: bytes) -> Tuple[bytes, ...]:
+    """Split only at CR, LF, or CRLF and preserve every terminator byte."""
+
+    lines: List[bytes] = []
+    start = 0
+    cursor = 0
+    while cursor < len(data):
+        byte = data[cursor]
+        if byte == 0x0D:
+            cursor += 1
+            if cursor < len(data) and data[cursor] == 0x0A:
+                cursor += 1
+            lines.append(data[start:cursor])
+            start = cursor
+            continue
+        if byte == 0x0A:
+            cursor += 1
+            lines.append(data[start:cursor])
+            start = cursor
+            continue
+        cursor += 1
+    if start < len(data):
+        lines.append(data[start:])
+    return tuple(lines)
+
+
+def _has_unsupported_line_separator(value: str) -> bool:
+    return any(character in _UNSUPPORTED_LINE_SEPARATORS for character in value)
+
+
+def _has_unsupported_control_character(value: str) -> bool:
+    return any(
+        (ord(character) < 0x20 and character != "\t")
+        or 0x7F <= ord(character) <= 0x9F
+        for character in value
+    )
+
+
+def _has_unsupported_line_codepoint(value: str) -> bool:
+    """Apply the shared fail-closed codepoint boundary for line classification."""
+
+    return _has_unsupported_line_separator(
+        value
+    ) or _has_unsupported_control_character(value)
+
+
 def _strip_line_ending(line: str) -> str:
     if line.endswith("\r\n"):
         return line[:-2]
@@ -326,7 +384,19 @@ def _observe_entry(body: str) -> _EntryObservation:
     ):
         suffix_length += 1
     version_suffix = suffix_length > 0
-    remainder = remainder[suffix_length:].lstrip(" \t")
+    remainder = remainder[suffix_length:]
+    if not remainder or remainder[0] not in " \t":
+        return _EntryObservation(
+            key,
+            version_suffix,
+            False,
+            0,
+            False,
+            True,
+            False,
+            MarkupCounts(),
+        )
+    remainder = remainder.lstrip(" \t")
     if not remainder.startswith('"'):
         return _EntryObservation(key, version_suffix, False, 0, False, True, False, MarkupCounts())
 
@@ -399,13 +469,12 @@ def inspect_bytes(data: bytes) -> ResearchDocument:
     bom_at_start = raw.startswith(UTF8_BOM)
     hidden_bom_count = raw[len(UTF8_BOM) if bom_at_start else 0 :].count(UTF8_BOM)
     final_newline = raw.endswith((b"\n", b"\r"))
-    raw_lines = raw.splitlines(keepends=True)
+    raw_lines = _split_physical_lines(raw)
 
     try:
-        text = raw.decode("utf-8")
+        raw.decode("utf-8")
         utf8_valid = True
     except UnicodeDecodeError:
-        text = ""
         utf8_valid = False
 
     language_headers = 0
@@ -428,11 +497,14 @@ def inspect_bytes(data: bytes) -> ResearchDocument:
     key_counts: Dict[str, int] = {}
 
     if utf8_valid:
-        lines = text.splitlines(keepends=True)
-        for index, raw_line in enumerate(lines):
-            body = _strip_line_ending(raw_line)
+        for index, raw_line in enumerate(raw_lines):
+            body = _strip_line_ending(raw_line.decode("utf-8"))
             if index == 0 and body.startswith("\ufeff"):
                 body = body[1:]
+            if _has_unsupported_line_codepoint(body):
+                unknown += 1
+                opaque += 1
+                continue
             if body != body.strip(" \t"):
                 whitespace_lines += 1
             stripped = body.strip(" \t")
@@ -446,7 +518,7 @@ def inspect_bytes(data: bytes) -> ResearchDocument:
                 body == stripped
                 and stripped.startswith("l_")
                 and stripped.endswith(":")
-                and _identifier_is_conservative(stripped[:-1])
+                and _identifier_is_conservative(stripped[2:-1])
             ):
                 language_headers += 1
                 continue
@@ -549,7 +621,11 @@ def _path_has_traversal(path: Path) -> bool:
 
 def _canonical_source_file(path_value: os.PathLike[str]) -> Path:
     path = Path(path_value)
-    if not path.is_absolute() or _path_has_traversal(path):
+    if (
+        not path.is_absolute()
+        or _path_has_traversal(path)
+        or "\x00" in os.fspath(path)
+    ):
         raise HarnessError("AMBIGUOUS_SOURCE_PATH")
     try:
         raw_metadata = os.lstat(str(path))
@@ -559,7 +635,7 @@ def _canonical_source_file(path_value: os.PathLike[str]) -> Path:
         canonical_metadata = os.lstat(str(canonical))
     except HarnessError:
         raise
-    except OSError:
+    except (OSError, ValueError):
         raise HarnessError("SOURCE_UNAVAILABLE")
     if stat.S_ISLNK(canonical_metadata.st_mode):
         raise HarnessError("SOURCE_SYMLINK_REJECTED")
@@ -610,11 +686,17 @@ class StableRead:
     byte_count: int
     sha256: str
     generation_sha256: str
+    _identity: Tuple[int, int] = field(repr=False)
+    _generation_signature: _GenerationSignature = field(repr=False)
     _data: bytes = field(repr=False)
 
     @property
     def data(self) -> bytes:
         return self._data
+
+    @property
+    def identity(self) -> Tuple[int, int]:
+        return self._identity
 
 
 def read_stable_file(
@@ -687,6 +769,8 @@ def read_stable_file(
             byte_count=len(first),
             sha256=digest,
             generation_sha256=opened.opaque_digest(digest),
+            _identity=(opened.device, opened.inode),
+            _generation_signature=opened,
             _data=first,
         )
     except HarnessError:
@@ -705,11 +789,31 @@ def _opaque_path_id(path: Path) -> str:
     return "src-" + digest[:16]
 
 
+def _strict_utf8_relative_path_bytes(value: str) -> bytes:
+    if type(value) is not str:
+        raise HarnessError("INVALID_RELATIVE_PATH")
+    try:
+        return value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError:
+        raise HarnessError("INVALID_RELATIVE_PATH") from None
+
+
 def _normalise_relative_path(value: str) -> Tuple[str, str]:
-    if not value or "\\" in value or "\x00" in value:
+    _strict_utf8_relative_path_bytes(value)
+    if (
+        not value
+        or "\\" in value
+        or "\x00" in value
+        or value.startswith("/")
+        or any(part in ("", ".", "..") for part in value.split("/"))
+    ):
         raise HarnessError("INVALID_RELATIVE_PATH")
     relative = PurePosixPath(value)
-    if relative.is_absolute() or any(part in ("", ".", "..") for part in relative.parts):
+    if (
+        relative.is_absolute()
+        or relative.as_posix() != value
+        or any(part in ("", ".", "..") for part in relative.parts)
+    ):
         raise HarnessError("INVALID_RELATIVE_PATH")
     normalised = relative.as_posix()
     reserved = {
@@ -737,6 +841,7 @@ class SnapshotBlob:
     generation_sha256: str
     content_generation_sha256: str
     inventory: FormatInventory
+    _generation_signature: _GenerationSignature = field(repr=False)
     _data: bytes = field(repr=False)
 
     @property
@@ -813,6 +918,7 @@ def snapshot_sources(
         canonical_prepared.append((canonical, relative_path))
 
     snapshots: List[SnapshotBlob] = []
+    opened_identities: Dict[Tuple[int, int], bool] = {}
     for index, (canonical, relative_path) in enumerate(canonical_prepared):
         hook = hook_factory(index) if hook_factory is not None else None
         reader = reader_factory(index) if reader_factory is not None else _default_reader
@@ -822,6 +928,9 @@ def snapshot_sources(
             hook=hook,
             reader=reader,
         )
+        if stable.identity in opened_identities:
+            raise HarnessError("SOURCE_IDENTITY_ALIAS")
+        opened_identities[stable.identity] = True
         document = inspect_bytes(stable.data)
         snapshots.append(
             SnapshotBlob(
@@ -834,6 +943,7 @@ def snapshot_sources(
                     stable.byte_count, stable.sha256
                 ),
                 inventory=document.inventory,
+                _generation_signature=stable._generation_signature,
                 _data=stable.data,
             )
         )
@@ -975,7 +1085,11 @@ def render_redacted_evidence(
 
 def _canonical_existing_directory(path_value: os.PathLike[str], role: str) -> Path:
     path = Path(path_value)
-    if not path.is_absolute() or _path_has_traversal(path):
+    if (
+        not path.is_absolute()
+        or _path_has_traversal(path)
+        or "\x00" in os.fspath(path)
+    ):
         raise HarnessError("AMBIGUOUS_ROOT_PATH")
     try:
         supplied = os.lstat(str(path))
@@ -985,7 +1099,7 @@ def _canonical_existing_directory(path_value: os.PathLike[str], role: str) -> Pa
         metadata = os.lstat(str(canonical))
     except HarnessError:
         raise
-    except OSError:
+    except (OSError, ValueError):
         raise HarnessError("ROOT_UNAVAILABLE")
     if stat.S_ISLNK(metadata.st_mode):
         raise HarnessError("ROOT_SYMLINK_REJECTED")
@@ -1141,7 +1255,10 @@ class CandidateBuildResult:
 def _candidate_layout(
     blobs: Sequence[SnapshotBlob],
 ) -> Tuple[Tuple[str, SnapshotBlob], ...]:
-    ordered = sorted(blobs, key=lambda item: item.relative_path.encode("utf-8"))
+    ordered = sorted(
+        blobs,
+        key=lambda item: _strict_utf8_relative_path_bytes(item.relative_path),
+    )
     return tuple(
         (PAYLOAD_NAME_TEMPLATE.format(index=index), blob)
         for index, blob in enumerate(ordered)
@@ -1163,7 +1280,119 @@ def _candidate_source_id(relative_path: str) -> str:
     return "src-" + hashlib.sha256(encoded).hexdigest()
 
 
+def _validate_snapshot_blob(blob: SnapshotBlob) -> None:
+    if type(blob) is not SnapshotBlob:
+        raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+    try:
+        data = blob._data
+        inventory = blob.inventory
+        generation_signature = blob._generation_signature
+        if (
+            type(data) is not bytes
+            or type(inventory) is not FormatInventory
+            or type(generation_signature) is not _GenerationSignature
+        ):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        inventory_counts = (
+            inventory.byte_count,
+            inventory.hidden_bom_count,
+            inventory.line_count,
+            inventory.language_header_lines,
+            inventory.comment_lines,
+            inventory.blank_lines,
+            inventory.whitespace_lines,
+            inventory.entry_lines,
+            inventory.version_suffix_occurrences,
+            inventory.quoted_value_occurrences,
+            inventory.escape_occurrences,
+            inventory.escaped_newline_occurrences,
+            inventory.escaped_quote_occurrences,
+            inventory.escaped_backslash_occurrences,
+            inventory.unknown_escape_occurrences,
+            inventory.empty_value_occurrences,
+            inventory.duplicate_key_groups,
+            inventory.duplicate_key_occurrences,
+            inventory.malformed_lines,
+            inventory.unknown_lines,
+            inventory.opaque_constructs,
+        )
+        if (
+            type(blob.opaque_source_id) is not str
+            or re.fullmatch(r"src-[0-9a-f]{16}", blob.opaque_source_id) is None
+            or type(blob.relative_path) is not str
+            or type(blob.byte_count) is not int
+            or blob.byte_count < 0
+            or type(blob.sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", blob.sha256) is None
+            or type(blob.generation_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", blob.generation_sha256) is None
+            or type(blob.content_generation_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", blob.content_generation_sha256) is None
+            or type(inventory.sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", inventory.sha256) is None
+            or type(inventory.utf8_valid) is not bool
+            or type(inventory.bom_at_start) is not bool
+            or type(inventory.final_newline) is not bool
+            or type(inventory.newline_style) is not str
+            or inventory.newline_style
+            not in {"CR", "CRLF", "LF", "mixed", "none"}
+            or any(type(value) is not int or value < 0 for value in inventory_counts)
+            or type(inventory.markup) is not MarkupCounts
+        ):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        _strict_utf8_relative_path_bytes(blob.relative_path)
+
+        markup_counts = (
+            inventory.markup.placeholders,
+            inventory.markup.icons,
+            inventory.markup.formatting_spans,
+            inventory.markup.scripted_localisation,
+            inventory.markup.unknown_or_ambiguous,
+        )
+        if any(type(value) is not int or value < 0 for value in markup_counts):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        signature_values = (
+            generation_signature.device,
+            generation_signature.inode,
+            generation_signature.mode,
+            generation_signature.size,
+            generation_signature.mtime_ns,
+            generation_signature.ctime_ns,
+        )
+        if (
+            any(type(value) is not int for value in signature_values)
+            or generation_signature.device < 0
+            or generation_signature.inode < 0
+            or generation_signature.mode != stat.S_IFREG
+            or generation_signature.size < 0
+        ):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        digest = hashlib.sha256(data).hexdigest()
+        if (
+            blob.byte_count != len(data)
+            or blob.sha256 != digest
+            or blob.content_generation_sha256
+            != _content_generation_sha256(len(data), digest)
+            or generation_signature.size != len(data)
+            or blob.generation_sha256 != generation_signature.opaque_digest(digest)
+            or inventory.byte_count != len(data)
+            or inventory.sha256 != digest
+        ):
+            raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+    except HarnessError:
+        raise
+    except (AttributeError, TypeError, ValueError):
+        raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+
 def _candidate_manifest_bytes(blobs: Sequence[SnapshotBlob]) -> bytes:
+    for blob in blobs:
+        _validate_snapshot_blob(blob)
     source_order = [
         {
             "generation": blob.content_generation_sha256,
@@ -1347,15 +1576,86 @@ def _actual_payload_tree(
 def _manifest_describes_complete_tree(root_fd: int) -> bool:
     try:
         raw = _read_root_file(root_fd, MANIFEST_NAME)
-        value = json.loads(raw.decode("ascii"))
-        if not isinstance(value, dict) or value.get("schema") != CANDIDATE_SCHEMA:
+        try:
+            value = json.loads(raw.decode("ascii"))
+        except RecursionError:
+            return False
+        if (
+            not isinstance(value, dict)
+            or set(value)
+            != {
+                "file_count",
+                "files",
+                "policy_id",
+                "profile_id",
+                "schema",
+                "source_order",
+                "source_order_digest",
+            }
+            or value.get("schema") != CANDIDATE_SCHEMA
+            or value.get("policy_id") != "synthetic-only"
+            or value.get("profile_id") != "stellaris-4.4.6-research"
+        ):
             return False
         records = value.get("files")
-        if not isinstance(records, list) or value.get("file_count") != len(records):
+        source_order = value.get("source_order")
+        file_count = value.get("file_count")
+        if (
+            not isinstance(records, list)
+            or not isinstance(source_order, list)
+            or not isinstance(file_count, int)
+            or isinstance(file_count, bool)
+            or file_count != len(records)
+            or file_count != len(source_order)
+        ):
             return False
+
+        order_pairs: Dict[str, str] = {}
+        for index, record in enumerate(source_order):
+            if not isinstance(record, dict) or set(record) != {
+                "generation",
+                "opaque_id",
+                "position",
+            }:
+                return False
+            generation = record.get("generation")
+            opaque_id = record.get("opaque_id")
+            position = record.get("position")
+            if (
+                type(position) is not int
+                or position < 0
+                or position >= file_count
+                or position != index
+                or not isinstance(generation, str)
+                or re.fullmatch(r"[0-9a-f]{64}", generation) is None
+                or not isinstance(opaque_id, str)
+                or re.fullmatch(r"src-[0-9a-f]{64}", opaque_id) is None
+                or opaque_id in order_pairs
+            ):
+                return False
+            order_pairs[opaque_id] = generation
+        encoded_order = json.dumps(
+            source_order,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("ascii")
+        if value.get("source_order_digest") != hashlib.sha256(encoded_order).hexdigest():
+            return False
+
         expected = {MANIFEST_NAME}
+        observed_pairs: Dict[str, str] = {}
+        logical_paths: List[str] = []
+        collision_keys: Set[str] = set()
         for index, record in enumerate(records):
-            if not isinstance(record, dict):
+            if not isinstance(record, dict) or set(record) != {
+                "generation",
+                "logical_path",
+                "sha256",
+                "size",
+                "source",
+                "storage",
+            }:
                 return False
             storage = PAYLOAD_NAME_TEMPLATE.format(index=index)
             if record.get("storage") != storage:
@@ -1363,25 +1663,53 @@ def _manifest_describes_complete_tree(root_fd: int) -> bool:
             logical_path = record.get("logical_path")
             if not isinstance(logical_path, str):
                 return False
-            normalised, _collision_key = _normalise_relative_path(logical_path)
-            if normalised != logical_path:
+            normalised, collision_key = _normalise_relative_path(logical_path)
+            if normalised != logical_path or collision_key in collision_keys:
                 return False
+            collision_keys.add(collision_key)
+            logical_paths.append(logical_path)
             size = record.get("size")
             digest = record.get("sha256")
+            source = record.get("source")
+            generation = record.get("generation")
             if (
                 not isinstance(size, int)
                 or isinstance(size, bool)
                 or size < 0
                 or not isinstance(digest, str)
                 or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or source != _candidate_source_id(logical_path)
+                or not isinstance(generation, str)
+                or re.fullmatch(r"[0-9a-f]{64}", generation) is None
+                or generation != _content_generation_sha256(size, digest)
+                or source not in order_pairs
+                or order_pairs[source] != generation
+                or source in observed_pairs
             ):
                 return False
+            observed_pairs[source] = generation
             payload = _read_root_file(root_fd, storage)
             if len(payload) != size or hashlib.sha256(payload).hexdigest() != digest:
                 return False
             expected.add(storage)
-        return set(_list_root_files(root_fd)) == expected
-    except (HarnessError, UnicodeDecodeError, json.JSONDecodeError):
+        if logical_paths != sorted(logical_paths, key=lambda item: item.encode("utf-8")):
+            return False
+        if observed_pairs != order_pairs:
+            return False
+        canonical = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("ascii") + b"\n"
+        return raw == canonical and set(_list_root_files(root_fd)) == expected
+    except (
+        HarnessError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        TypeError,
+        ValueError,
+    ):
         return False
 
 
@@ -1458,6 +1786,7 @@ def build_candidate(
     path_keys: List[Tuple[str, ...]] = []
     parent_spellings: Dict[Tuple[str, ...], Tuple[str, ...]] = {}
     for blob in blobs:
+        _validate_snapshot_blob(blob)
         normalised, collision_key = _normalise_relative_path(blob.relative_path)
         if normalised != blob.relative_path or collision_key in seen:
             raise HarnessError("DUPLICATE_RELATIVE_PATH")

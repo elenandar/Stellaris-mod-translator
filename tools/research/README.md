@@ -11,6 +11,8 @@ original immutable bytes.
   metadata, path metadata, byte count, and both byte passes agree;
 - source symlinks, source replacement, partial reads, and observed generation
   changes abort with path-free error codes;
+- preflight identities are compared with the identities of the descriptors that
+  were actually opened, and hardlink aliases observed after preflight abort;
 - inventory output contains only aggregate counts, booleans, controlled class
   labels, sizes, and hashes; source keys, values, filenames, and paths are not
   serialized;
@@ -19,6 +21,9 @@ original immutable bytes.
   every caller-supplied protected root;
 - equality, ancestor/descendant overlap, traversal, duplicate/colliding relative
   paths, root replacement, and symlink substitution fail closed;
+- logical relative paths must be strictly UTF-8 encodable before source reads or
+  candidate layout/write; unpaired surrogates return controlled
+  `INVALID_RELATIVE_PATH`, while valid non-ASCII UTF-8 paths remain allowed;
 - candidate physical layout is flat, with generated payload names written
   directly through the sealed root descriptor; logical paths exist only in the
   manifest and nested-output rename races are outside this M1A protocol;
@@ -32,6 +37,10 @@ original immutable bytes.
   without making logical output nondeterministic;
 - a pre-commit crash/write failure cannot produce a complete candidate; a
   post-commit retry validates and reuses exact bytes without rebuilding.
+
+A failure of the final directory `fsync` is still reported as a failed build.
+The manifest may already describe a complete tree in the current filesystem
+view, but M1A does not claim power-loss durability for that state.
 
 The low-level aggregate inventory command accepts explicit absolute regular
 file paths and writes JSON to stdout. Its error output is controlled JSON;
@@ -61,11 +70,47 @@ It accepts no game, Workshop, mod, descriptor, launcher, or corpus path. It
 discovers only standard macOS/Steam locations inside the process, rejects
 relative library paths and source symlinks, performs two full stable-read
 content/topology manifests, runs a corpus-aware no-excerpt leakage check, and
-emits fixed-schema aggregate JSON. A discovered launcher database is read only
-as bytes for the generation manifest and is never opened through SQLite;
-schema/order semantics remain unproven. Real local-mod `path` values are not
-followed by this M1A helper. The scan reports exact-line, long structured-token,
-descriptor/value, and private-path match counts only; it never returns a match.
+emits `m1a-local-redacted-evidence-v2` aggregate JSON. `status=ok` means that
+collection completed; it does not override any item in `blockers` and is not an
+M1A gate verdict.
+
+The duplicate section has three deliberately overlapping axes: intra-file
+groups/occurrences stay in `inventory`, while same-source cross-file and
+cross-source groups/occurrences are in `duplicates`. They must not be summed and
+do not prove a collision winner. Two equal sequential manifests prove observed
+pre/post equality, not an atomic cross-file snapshot; the collector therefore
+always returns `CROSS_FILE_GENERATION_COHERENCE_UNPROVEN`.
+
+A discovered launcher database is read only as bytes for the generation
+manifest and is never opened through SQLite; schema/order semantics remain
+unproven. Real local-mod `path` values are not followed by this M1A helper.
+
+Before role-specific parsing, every observed private input contributes an exact
+digest when nonempty plus physical-line and long structured-token fingerprints.
+This includes localisation, descriptors, active-load/playset, version,
+launcher-database and Steam discovery metadata. Invalid UTF-8/binary data stays
+byte-level. Only the first physical localisation line receives the public-header
+exception: after removing exactly its CR, LF, or CRLF terminator, an optional
+BOM is accepted only at byte offset 0 and the entire remaining line must match
+the strict public language-header grammar. Surrounding whitespace, control
+bytes, a misplaced BOM, metadata and later header-shaped lines receive no
+exception and remain fingerprinted. Parsed private values and paths remain
+defense in depth. Public schema v2 returns only input/fingerprint denominators,
+typed match counts and booleans; any match yields controlled
+`LEAKAGE_DETECTED`, `status=blocked` and a non-zero CLI exit without returning a
+fragment, digest, filename or path.
+
+Write evidence is an exact field mapping, not five prose domains compressed
+into four numbers: `containment.source_write_attempts` covers registered game
+and Workshop source roots; `containment.launcher_write_attempts` covers launcher
+roots; `containment.active_path_write_attempts` covers Documents/active roots;
+`launcher.source_writes` states that launcher metadata/database has no write
+entrypoint; and `candidate.active_path_writes` states candidate writes stayed in
+disposable roots. All five are protocol-level zero counters/claims, not an
+OS-wide syscall audit. Discovery and the repository leakage walk remain
+path-based between operations, so protection against an arbitrary concurrent
+same-UID actor is not claimed and
+`CONCURRENT_SAME_UID_PATH_RACE_UNPROVEN` remains a blocker.
 
 Run the synthetic-only suite with:
 
