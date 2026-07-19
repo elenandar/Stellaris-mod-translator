@@ -50,7 +50,7 @@ candidate-root/
 
 - Candidate root создаётся и удаляется владельцем `TemporaryDirectory`; helper не имеет cleanup API для произвольного path.
 - Payload в M1A создаётся только из synthetic fixture bytes. Physical layout намеренно плоский: это не game-ready tree и не accepted export layout.
-- Logical relative paths хранятся только в manifest и заранее проверены на traversal, ancestry/type conflict, casefold и Unicode-normalization collisions. Physical storage names генерируются builder-ом.
+- Logical relative paths хранятся только в manifest и заранее проверены на strict UTF-8 encodability, traversal, ancestry/type conflict, casefold и Unicode-normalization collisions. Unpaired surrogate отклоняется как controlled `INVALID_RELATIVE_PATH` до source read, candidate layout и write; корректный non-ASCII UTF-8 не запрещается. Physical storage names генерируются builder-ом.
 - `manifest.json` записывается canonical JSON после payload и является единственным completion marker.
 - Candidate без manifest, с staged manifest, лишним file, несовпадающим manifest или неизвестным schema считается incomplete и не может перейти к publish.
 
@@ -86,7 +86,7 @@ Collision record может содержать только opaque key ID, order
 
 1. Verify roots и создать новый empty candidate root.
 2. Проверить immutable input generation и explicit source order.
-3. Отклонить duplicate/ambiguous relative paths до первого read/write; semantic key collisions остаются отдельным export-policy blocker.
+3. Отклонить не кодируемые строго в UTF-8, duplicate либо ambiguous relative paths до первого source read и candidate layout/write; semantic key collisions остаются отдельным export-policy blocker.
 4. Писать плоские payload names только непосредственно через sealed root descriptor, exclusive create и `O_NOFOLLOW` там, где его предоставляет platform; nested output directories запрещены M1A protocol.
 5. Перечитать фактические payload bytes через root descriptor, отклонить hardlinks/extra entries и вычислить отдельный observed payload-tree hash.
 6. На partial write/disk-full/process crash оставить root incomplete; silent retry внутри того же logical build запрещён.

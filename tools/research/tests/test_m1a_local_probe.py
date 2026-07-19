@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -444,11 +445,24 @@ class LocalProbeTests(unittest.TestCase):
                     self.assertNotIn(str(repository), serialized)
 
     def test_language_header_line_exception_is_localisation_only(self) -> None:
-        header = b"l_synthetic:\n"
+        header_body = b"l_synthetic:"
+        digest = hashlib.sha256(header_body).digest()
+        for terminator in (b"", b"\r", b"\n", b"\r\n"):
+            with self.subTest(terminator=terminator):
+                localisation = self._fingerprints_for(
+                    header_body + terminator,
+                    role="official",
+                )
+                bom_localisation = self._fingerprints_for(
+                    probe.harness.UTF8_BOM + header_body + terminator,
+                    role="official",
+                )
+                self.assertNotIn(digest, localisation.line_hashes)
+                self.assertFalse(localisation.line_hashes)
+                self.assertFalse(bom_localisation.line_hashes)
+
+        header = header_body + b"\n"
         bom_header = probe.harness.UTF8_BOM + header
-        digest = __import__("hashlib").sha256(b"l_synthetic:").digest()
-        localisation = self._fingerprints_for(header, role="official")
-        bom_localisation = self._fingerprints_for(bom_header, role="official")
         metadata = self._fingerprints_for(header, role="version_metadata")
         bom_metadata = self._fingerprints_for(
             bom_header,
@@ -458,13 +472,90 @@ class LocalProbeTests(unittest.TestCase):
             b"l_synthetic:\nl_private_later:\n",
             role="official",
         )
-        later_digest = __import__("hashlib").sha256(b"l_private_later:").digest()
-        self.assertNotIn(digest, localisation.line_hashes)
-        self.assertFalse(bom_localisation.line_hashes)
+        later_digest = hashlib.sha256(b"l_private_later:").digest()
         self.assertIn(later_digest, later_header.line_hashes)
         self.assertIn(digest, metadata.line_hashes)
         self.assertTrue(bom_metadata.line_hashes)
-        self.assertEqual(localisation.file_hashes, metadata.file_hashes)
+        self.assertEqual(
+            self._fingerprints_for(header, role="official").file_hashes,
+            metadata.file_hashes,
+        )
+
+    def test_language_header_line_exception_rejects_malformed_bytes(self) -> None:
+        malformed = {
+            "leading_space": b" l_synthetic:\n",
+            "trailing_space": b"l_synthetic: \n",
+            "trailing_tab": b"l_synthetic:\t\n",
+            "leading_vertical_tab": b"\x0bl_synthetic:\n",
+            "trailing_form_feed": b"l_synthetic:\x0c\n",
+            "embedded_control": b"l_synthetic:\x00\n",
+            "bom_after_space": b" " + probe.harness.UTF8_BOM + b"l_synthetic:\n",
+            "bom_after_byte": b"x" + probe.harness.UTF8_BOM + b"l_synthetic:\n",
+        }
+        for case_name, payload in malformed.items():
+            with self.subTest(case=case_name):
+                fingerprints = self._fingerprints_for(payload, role="official")
+                self.assertTrue(fingerprints.line_hashes)
+
+    def test_malformed_header_partial_leak_blocks_with_redacted_cli(self) -> None:
+        marker = "l_PRIVATE_SYNTHETIC_HEADER_BYPASS:"
+        marker_bytes = marker.encode("ascii")
+        source = b" " + marker_bytes + b"\t\n key:0 \"Synthetic\"\n"
+        leaked_line = b" " + marker_bytes + b"\t\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            home = self._synthetic_home(root)
+            repository = self._synthetic_repository(root)
+            candidate_parent = root / "candidate-parent"
+            candidate_parent.mkdir()
+            official = (
+                home
+                / "Library"
+                / "Application Support"
+                / "Steam"
+                / "steamapps"
+                / "common"
+                / "Stellaris"
+                / "localisation"
+                / "english"
+                / "official.yml"
+            )
+            leaked_file = repository / "malformed-header-partial.bin"
+            official.write_bytes(source)
+            leaked_file.write_bytes(leaked_line)
+
+            result = probe.collect_evidence(
+                home=home,
+                repository_root=repository,
+                candidate_temporary_parent=candidate_parent,
+            )
+            leakage = result["leakage"]
+            self.assertEqual(result["status"], "blocked")
+            self.assertEqual(result["code"], "LEAKAGE_DETECTED")
+            self.assertFalse(leakage["passed"])
+            self.assertEqual(leakage["exact_file_match_count"], 0)
+            self.assertGreaterEqual(leakage["exact_line_match_count"], 1)
+            self.assertGreaterEqual(leakage["match_count"], 1)
+
+            output = io.StringIO()
+            with mock.patch.object(probe, "collect_evidence", return_value=result):
+                with mock.patch.object(sys, "stdout", output):
+                    exit_code = probe.main(["collect"])
+            serialized = output.getvalue()
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(json.loads(serialized), result)
+            for private_value in (
+                marker,
+                "PRIVATE_SYNTHETIC_HEADER_BYPASS",
+                hashlib.sha256(source).hexdigest(),
+                hashlib.sha256(marker_bytes).hexdigest(),
+                official.name,
+                leaked_file.name,
+                str(home),
+                str(repository),
+                str(official),
+            ):
+                self.assertNotIn(private_value, serialized)
 
     def test_invalid_utf8_long_token_leak_is_detected_without_replacement(self) -> None:
         token = (

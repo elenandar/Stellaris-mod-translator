@@ -21,6 +21,9 @@ original immutable bytes.
   every caller-supplied protected root;
 - equality, ancestor/descendant overlap, traversal, duplicate/colliding relative
   paths, root replacement, and symlink substitution fail closed;
+- logical relative paths must be strictly UTF-8 encodable before source reads or
+  candidate layout/write; unpaired surrogates return controlled
+  `INVALID_RELATIVE_PATH`, while valid non-ASCII UTF-8 paths remain allowed;
 - candidate physical layout is flat, with generated payload names written
   directly through the sealed root descriptor; logical paths exist only in the
   manifest and nested-output rename races are outside this M1A protocol;
@@ -86,9 +89,12 @@ Before role-specific parsing, every observed private input contributes an exact
 digest when nonempty plus physical-line and long structured-token fingerprints.
 This includes localisation, descriptors, active-load/playset, version,
 launcher-database and Steam discovery metadata. Invalid UTF-8/binary data stays
-byte-level. Only the first public localisation language-header line after an
-optional BOM is excluded from line fingerprints; metadata and later
-header-shaped lines receive no exception. Parsed private values and paths remain
+byte-level. Only the first physical localisation line receives the public-header
+exception: after removing exactly its CR, LF, or CRLF terminator, an optional
+BOM is accepted only at byte offset 0 and the entire remaining line must match
+the strict public language-header grammar. Surrounding whitespace, control
+bytes, a misplaced BOM, metadata and later header-shaped lines receive no
+exception and remain fingerprinted. Parsed private values and paths remain
 defense in depth. Public schema v2 returns only input/fingerprint denominators,
 typed match counts and booleans; any match yields controlled
 `LEAKAGE_DETECTED`, `status=blocked` and a non-zero CLI exit without returning a

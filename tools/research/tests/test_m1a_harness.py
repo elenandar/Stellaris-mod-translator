@@ -279,6 +279,30 @@ class StableReadTests(unittest.TestCase):
                     self.assertEqual(raised.exception.code, "INVALID_RELATIVE_PATH")
             self.assertEqual(calls, 0)
 
+    def test_non_utf8_relative_paths_abort_before_any_read(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            source = self._source(root)
+            calls = 0
+
+            def hook_factory(_index: int):
+                nonlocal calls
+                calls += 1
+                return None
+
+            for case, relative_path in (
+                ("high-surrogate", "opaque/high-\ud800.yml"),
+                ("low-surrogate", "opaque/low-\udfff.yml"),
+            ):
+                with self.subTest(case=case):
+                    with self.assertRaises(harness.HarnessError) as raised:
+                        harness.snapshot_sources(
+                            (harness.SourceRequest(source, relative_path),),
+                            hook_factory=hook_factory,
+                        )
+                    self.assertEqual(raised.exception.code, "INVALID_RELATIVE_PATH")
+            self.assertEqual(calls, 0)
+
     def test_embedded_nul_source_path_is_controlled(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -612,6 +636,80 @@ class CandidateProtocolTests(unittest.TestCase):
                     harness.build_candidate(seal, candidate_blobs)
                 self.assertEqual(raised.exception.code, expected)
                 self.assertEqual(harness.candidate_state(seal), "empty")
+
+    def test_candidate_non_utf8_paths_abort_before_layout_or_write(self) -> None:
+        blobs = self._blobs()
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            for index, (case, relative_path) in enumerate(
+                (
+                    ("high-surrogate", "localisation/high-\ud800.yml"),
+                    ("low-surrogate", "localisation/low-\udfff.yml"),
+                )
+            ):
+                with self.subTest(case=case):
+                    seal = self._sealed_output(base, f"non-utf8-{index}")
+                    candidate_blobs = (
+                        replace(blobs[0], relative_path=relative_path),
+                        blobs[1],
+                    )
+                    protocol_events = []
+                    with mock.patch.object(
+                        harness,
+                        "_candidate_layout",
+                        wraps=harness._candidate_layout,
+                    ) as candidate_layout:
+                        with self.assertRaises(harness.HarnessError) as raised:
+                            harness.build_candidate(
+                                seal,
+                                candidate_blobs,
+                                hook=lambda event, item: protocol_events.append(
+                                    (event, item)
+                                ),
+                            )
+                    self.assertEqual(
+                        raised.exception.code,
+                        "INVALID_RELATIVE_PATH",
+                    )
+                    candidate_layout.assert_not_called()
+                    self.assertEqual(protocol_events, [])
+                    self.assertEqual(tuple(seal.canonical.iterdir()), ())
+                    self.assertEqual(harness.candidate_state(seal), "empty")
+
+                    for internal_boundary in (
+                        harness._validate_snapshot_blob,
+                        lambda blob: harness._candidate_layout((blob,)),
+                    ):
+                        with self.assertRaises(harness.HarnessError) as internal:
+                            internal_boundary(candidate_blobs[0])
+                        self.assertEqual(
+                            internal.exception.code,
+                            "INVALID_RELATIVE_PATH",
+                        )
+
+    def test_candidate_accepts_strict_utf8_non_ascii_path(self) -> None:
+        unicode_path = "localisation/синтетика-é.yml"
+        candidate_blobs = harness.snapshot_sources(
+            (
+                harness.SourceRequest(
+                    self.source_root / "source-a.yml",
+                    unicode_path,
+                ),
+                self.requests[1],
+            )
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            seal = self._sealed_output(Path(temporary).resolve(), "unicode-path")
+            result = harness.build_candidate(seal, candidate_blobs)
+            manifest = json.loads(
+                (seal.canonical / harness.MANIFEST_NAME).read_text("ascii")
+            )
+            self.assertFalse(result.reused)
+            self.assertEqual(harness.candidate_state(seal), "complete")
+            self.assertIn(
+                unicode_path,
+                [record["logical_path"] for record in manifest["files"]],
+            )
 
     def test_tampered_content_generation_aborts_before_write(self) -> None:
         blobs = self._blobs()

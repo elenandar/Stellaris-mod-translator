@@ -63,7 +63,7 @@ Stdout — один JSON document с фиксированными полями. 
 Перед commit и перед созданием PR локальный helper:
 
 1. до role-specific semantic parsing строит fingerprints для bytes каждого наблюдаемого private input: SHA-256 полного непустого file, exact physical lines длиной от 4 bytes и structured lexical tokens длиной от 64 bytes; это включает localisation, descriptors, active-load/playset, version, launcher-database и Steam discovery metadata;
-2. для invalid UTF-8/binary inputs работает только по bytes, без decode-with-replacement; public language-header line исключается только для первой physical line localisation после optional BOM, но не для metadata либо последующих header-shaped lines;
+2. для invalid UTF-8/binary inputs работает только по bytes, без decode-with-replacement; public language-header исключается только для первой physical line localisation, если после удаления ровно её CR/LF/CRLF terminator optional BOM находится строго в byte offset 0, а оставшаяся строка полностью соответствует strict public-header grammar; surrounding whitespace/control, misplaced BOM, metadata и последующие header-shaped lines не получают exception и участвуют в fingerprints;
 3. как defense in depth дополнительно хранит только внутри процесса parsed descriptor/active values, полные canonical private paths и их непубличные components длиной от 8 bytes;
 4. дважды стабильно читает все regular files текущего repository tree, включая synthetic fixtures и подготовленный ignored PR body;
 5. исключает только `.git` и tool caches; suffix allowlist не применяется;

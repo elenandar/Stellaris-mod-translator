@@ -709,8 +709,14 @@ def _line_fingerprints(
 ) -> Set[bytes]:
     result: Set[bytes] = set()
     for index, line in enumerate(harness._split_physical_lines(data)):
-        stripped = line.rstrip(b"\r\n").strip()
-        header_candidate = stripped
+        if line.endswith(b"\r\n"):
+            physical_line = line[:-2]
+        elif line.endswith((b"\r", b"\n")):
+            physical_line = line[:-1]
+        else:
+            physical_line = line
+        stripped = physical_line.strip()
+        header_candidate = physical_line
         if index == 0 and header_candidate.startswith(harness.UTF8_BOM):
             header_candidate = header_candidate[len(harness.UTF8_BOM) :]
         if (

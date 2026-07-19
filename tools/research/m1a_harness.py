@@ -789,7 +789,17 @@ def _opaque_path_id(path: Path) -> str:
     return "src-" + digest[:16]
 
 
+def _strict_utf8_relative_path_bytes(value: str) -> bytes:
+    if type(value) is not str:
+        raise HarnessError("INVALID_RELATIVE_PATH")
+    try:
+        return value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError:
+        raise HarnessError("INVALID_RELATIVE_PATH") from None
+
+
 def _normalise_relative_path(value: str) -> Tuple[str, str]:
+    _strict_utf8_relative_path_bytes(value)
     if (
         not value
         or "\\" in value
@@ -1245,7 +1255,10 @@ class CandidateBuildResult:
 def _candidate_layout(
     blobs: Sequence[SnapshotBlob],
 ) -> Tuple[Tuple[str, SnapshotBlob], ...]:
-    ordered = sorted(blobs, key=lambda item: item.relative_path.encode("utf-8"))
+    ordered = sorted(
+        blobs,
+        key=lambda item: _strict_utf8_relative_path_bytes(item.relative_path),
+    )
     return tuple(
         (PAYLOAD_NAME_TEMPLATE.format(index=index), blob)
         for index, blob in enumerate(ordered)
@@ -1329,6 +1342,8 @@ def _validate_snapshot_blob(blob: SnapshotBlob) -> None:
             or type(inventory.markup) is not MarkupCounts
         ):
             raise HarnessError("SNAPSHOT_BLOB_MISMATCH")
+
+        _strict_utf8_relative_path_bytes(blob.relative_path)
 
         markup_counts = (
             inventory.markup.placeholders,
