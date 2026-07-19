@@ -117,3 +117,16 @@ Run the synthetic-only suite with:
 ```sh
 python3 -m unittest discover -s tools/research/tests -v
 ```
+
+## M1B synthetic protocol gate
+
+The M1B-0 [benchmark contract](../../docs/specs/m1b-benchmark-contract.md),
+[corpus policy](../../docs/m1b-corpus-policy.md),
+[quality rubric](../../docs/specs/m1b-quality-rubric.md), and
+[threat model](../../docs/m1b-threat-model.md) define the protocol currently
+under review. The offline [synthetic fixture contract](../../fixtures/m1b/README.md)
+is checked by [`m1b_contract.py`](m1b_contract.py) without Ollama, network, corpus,
+game, Workshop, launcher, or active-path access.
+
+Passing this synthetic conformance gate does not evaluate model quality:
+`M1B: NOT_EVALUATED`, `M1A: BLOCKED`, and `M2: FORBIDDEN` remain in force.
