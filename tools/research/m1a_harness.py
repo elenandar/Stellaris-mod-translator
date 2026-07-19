@@ -1576,7 +1576,10 @@ def _actual_payload_tree(
 def _manifest_describes_complete_tree(root_fd: int) -> bool:
     try:
         raw = _read_root_file(root_fd, MANIFEST_NAME)
-        value = json.loads(raw.decode("ascii"))
+        try:
+            value = json.loads(raw.decode("ascii"))
+        except RecursionError:
+            return False
         if (
             not isinstance(value, dict)
             or set(value)

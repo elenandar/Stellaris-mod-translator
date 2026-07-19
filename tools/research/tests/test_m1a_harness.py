@@ -900,6 +900,55 @@ class CandidateProtocolTests(unittest.TestCase):
             )
             self.assertEqual(harness.candidate_state(seal), "incomplete")
 
+    def test_deep_manifest_is_incomplete_without_mutating_candidate(self) -> None:
+        deep_manifest = b"[" * 2000 + b"]" * 2000
+        self.assertLess(len(deep_manifest), harness.DEFAULT_MAX_SOURCE_BYTES)
+        with self.assertRaises(RecursionError):
+            json.loads(deep_manifest.decode("ascii"))
+
+        def root_bytes(seal: harness.DisposableRootSeal) -> tuple:
+            return tuple(
+                (path.name, path.read_bytes())
+                for path in sorted(
+                    seal.canonical.iterdir(),
+                    key=lambda item: item.name.encode("utf-8"),
+                )
+            )
+
+        blobs = self._blobs()
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            deep_seal = self._sealed_output(base, "deep-manifest")
+            (deep_seal.canonical / harness.MANIFEST_NAME).write_bytes(deep_manifest)
+            deep_before = root_bytes(deep_seal)
+
+            self.assertEqual(harness.candidate_state(deep_seal), "incomplete")
+            self.assertEqual(root_bytes(deep_seal), deep_before)
+            with self.assertRaises(harness.HarnessError) as raised:
+                harness.build_candidate(deep_seal, blobs)
+            self.assertEqual(raised.exception.code, "INCOMPLETE_BUILD_PRESENT")
+            self.assertEqual(root_bytes(deep_seal), deep_before)
+
+            malformed_seal = self._sealed_output(base, "malformed-manifest")
+            (malformed_seal.canonical / harness.MANIFEST_NAME).write_bytes(b"{")
+            malformed_before = root_bytes(malformed_seal)
+            self.assertEqual(harness.candidate_state(malformed_seal), "incomplete")
+            self.assertEqual(root_bytes(malformed_seal), malformed_before)
+            with mock.patch.object(
+                harness.json,
+                "loads",
+                side_effect=RuntimeError("synthetic programming error"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    harness.candidate_state(malformed_seal)
+            self.assertEqual(root_bytes(malformed_seal), malformed_before)
+
+            complete_seal = self._sealed_output(base, "complete-manifest")
+            harness.build_candidate(complete_seal, blobs)
+            complete_before = root_bytes(complete_seal)
+            self.assertEqual(harness.candidate_state(complete_seal), "complete")
+            self.assertEqual(root_bytes(complete_seal), complete_before)
+
     def test_precommit_crash_points_never_create_completion_manifest(self) -> None:
         blobs = self._blobs()
         checkpoints = (
