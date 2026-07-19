@@ -18,6 +18,10 @@ from tools.research import m1b_contract as contract
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPOSITORY_ROOT / "fixtures" / "m1b" / "contract-cases.json"
 README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
+EXPECTED_FIXTURE_CASES = 140
+EXPECTED_BUNDLE_HASH = (
+    "4bc9475737ab6fbc364b9c16b604ca9ea649bfc36077eadb01edfdbb0d4e0e40"
+)
 
 
 class SyntheticContractCaseTests(unittest.TestCase):
@@ -26,12 +30,13 @@ class SyntheticContractCaseTests(unittest.TestCase):
         cls.fixture_bytes = FIXTURE.read_bytes()
         cls.manifest = contract.parse_json_bytes(cls.fixture_bytes)
         cls.cases = cls.manifest["cases"]
+        cls.base = cls.manifest["base_document"]
 
     def test_all_table_cases_return_exact_controlled_code(self) -> None:
-        self.assertEqual(len(self.cases), 59)
+        self.assertEqual(len(self.cases), EXPECTED_FIXTURE_CASES)
         self.assertEqual(
             sum(case["expected"]["status"] == "error" for case in self.cases),
-            58,
+            EXPECTED_FIXTURE_CASES - 1,
         )
         for case in self.cases:
             with self.subTest(case=case["id"]):
@@ -41,46 +46,98 @@ class SyntheticContractCaseTests(unittest.TestCase):
                 self.assertEqual(set(actual), {"codes", "counts", "status"})
                 self.assertEqual(set(actual["counts"]), set(contract._COUNT_KEYS))
                 if actual["status"] == "error":
-                    self.assertTrue(all(value == 0 for value in actual["counts"].values()))
+                    self.assertTrue(
+                        all(value == 0 for value in actual["counts"].values())
+                    )
 
-    def test_required_adversarial_families_are_fixture_backed(self) -> None:
+    def test_required_remediation_regressions_are_fixture_backed(self) -> None:
         case_ids = {case["id"] for case in self.cases}
         required = {
-            "accepted-critical-human-finding",
-            "api-base-path-trailing-slash",
-            "atom-extra",
-            "atom-missing",
-            "atom-mutation",
-            "auto-pull-enabled",
-            "boolean-integer",
-            "candidate-profile-version-mismatch",
-            "candidate-runtime-mismatch",
-            "cloud-model-ref",
-            "cloud-tag",
-            "content-derived-private-corpus-hash",
-            "corpus-generation-mismatch",
+            # Human/editorial separation and identity.
+            "editorial-approved-unevaluated",
+            "editorial-approved-without-technical",
+            "approved-high-no-reviews",
+            "approved-mandatory-human-without-gate",
+            "model-review-instead-of-human",
             "critical-review-count-insufficient",
-            "duplicate-json-key",
-            "duplicate-opaque-id",
-            "fallback-enabled",
-            "loopback-hostname-endpoint",
-            "malformed-full-digest",
-            "malformed-uuid",
-            "missing-api-base-path",
-            "missing-document-schema-version",
-            "missing-output-schema-version",
-            "missing-profile-version",
-            "missing-prompt-version",
-            "model-review-counted-as-human",
-            "non-loopback-endpoint",
-            "non-synthetic-atom",
-            "prefixed-full-digest",
-            "premature-baseline",
-            "premature-m1b-verdict",
-            "premature-winner",
-            "profile-generation-mismatch",
-            "protocol-generation-mismatch",
-            "proxy-routing-enabled",
+            "same-critical-reviewer-twice",
+            "reviewer-role-inconsistent",
+            "reviewer-id-role-collision",
+            "finding-dimension-mismatch",
+            "holdout-ground-truth-missing",
+            "model-ground-truth-not-human",
+            "high-approved-after-repair",
+            "critical-approved-after-fallback",
+            "not-observed-without-terminal-failure",
+            "terminal-failure-with-observed-atoms",
+            "terminal-failure-accounting-mismatch",
+            "success-without-model-call",
+            "human-quality-without-output",
+            "human-status-without-ground-truth",
+            "human-ground-truth-without-output",
+            # Exact typed atoms.
+            "atom-value-mutation",
+            "atom-position-reordered",
+            "atom-multiplicity-mutation",
+            "expected-atom-occurrence-index-duplicate",
+            "coherent-expected-observed-atom-kind-drift",
+            "coherent-expected-observed-atom-value-drift",
+            "coherent-expected-observed-atom-position-drift",
+            "atom-occurrence-duplicate",
+            "atom-missing",
+            "atom-extra",
+            "atom-kind-mutation",
+            # Trusted freeze registry and coherent drift.
+            "definition-component-missing",
+            "definition-component-duplicate",
+            "definition-component-extra",
+            "definition-kind-unknown",
+            "definition-hash-malformed",
+            "bundle-hash-malformed",
+            "bundle-hash-mismatch",
+            "definition-payload-drift",
+            "definition-self-rehash-drift",
+            "definition-generation-drift",
+            "definition-state-self-accepted",
+            "definition-version-drift",
+            "protocol-version-drift",
+            "prompt-version-drift",
+            "output-schema-version-drift",
+            "document-schema-version-drift",
+            "all-candidate-runtime-drift",
+            # Assignment, coverage, and accounting.
+            "duplicate-assignment-new-result-id",
+            "complete-missing-assignment",
+            "extra-primary-assignment",
+            "candidate-without-results",
+            "phantom-repair-row",
+            "phantom-fallback-row",
+            "fallback-row-while-disabled",
+            "model-fallback-while-disabled",
+            "live-observation-not-probed",
+            "accounting-count-exceeds-results",
+            "retry-zero-hidden-attempt",
+            "multiple-model-calls-without-retry",
+            "repair-accounting-mismatch",
+            "aggregate-count-mismatch",
+            "aggregate-accounting-mismatch",
+            "mixed-result-generation",
+            "partial-report-claimed-complete",
+            "narrative-auto-eligible-risk",
+            # Endpoint and bounded parsing.
+            "leading-lf-endpoint",
+            "trailing-lf-endpoint",
+            "inside-lf-endpoint",
+            "inside-tab-endpoint",
+            "crlf-endpoint",
+            "unicode-whitespace-endpoint",
+            "ascii-whitespace-endpoint",
+            "port-zero-endpoint",
+            "missing-port-endpoint",
+            "out-of-range-port-endpoint",
+            "oversize-json-integer",
+            "json-float",
+            # Privacy and premature gate claims.
             "raw-annotation-field",
             "raw-filename-field",
             "raw-input-field",
@@ -89,23 +146,140 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "raw-prompt-field",
             "raw-text-field",
             "raw-translation-field",
-            "redirects-enabled",
-            "result-dimension-duplicate",
-            "result-dimension-missing",
-            "result-dimension-unknown",
-            "same-critical-reviewer-twice",
-            "tuning-holdout-overlap",
-            "unknown-category",
-            "unknown-dimension",
-            "unknown-reviewer-role",
-            "unknown-severity",
-            "unknown-split",
+            "content-derived-private-corpus-hash",
+            "premature-winner",
+            "premature-baseline",
+            "premature-m1b-verdict",
         }
         self.assertTrue(required <= case_ids, sorted(required - case_ids))
 
+    def test_positive_contract_uses_external_trusted_definition_registry(self) -> None:
+        bundle = self.base["definition_bundle"]
+        self.assertEqual(bundle["framing"], contract.COMPONENT_FRAMING)
+        self.assertEqual(bundle["sha256"], EXPECTED_BUNDLE_HASH)
+        self.assertEqual(bundle["sha256"], contract.TRUSTED_BUNDLE_HASH)
+        self.assertEqual(len(bundle["components"]), 15)
+        self.assertEqual(
+            bundle["components"],
+            [dict(component) for component in contract.TRUSTED_COMPONENTS],
+        )
+        self.assertEqual(
+            {component["acceptance_state"] for component in bundle["components"]},
+            {"proposed"},
+        )
+
+    def test_component_hash_has_a_fixed_public_vector(self) -> None:
+        component = self.base["definition_bundle"]["components"][0]
+        actual = contract.component_hash(
+            component["kind"],
+            component["version"],
+            component["definition"].encode("ascii"),
+        )
+        self.assertEqual(
+            actual,
+            "6b55a57f4905db55972ae301daa080c5cc8b7c42e66e75c7249a6b8abf9147dc",
+        )
+        self.assertEqual(actual, component["sha256"])
+
+    def test_trusted_definitions_cover_executable_semantics(self) -> None:
+        definitions = {
+            component["kind"]: json.loads(component["definition"])
+            for component in self.base["definition_bundle"]["components"]
+        }
+        benchmark = definitions["benchmark_contract"]
+        self.assertEqual(benchmark["root_fields"], list(contract._ROOT_FIELDS))
+        self.assertEqual(
+            benchmark["assignment_tuple"],
+            [
+                "candidate_id",
+                "sample_id",
+                "profile_version",
+                "profile_generation",
+                "experiment_lane",
+                "attempt_stage",
+                "attempt_index",
+            ],
+        )
+        output = definitions["output_schema"]
+        self.assertEqual(output["result_fields"], list(contract._RESULT_FIELDS))
+        self.assertEqual(output["atom_fields"], list(contract._ATOM_FIELDS))
+        self.assertEqual(
+            output["accounting_fields"], list(contract._ACCOUNTING_FIELDS)
+        )
+        self.assertEqual(output["count_keys"], list(contract._COUNT_KEYS))
+        generation = definitions["generation_policy"]
+        self.assertEqual(
+            generation["request_boundary"],
+            contract._EXPECTED_REQUEST_BOUNDARY,
+        )
+        self.assertEqual(
+            generation["provider_controls"],
+            contract._EXPECTED_PROVIDER_CONTROLS,
+        )
+        corpus = definitions["corpus_policy"]
+        self.assertEqual(
+            corpus["synthetic_corpus_sha256"],
+            contract.SYNTHETIC_CORPUS_SHA256,
+        )
+        for candidate in self.base["candidate_profiles"]:
+            definition = definitions["candidate_profile." + candidate["candidate"]]
+            self.assertEqual(
+                definition["candidate_profile_fields"],
+                list(contract._CANDIDATE_FIELDS),
+            )
+            self.assertEqual(definition["model_ref"], candidate["model_ref"])
+            self.assertEqual(definition["model_digest"], candidate["model_digest"])
+            self.assertEqual(definition["runtime"], candidate["runtime"])
+            self.assertEqual(
+                definition["thinking_profile"], candidate["thinking_profile"]
+            )
+        validator = definitions["validator_policy"]
+        self.assertEqual(validator["max_input_bytes"], contract.MAX_INPUT_BYTES)
+        self.assertEqual(validator["json_integer_min"], contract.MIN_JSON_INTEGER)
+        self.assertEqual(validator["json_integer_max"], contract.MAX_JSON_INTEGER)
+        analysis = definitions["analysis_policy"]
+        self.assertEqual(analysis["minimum_n_per_required_stratum"], 36)
+        self.assertEqual(analysis["minimum_overall_n"], 288)
+        self.assertEqual(analysis["critical_false_accept_minimum_n"], 149)
+        self.assertTrue(analysis["owner_decision_required"])
+        retention = definitions["retention_leakage_policy"]
+        self.assertEqual(
+            retention["persistence_blocker"], "PROVIDER_PERSISTENCE_UNPROVEN"
+        )
+        self.assertEqual(retention["persistence_status"], "not_probed")
+        blinding = definitions["randomization_blinding_policy"]
+        self.assertEqual(blinding["unblinded_review"], "secondary_only")
+        self.assertEqual(
+            blinding["replacement_reviewers"], "never_unblinded_humans"
+        )
+        quality = definitions["quality_rubric"]
+        self.assertTrue(quality["human_status_requires_ground_truth"])
+        self.assertEqual(
+            quality["missing_ground_truth_status"], "not_evaluated"
+        )
+
+    def test_bundle_hash_has_fixed_vector_and_deterministic_order(self) -> None:
+        rows = [
+            (component["kind"], component["version"], component["sha256"])
+            for component in self.base["definition_bundle"]["components"]
+        ]
+        self.assertEqual(contract.bundle_hash(rows), EXPECTED_BUNDLE_HASH)
+        self.assertEqual(contract.bundle_hash(list(reversed(rows))), EXPECTED_BUNDLE_HASH)
+
+    def test_hash_helpers_reject_duplicate_and_malformed_records(self) -> None:
+        row = ("benchmark_contract", "m1b-benchmark-contract-v1", "0" * 64)
+        with self.assertRaises(contract.ContractError) as duplicate:
+            contract.bundle_hash([row, row])
+        self.assertEqual(duplicate.exception.code, "DEFINITION_COMPONENT_DUPLICATE")
+        with self.assertRaises(contract.ContractError) as malformed:
+            contract.bundle_hash([(row[0], row[1], "sha256:bad")])
+        self.assertEqual(malformed.exception.code, "DEFINITION_HASH_INVALID")
+        with self.assertRaises(contract.ContractError) as invalid_payload:
+            contract.component_hash(row[0], row[1], "not-bytes")
+        self.assertEqual(invalid_payload.exception.code, "INVALID_TYPE")
+
     def test_positive_contract_proves_equal_unranked_candidate_profiles(self) -> None:
-        base = self.manifest["base_document"]
-        candidates = base["candidate_profiles"]
+        candidates = self.base["candidate_profiles"]
         self.assertEqual(
             {candidate["candidate"] for candidate in candidates},
             contract.EXPECTED_CANDIDATES,
@@ -113,7 +287,11 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(len(candidates), 3)
         self.assertEqual(
             {candidate["profile_version"] for candidate in candidates},
-            {"m1b-primary-common-profile-v1"},
+            {contract.PROFILE_VERSION},
+        )
+        self.assertEqual(
+            {candidate["profile_generation"] for candidate in candidates},
+            {contract.PROFILE_GENERATION},
         )
         self.assertEqual(
             {candidate["selection_status"] for candidate in candidates},
@@ -126,100 +304,112 @@ class SyntheticContractCaseTests(unittest.TestCase):
             {candidate["thinking_profile"]["mode"] for candidate in candidates},
             {"not_probed"},
         )
-        self.assertEqual(
-            {candidate["thinking_profile"]["exception_status"] for candidate in candidates},
-            {"none"},
-        )
 
     def test_positive_contract_uses_placeholder_full_digest_shape_only(self) -> None:
         digests = [
-            candidate["model_digest"]
-            for candidate in self.manifest["base_document"]["candidate_profiles"]
+            candidate["model_digest"] for candidate in self.base["candidate_profiles"]
         ]
         self.assertEqual(len(set(digests)), 3)
         self.assertTrue(all(re.fullmatch(r"[0-9a-f]{64}", value) for value in digests))
         self.assertTrue(all(value == value[0] * 64 for value in digests))
         self.assertNotIn("sha256:", "".join(digests))
 
-    def test_positive_contract_proves_split_and_atom_invariants(self) -> None:
-        base = self.manifest["base_document"]
-        tuning = set(base["corpus"]["splits"]["tuning"])
-        holdout = set(base["corpus"]["splits"]["holdout"])
-        self.assertTrue(tuning)
-        self.assertTrue(holdout)
-        self.assertFalse(tuning & holdout)
-        atoms = [
+    def test_positive_is_declared_partial_not_complete_benchmark(self) -> None:
+        self.assertEqual(
+            self.base["benchmark_state"],
+            {"complete": False, "report_kind": "partial_synthetic_conformance"},
+        )
+        coverage = self.base["coverage"]
+        self.assertEqual(coverage["declared_primary_assignment_count"], 3)
+        self.assertEqual(coverage["required_primary_assignment_count"], 6)
+        self.assertEqual(
+            {row["primary_result_count"] for row in coverage["per_candidate"]},
+            {1},
+        )
+        self.assertEqual(
+            sum(row["primary_result_count"] for row in coverage["per_stratum"]),
+            3,
+        )
+
+    def test_positive_exact_atoms_cover_value_position_and_multiplicity(self) -> None:
+        sample = self.base["corpus"]["samples"][0]
+        expected = sample["expected_atoms"]
+        self.assertEqual(len(expected), 3)
+        logical = [
             atom
-            for sample in base["corpus"]["samples"]
-            for atom in sample["expected_atoms"]
+            for atom in expected
+            if atom["atom_id"] == "00000000-0000-4000-8000-000000000021"
         ]
-        self.assertTrue(atoms)
-        self.assertEqual({atom["provenance"] for atom in atoms}, {"synthetic"})
-        dimension_records = base["conformance_results"][0]["dimension_records"]
+        self.assertEqual(len(logical), 2)
+        self.assertEqual({atom["occurrence_index"] for atom in logical}, {0, 1})
+        self.assertEqual(len({atom["occurrence_id"] for atom in expected}), 3)
         self.assertEqual(
-            {record["dimension"] for record in dimension_records},
-            contract.QUALITY_DIMENSIONS,
+            {atom["position_policy"] for atom in expected},
+            {"exact_utf8_byte_span"},
         )
-        self.assertEqual(len(dimension_records), len(contract.QUALITY_DIMENSIONS))
-        self.assertEqual(
-            {
-                record["dimension"]: record["status"]
-                for record in dimension_records
-            },
-            {
-                "context_voice_style": "not_evaluated",
-                "literary_russian": "not_evaluated",
-                "meaning_accuracy": "not_evaluated",
-                "schema_atom_stability": "synthetic_conformant",
-                "terminology_lore": "not_evaluated",
-            },
+        self.assertTrue(
+            all(
+                atom["position_end"] - atom["position_start"]
+                == len(atom["synthetic_value"].encode("utf-8"))
+                for atom in expected
+            )
         )
-        result = contract.validate_fixture_case(self.manifest, "positive")
+        for result in self.base["conformance_results"]:
+            self.assertEqual(result["observed_atoms"], expected)
+
+    def test_positive_separates_technical_human_and_editorial_state(self) -> None:
+        self.assertEqual(self.base["findings"], [])
+        self.assertEqual(self.base["human_ground_truth"], [])
+        for result in self.base["conformance_results"]:
+            self.assertEqual(result["technical_conformance"], "synthetic_conformant")
+            self.assertEqual(result["editorial_status"], "not_evaluated")
+            dimensions = {
+                row["dimension"]: row["status"]
+                for row in result["dimension_records"]
+            }
+            self.assertEqual(
+                dimensions,
+                {
+                    "schema_atom_stability": "synthetic_conformant",
+                    "meaning_accuracy": "not_evaluated",
+                    "terminology_lore": "not_evaluated",
+                    "literary_russian": "not_evaluated",
+                    "context_voice_style": "not_evaluated",
+                },
+            )
+
+    def test_positive_report_is_redacted_zero_live_accounting(self) -> None:
+        report = self.base["aggregate_report"]
+        self.assertEqual(report["redaction"], "controlled_aggregates_only")
+        self.assertEqual(set(report["quality_dimensions"]), contract.QUALITY_DIMENSIONS)
+        for field in contract._ACCOUNTING_FIELDS:
+            self.assertEqual(report[field], 0)
+            self.assertTrue(
+                all(result["accounting"][field] == 0 for result in self.base["conformance_results"])
+            )
+        self.assertEqual(self.base["provider_policy"]["residency_status"], "not_probed")
+        self.assertEqual(self.base["provider_policy"]["persistence_status"], "not_probed")
+        self.assertFalse(self.base["provider_policy"]["fallback"])
+        self.assertEqual(report["human_ground_truth_count"], 0)
+
+    def test_positive_result_has_exact_aggregate_counts(self) -> None:
         self.assertEqual(
-            result,
+            contract.validate_fixture_case(self.manifest, "positive"),
             {
                 "codes": [],
                 "counts": {
                     "candidates": 3,
-                    "findings": 1,
+                    "findings": 0,
                     "holdout_samples": 1,
-                    "results": 1,
-                    "reviews": 2,
+                    "human_ground_truth": 0,
+                    "results": 3,
+                    "reviews": 0,
                     "samples": 2,
                     "tuning_samples": 1,
                 },
                 "status": "ok",
             },
         )
-
-    def test_positive_report_is_redacted_independent_and_fully_accounted(self) -> None:
-        base = self.manifest["base_document"]
-        report = base["aggregate_report"]
-        self.assertEqual(report["redaction"], "controlled_aggregates_only")
-        self.assertEqual(set(report["quality_dimensions"]), contract.QUALITY_DIMENSIONS)
-        for field in (
-            "cold_latency_observation_count",
-            "warm_latency_observation_count",
-            "memory_observation_count",
-            "repair_attempt_count",
-            "repair_success_count",
-            "repair_failure_count",
-            "fallback_attempt_count",
-            "human_fallback_count",
-            "model_fallback_count",
-            "terminal_rejection_count",
-        ):
-            self.assertIn(field, report)
-            self.assertIs(type(report[field]), int)
-        self.assertEqual(base["benchmark_state"], {"complete": False})
-
-    def test_positive_critical_finding_has_two_distinct_human_reviewers(self) -> None:
-        finding = self.manifest["base_document"]["findings"][0]
-        reviews = finding["reviews"]
-        self.assertEqual(finding["severity"], "critical")
-        self.assertEqual({review["reviewer_role"] for review in reviews}, {"human_reviewer"})
-        self.assertEqual({review["review_credit"] for review in reviews}, {"human"})
-        self.assertEqual(len({review["reviewer_id"] for review in reviews}), 2)
 
     def test_fixture_contains_no_private_or_raw_payload_values(self) -> None:
         serialized = self.fixture_bytes.decode("utf-8")
@@ -229,6 +419,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "file://",
             "PRIVATE_SYNTHETIC_CONTENT",
             "copyrighted excerpt",
+            "l_russian:",
         ):
             self.assertNotIn(forbidden, serialized)
         for case in self.cases:
@@ -239,53 +430,72 @@ class SyntheticContractCaseTests(unittest.TestCase):
 
     def test_ipv4_and_ipv6_exact_api_endpoints_are_accepted(self) -> None:
         for endpoint in (
-            "http://127.0.0.1:11434/api",
+            "http://127.0.0.1:1/api",
+            "http://127.0.0.1:65535/api",
             "http://[::1]:11434/api",
         ):
             with self.subTest(endpoint=endpoint):
-                document = copy.deepcopy(self.manifest["base_document"])
+                document = copy.deepcopy(self.base)
                 document["provider_policy"]["endpoint"] = endpoint
                 counts = contract.validate_document(document)
                 self.assertEqual(counts["candidates"], 3)
 
-    def test_thinking_difference_requires_explicit_preregistration(self) -> None:
-        document = copy.deepcopy(self.manifest["base_document"])
-        for index, mode in enumerate(("enabled", "low", "high")):
-            thinking = document["candidate_profiles"][index]["thinking_profile"]
-            thinking["mode"] = mode
-            thinking["exception_status"] = "preregistered"
-            thinking["exception_version"] = "m1b-thinking-exception-v1"
-        counts = contract.validate_document(document)
-        self.assertEqual(counts["candidates"], 3)
-
 
 class StrictJsonAndSchemaTests(unittest.TestCase):
-    def test_duplicate_object_keys_are_rejected_before_schema_validation(self) -> None:
-        result = contract.validate_json_bytes(b'{"a":1,"a":2}')
-        self.assertEqual(result["codes"], ["JSON_DUPLICATE_KEY"])
+    def test_bounded_json_integer_accepts_signed_64_bit_boundaries(self) -> None:
+        self.assertEqual(
+            contract.parse_json_bytes(str(contract.MAX_JSON_INTEGER).encode("ascii")),
+            contract.MAX_JSON_INTEGER,
+        )
+        self.assertEqual(
+            contract.parse_json_bytes(str(contract.MIN_JSON_INTEGER).encode("ascii")),
+            contract.MIN_JSON_INTEGER,
+        )
 
-    def test_invalid_utf8_is_controlled(self) -> None:
-        result = contract.validate_json_bytes(b'{"schema_version":"\xff"}')
-        self.assertEqual(result["codes"], ["UTF8_INVALID"])
+    def test_bounded_json_integer_rejects_before_integer_conversion(self) -> None:
+        tokens = (
+            str(contract.MAX_JSON_INTEGER + 1),
+            str(contract.MIN_JSON_INTEGER - 1),
+            "9" * 80,
+        )
+        for token in tokens:
+            with self.subTest(length=len(token), negative=token.startswith("-")):
+                result = contract.validate_json_bytes(token.encode("ascii"))
+                self.assertEqual(result["codes"], ["JSON_INTEGER_OUT_OF_RANGE"])
+                self.assertNotIn(token, json.dumps(result, sort_keys=True))
 
-    def test_malformed_and_nonfinite_json_are_controlled(self) -> None:
+    def test_floats_and_nonfinite_numbers_are_controlled(self) -> None:
         cases = (
-            (b"{", "JSON_MALFORMED"),
-            (b'{"value":NaN}', "JSON_MALFORMED"),
-            (b'{"value":Infinity}', "JSON_MALFORMED"),
-            (b'{"value":-Infinity}', "JSON_MALFORMED"),
+            (b"1.0", "JSON_FLOAT_FORBIDDEN"),
+            (b"1e3", "JSON_FLOAT_FORBIDDEN"),
+            (b"NaN", "JSON_MALFORMED"),
+            (b"Infinity", "JSON_MALFORMED"),
+            (b"-Infinity", "JSON_MALFORMED"),
         )
         for payload, code in cases:
             with self.subTest(code=code, payload=payload):
                 self.assertEqual(contract.validate_json_bytes(payload)["codes"], [code])
 
-    def test_escaped_surrogate_is_not_a_valid_unicode_scalar(self) -> None:
-        result = contract.validate_json_bytes(b'{"value":"\\ud800"}')
-        self.assertEqual(result["codes"], ["JSON_UNICODE_INVALID"])
+    def test_duplicate_object_keys_are_rejected_before_schema_validation(self) -> None:
+        self.assertEqual(
+            contract.validate_json_bytes(b'{"a":1,"a":2}')["codes"],
+            ["JSON_DUPLICATE_KEY"],
+        )
+
+    def test_invalid_utf8_malformed_json_and_surrogate_are_controlled(self) -> None:
+        cases = (
+            (b'{"schema_version":"\xff"}', "UTF8_INVALID"),
+            (b"{", "JSON_MALFORMED"),
+            (b'{"value":"\\ud800"}', "JSON_UNICODE_INVALID"),
+        )
+        for payload, code in cases:
+            with self.subTest(code=code):
+                self.assertEqual(contract.validate_json_bytes(payload)["codes"], [code])
 
     def test_bool_is_not_accepted_as_integer(self) -> None:
-        manifest = contract.parse_json_bytes(FIXTURE.read_bytes())
-        result = contract.validate_fixture_case(manifest, "boolean-integer")
+        result = contract.validate_fixture_case(
+            contract.parse_json_bytes(FIXTURE.read_bytes()), "boolean-integer"
+        )
         self.assertEqual(result["codes"], ["INVALID_TYPE"])
 
     def test_manifest_and_document_objects_have_closed_field_sets(self) -> None:
@@ -311,14 +521,18 @@ class StrictJsonAndSchemaTests(unittest.TestCase):
 class OfflineCliBoundaryTests(unittest.TestCase):
     def _run(self, *arguments: str) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [sys.executable, str(REPOSITORY_ROOT / "tools" / "research" / "m1b_contract.py"), *arguments],
+            [
+                sys.executable,
+                str(REPOSITORY_ROOT / "tools" / "research" / "m1b_contract.py"),
+                *arguments,
+            ],
             cwd=str(REPOSITORY_ROOT),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
         )
 
-    def test_positive_fixture_cli_is_compact_and_stderr_free(self) -> None:
+    def test_positive_fixture_cli_is_compact_stderr_free_and_path_free(self) -> None:
         completed = self._run("validate-case", str(FIXTURE), "positive")
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(completed.stderr, b"")
@@ -340,16 +554,28 @@ class OfflineCliBoundaryTests(unittest.TestCase):
         self.assertEqual(completed.stderr, b"")
         self.assertEqual(json.loads(completed.stdout)["status"], "ok")
 
+    def test_oversize_integer_cli_never_echoes_token_or_path(self) -> None:
+        marker = "9" * 80
+        with tempfile.TemporaryDirectory() as temporary:
+            input_file = Path(temporary) / "synthetic-number.json"
+            input_file.write_text(marker, encoding="ascii")
+            completed = self._run("validate", str(input_file))
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stderr, b"")
+        self.assertNotIn(marker.encode("ascii"), completed.stdout)
+        self.assertNotIn(os.fsencode(str(input_file)), completed.stdout)
+        self.assertEqual(
+            json.loads(completed.stdout)["codes"],
+            ["JSON_INTEGER_OUT_OF_RANGE"],
+        )
+
     def test_missing_input_never_echoes_filename_path_or_exception(self) -> None:
         marker = "SENSITIVE_SYNTHETIC_FILENAME_MARKER"
         completed = self._run("validate", marker)
         self.assertEqual(completed.returncode, 2)
         self.assertEqual(completed.stderr, b"")
         self.assertNotIn(marker.encode("ascii"), completed.stdout)
-        self.assertEqual(
-            json.loads(completed.stdout)["codes"],
-            ["INPUT_READ_FAILED"],
-        )
+        self.assertEqual(json.loads(completed.stdout)["codes"], ["INPUT_READ_FAILED"])
 
     def test_invalid_utf8_cli_never_echoes_input_path_or_bytes(self) -> None:
         marker = "SENSITIVE_SYNTHETIC_UTF8_MARKER"
@@ -375,11 +601,21 @@ class OfflineCliBoundaryTests(unittest.TestCase):
 
     def test_unexpected_exception_text_is_discarded(self) -> None:
         marker = "PRIVATE_SYNTHETIC_EXCEPTION_MARKER"
-        with mock.patch.object(contract, "_read_explicit_file", side_effect=RuntimeError(marker)):
+        with mock.patch.object(
+            contract, "_read_explicit_file", side_effect=RuntimeError(marker)
+        ):
             result = contract._execute(("validate", "synthetic"))
         encoded = contract._encode_result(result)
         self.assertNotIn(marker.encode("ascii"), encoded)
         self.assertEqual(json.loads(encoded)["codes"], ["UNEXPECTED_FAILURE"])
+
+    def test_encode_fallback_preserves_closed_count_schema(self) -> None:
+        encoded = contract._encode_result(
+            {"status": object(), "codes": [], "counts": contract._empty_counts()}
+        )
+        result = json.loads(encoded)
+        self.assertEqual(result["codes"], ["UNEXPECTED_FAILURE"])
+        self.assertEqual(set(result["counts"]), set(contract._COUNT_KEYS))
 
     def test_input_size_limit_is_controlled(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
