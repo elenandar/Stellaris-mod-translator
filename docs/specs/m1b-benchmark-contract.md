@@ -2,7 +2,7 @@
 
 - Статус: `M1B: NOT_EVALUATED`; protocol under review, benchmark не запускался,
   feasibility verdict отсутствует
-- Версия proposal: `m1b-benchmark-contract-v4`; protocol generation `104`;
+- Версия proposal: `m1b-benchmark-contract-v4`; protocol generation `105`;
   состояние definition:
   `proposed`, не `owner_accepted`
 - Зависимый gate: `M1A: BLOCKED`
@@ -22,7 +22,7 @@ trusted registry validator-а и `fixtures/m1b/README.md`. Этот докуме
 Текущие executable IDs: document schema `m1b-synthetic-contract-v4`, fixture
 manifest `m1b-synthetic-contract-cases-v4`, output schema
 `m1b-synthetic-output-v4`, corpus `m1b-synthetic-corpus-v3` generation `304`.
-Trusted analysis component — `m1b-analysis-policy-v4`, generation `104`.
+Trusted analysis component — `m1b-analysis-policy-v4`, generation `105`.
 Любая другая version unsupported, даже если проходит общий version regex.
 
 ## Цель и граница решения

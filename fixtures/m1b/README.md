@@ -27,20 +27,20 @@ editorial state remain `not_evaluated`.
 The fixture uses:
 
 - fixture schema `m1b-synthetic-contract-cases-v4`;
-- protocol `m1b-benchmark-contract-v4`, generation `104`;
+- protocol `m1b-benchmark-contract-v4`, generation `105`;
 - output schema `m1b-synthetic-output-v4`;
 - corpus `m1b-synthetic-corpus-v3`, generation `304`;
-- quality rubric `m1b-quality-rubric-v4`;
-- analysis policy `m1b-analysis-policy-v4`, generation `104`;
+- quality rubric `m1b-quality-rubric-v5`;
+- analysis policy `m1b-analysis-policy-v4`, generation `105`;
 - `17` byte-exact public proposal components;
 - bundle SHA-256
-  `18940d254087317b46bd8c78a00a1526b741907dc3dc0c1eb28b9a9f8bc22cd4`;
+  `97f7096de99d36a507f3df0c7e025b25cd6f0a3c573dc5f66f5aa15dd671fd1e`;
 - public synthetic corpus SHA-256
   `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`;
 - fixed first-component vector
-  `6e3b9bfbaaef3793dd1a84ed5a6c37b8a249be4de5e2b889c13e84b83a15a9e1`;
+  `ef5c91cea7d9397e035e87676f32deb3410296417277d09d3f1dee76272bbd48`;
 - fixture file SHA-256
-  `fca4fabea3781f53d1759475b0a1d3a8c97c3b03cb785e04051961fb2422fba4`.
+  `98978b6f17198f81cd1c0dd29039e5ed039b744fdd019d80bb01e9e1f423ce66`.
 
 All definitions remain `proposed`; none is `owner_accepted`. The bundle binds
 declarative definitions and the public synthetic corpus, not the exact current

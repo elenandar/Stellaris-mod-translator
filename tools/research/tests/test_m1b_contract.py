@@ -23,10 +23,10 @@ README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
 EXPECTED_FIXTURE_CASES = 173
 EXPECTED_POSITIVE_CASES = 3
 EXPECTED_FIXTURE_SHA256 = (
-    "fca4fabea3781f53d1759475b0a1d3a8c97c3b03cb785e04051961fb2422fba4"
+    "98978b6f17198f81cd1c0dd29039e5ed039b744fdd019d80bb01e9e1f423ce66"
 )
 EXPECTED_BUNDLE_HASH = (
-    "18940d254087317b46bd8c78a00a1526b741907dc3dc0c1eb28b9a9f8bc22cd4"
+    "97f7096de99d36a507f3df0c7e025b25cd6f0a3c573dc5f66f5aa15dd671fd1e"
 )
 
 
@@ -248,7 +248,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(
             analysis_component["generation"], contract.PROTOCOL_GENERATION
         )
-        self.assertEqual(self.base["protocol"]["generation"], 104)
+        self.assertEqual(self.base["protocol"]["generation"], 105)
 
     def test_component_hash_has_a_fixed_public_vector(self) -> None:
         component = self.base["definition_bundle"]["components"][0]
@@ -259,7 +259,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(
             actual,
-            "6e3b9bfbaaef3793dd1a84ed5a6c37b8a249be4de5e2b889c13e84b83a15a9e1",
+            "ef5c91cea7d9397e035e87676f32deb3410296417277d09d3f1dee76272bbd48",
         )
         self.assertEqual(actual, component["sha256"])
 

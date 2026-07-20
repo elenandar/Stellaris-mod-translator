@@ -35,7 +35,7 @@ OUTPUT_SCHEMA_VERSION = "m1b-synthetic-output-v4"
 PROMPT_VERSION = "m1b-synthetic-prompt-policy-v1"
 PROFILE_VERSION = "m1b-primary-common-profile-v1"
 CORPUS_VERSION = "m1b-synthetic-corpus-v3"
-PROTOCOL_GENERATION = 104
+PROTOCOL_GENERATION = 105
 PROFILE_GENERATION = 202
 CORPUS_GENERATION = 304
 
@@ -776,7 +776,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "quality_rubric",
-        "m1b-quality-rubric-v4",
+        "m1b-quality-rubric-v5",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {

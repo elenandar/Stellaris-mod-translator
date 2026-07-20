@@ -128,16 +128,16 @@ under review. The offline [synthetic fixture contract](../../fixtures/m1b/README
 is checked by [`m1b_contract.py`](m1b_contract.py) without Ollama, network, corpus,
 game, Workshop, launcher, or active-path access.
 
-Current public proposal identity is protocol v4/generation 104, analysis policy
-v4/generation 104, document,
+Current public proposal identity is protocol v4/generation 105, analysis policy
+v4/generation 105, document,
 fixture and output schema v4, synthetic corpus v3/generation 304, and 17
 components. The table has 173 cases: 3 controlled successes and 170 exact
 controlled failures. Bundle SHA-256 is
-`18940d254087317b46bd8c78a00a1526b741907dc3dc0c1eb28b9a9f8bc22cd4`;
+`97f7096de99d36a507f3df0c7e025b25cd6f0a3c573dc5f66f5aa15dd671fd1e`;
 the public synthetic corpus SHA-256 is
 `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`.
 The fixture file SHA-256 is
-`fca4fabea3781f53d1759475b0a1d3a8c97c3b03cb785e04051961fb2422fba4`.
+`98978b6f17198f81cd1c0dd29039e5ed039b744fdd019d80bb01e9e1f423ce66`.
 Decision-grade agreement, D1-D5/statistical, and CFA helpers are holdout-only;
 tuning remains explicitly split-scoped diagnostics. Finding reviews preserve
 reviewer-specific closed outcomes and distinct initial human identities, while
