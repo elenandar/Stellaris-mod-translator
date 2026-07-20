@@ -2,8 +2,9 @@
 
 - Статус: `M1B: NOT_EVALUATED`; proposal для owner review, human scoring и
   holdout ещё не выполнялись
-- Версия proposal: `m1b-quality-rubric-v2`; protocol generation `102`;
-  definition state: `proposed`
+- Версия proposal: `m1b-quality-rubric-v3`; analysis policy
+  `m1b-analysis-policy-v3`; protocol generation `103`; definition state:
+  `proposed`
 - Quality verdict: отсутствует
 - Gate state: `M1A: BLOCKED`; `M2: FORBIDDEN`
 
@@ -54,9 +55,10 @@ dimensions либо `critical_false_accept`/`editorial_approval`. Unknown token 
 Cluster не создаёт отдельный denominator: его rows входят в соответствующую
 source-generation/stratum unit. Для D2–D5 unit success только если успешны все
 applicable rows всех contained clusters; любой failure делает unit failure. Для
-ordinal distribution каждый reviewer даёт source generation худший minimum
-applicable score. Cluster может иметь ровно один primary stratum; secondary risk
-labels не создают новый `n`.
+ordinal reviewer-agreement distribution source generation получает суммарную
+массу ровно `1`, распределённую только между фактически наблюдавшимися paired
+ratings; component-wise minimum разных rows запрещён. Cluster может иметь ровно
+один primary stratum; secondary risk labels не создают новый `n`.
 
 Повторные attempts не создают дополнительные samples или clusters. Initial,
 repair и fallback histories связываются с одной assignment и считаются отдельно.
@@ -294,32 +296,50 @@ applicability либо mandatory-review disposition. До aggregation:
 Калибровка reviewer-ов выполняется только на tuning. Изменение instructions или
 anchors после holdout invalidates rubric generation и требует нового holdout.
 
-Для публикуемого quadratic-weighted Cohen kappa каждый tuple
+Для публикуемого source-balanced, case-weighted quadratic Cohen kappa каждый tuple
 `(primary stratum, dimension)` имеет заранее назначенную stable pair reviewers,
 одинаковую для всех трёх candidates/profiles, но kappa публикуется отдельно для
 каждого candidate/profile. Значения меняющихся pairs или candidates не
-pooling-уются. Вход каждой row ссылается на два distinct frozen initial HGT IDs,
-их exact reviewer pair и source generation; final adjudicator score никогда не
-становится третьим kappa rating. Multiple rows одной source generation
-сворачиваются minimum/worst score отдельно для каждого reviewer. Ratings — exact
-integers `0..4`; для counts
-`O_ij`, row totals `r_i`, column totals `c_j`, `n` и agreement weights
-`q_ij = 16 - (i-j)^2` executable formula равна
+pooling-уются. Вход каждой row ссылается на unique logical
+`(result_id, dimension)`, два distinct frozen initial HGT IDs, их exact reviewer
+pair и source generation; повтор logical row запрещён. Final adjudicator score
+никогда не становится третьим kappa rating. Eligible universe — все
+validator-linked distinct frozen initial pairs данного scope; он замораживается
+до holdout и не может выбирать rows post-hoc по score.
+
+Для каждой ordinal-applicable source generation `s` пусть `m_s` — число её
+actual paired rows, а `count_sij` — сколько из них имеют exact pair `(i,j)`.
+Executable equal-source contingency задаётся как
+`O_ij = sum_s(count_sij / m_s)`. Поэтому каждая source generation вносит total
+mass ровно `1`, все реальные pairings сохраняются, а число contained rows не
+увеличивает независимый вес. `n = sum_ij O_ij` равно числу source generations с
+хотя бы одной ordinal-applicable pair. Component-wise minima reviewer-ов из
+разных rows, synthetic cross-row pairing и row-count weighting запрещены.
+
+Ratings — exact integers `0..4`; для rational counts `O_ij`, row totals `r_i`,
+column totals `c_j`, `n` и agreement weights `q_ij = 16 - (i-j)^2` executable
+formula равна
 `kappa = (n*sum(q_ij*O_ij) - sum(q_ij*r_i*c_j)) /
 (16*n^2 - sum(q_ij*r_i*c_j))`. Arithmetic выполняется как exact rational.
 
-Оба `not_applicable` входят только в отдельный applicability-agreement count;
-односторонний `not_applicable` связывается с exact двумя initial IDs и distinct
-third adjudicator, затем source исключается из ordinal kappa, но остаётся в
-applicability-disagreement count. Missing pair/provenance record invalidates run.
-Если denominator formula равен
+Source без ordinal-applicable rows, у которого все rows bilateral
+`not_applicable`, входит только в отдельный applicability-agreement count.
+Любой unilateral `not_applicable` связывается с exact двумя initial IDs и
+distinct third adjudicator, исключает source из ordinal contingency и даёт
+fail-closed `AGREEMENT_APPLICABILITY_DISAGREEMENT`; наличие adjudication не
+превращает исчезнувшую ordinal pair в agreement success. Missing
+pair/provenance record invalidates run. Если denominator formula равен
 нулю, результат `AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT`, а не perfect
 agreement. Proposed gate требует `n >= 46`, point kappa `>= 3/5` и каждую
-delete-one-source kappa defined и `>= 3/5`. Недостаток units, point failure,
-undefined uncertainty и robustness failure имеют отдельные controlled statuses;
-они не заменяются приблизительным score.
+delete-one-whole-source kappa defined и `>= 3/5`; при delete-one удаляется вся
+fractional contribution source и заново вычисляются `n`, marginals и kappa.
+Этот every-delete-one test — influence robustness criterion, не sampling
+confidence interval. Недостаток units, applicability disagreement, point
+failure, undefined robustness и threshold failure имеют отдельные controlled
+statuses; они не заменяются приблизительным score.
 
-Closed result set ровно такой: `AGREEMENT_INSUFFICIENT_UNITS`,
+Closed result set ровно такой: `AGREEMENT_APPLICABILITY_DISAGREEMENT`,
+`AGREEMENT_INSUFFICIENT_UNITS`,
 `AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT`,
 `AGREEMENT_POINT_BELOW_FLOOR`, `AGREEMENT_UNCERTAINTY_UNDEFINED`,
 `AGREEMENT_ROBUSTNESS_BELOW_FLOOR`, `AGREEMENT_PASS`. Порядок initial ratings

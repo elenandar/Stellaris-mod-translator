@@ -128,11 +128,12 @@ under review. The offline [synthetic fixture contract](../../fixtures/m1b/README
 is checked by [`m1b_contract.py`](m1b_contract.py) without Ollama, network, corpus,
 game, Workshop, launcher, or active-path access.
 
-Current public proposal identity is protocol v2/generation 102, document,
+Current public proposal identity is protocol v3/generation 103, analysis policy
+v3/generation 103, document,
 fixture and output schema v3, synthetic corpus v3/generation 304, and 17
 components. The table has 171 cases: 3 controlled successes and 168 exact
 controlled failures. Bundle SHA-256 is
-`8992351db59d99deec8809a7228458577cca09c11f0d3c2fe15567315c4108d9`;
+`10f41321d013c0fa73dea0d689be51f43c721c3f2cef21eb8b8b4fcceff1fdf0`;
 the public synthetic corpus SHA-256 is
 `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`.
 These identities bind public declarative definitions and synthetic corpus

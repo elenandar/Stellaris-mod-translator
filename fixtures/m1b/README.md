@@ -27,17 +27,18 @@ editorial state remain `not_evaluated`.
 The fixture uses:
 
 - fixture schema `m1b-synthetic-contract-cases-v3`;
-- protocol `m1b-benchmark-contract-v2`, generation `102`;
+- protocol `m1b-benchmark-contract-v3`, generation `103`;
 - output schema `m1b-synthetic-output-v3`;
 - corpus `m1b-synthetic-corpus-v3`, generation `304`;
-- quality rubric `m1b-quality-rubric-v2`;
+- quality rubric `m1b-quality-rubric-v3`;
+- analysis policy `m1b-analysis-policy-v3`, generation `103`;
 - `17` byte-exact public proposal components;
 - bundle SHA-256
-  `8992351db59d99deec8809a7228458577cca09c11f0d3c2fe15567315c4108d9`;
+  `10f41321d013c0fa73dea0d689be51f43c721c3f2cef21eb8b8b4fcceff1fdf0`;
 - public synthetic corpus SHA-256
   `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`;
 - fixed first-component vector
-  `00a5ff494e7bc07e7e4eb7ef18ee0b8dad7ef0b7f0a3d8c08b39e6a91e83bf34`.
+  `e65d2776085a868b50986355fc2f5db5f426a020165ce4c11d05c2a1fe36f76c`.
 
 All definitions remain `proposed`; none is `owner_accepted`. The bundle binds
 declarative definitions and the public synthetic corpus, not the exact current
@@ -66,9 +67,10 @@ Without Ollama or a live model, the table and unit tests cover:
 - external mapping compromise versus non-recoverable self-identification,
   positive mapping generations, global reviewer exposure, and exact blinding
   aggregate derivation;
-- HGT-derived stable reviewer pairs, exact `0..4` quadratic kappa, bilateral and
-  unilateral `not_applicable`, zero variance, insufficient coverage, and every
-  delete-one-source robustness branch;
+- HGT-derived unique logical rows and canonical stable reviewer pairs, exact
+  `0..4` source-balanced quadratic kappa, bilateral and unilateral
+  `not_applicable`, equal-source weighting of actual paired rows, zero variance,
+  insufficient coverage, and every delete-one-whole-source robustness branch;
 - source-generation conservative collapse, descriptive-only overall totals,
   three-candidate family correction, and closed CFA source/class aggregation;
 - partial-report evidence restrictions, context self-assertion rejection, and

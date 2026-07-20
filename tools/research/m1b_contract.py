@@ -30,12 +30,12 @@ MATERIALIZATION_PREENCODE_RESERVE_BYTES = MAX_INPUT_BYTES
 MAX_JSON_INTEGER = (1 << 63) - 1
 MIN_JSON_INTEGER = -(1 << 63)
 
-PROTOCOL_VERSION = "m1b-benchmark-contract-v2"
+PROTOCOL_VERSION = "m1b-benchmark-contract-v3"
 OUTPUT_SCHEMA_VERSION = "m1b-synthetic-output-v3"
 PROMPT_VERSION = "m1b-synthetic-prompt-policy-v1"
 PROFILE_VERSION = "m1b-primary-common-profile-v1"
 CORPUS_VERSION = "m1b-synthetic-corpus-v3"
-PROTOCOL_GENERATION = 102
+PROTOCOL_GENERATION = 103
 PROFILE_GENERATION = 202
 CORPUS_GENERATION = 304
 
@@ -755,7 +755,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "quality_rubric",
-        "m1b-quality-rubric-v2",
+        "m1b-quality-rubric-v3",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -847,7 +847,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "analysis_policy",
-        "m1b-analysis-policy-v2",
+        "m1b-analysis-policy-v3",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -867,6 +867,7 @@ _TRUSTED_COMPONENT_ROWS = (
                         "first",
                         "initial_record_ids",
                         "profile",
+                        "result_id",
                         "reviewer_pair",
                         "second",
                         "source_generation_id",
@@ -886,11 +887,22 @@ _TRUSTED_COMPONENT_ROWS = (
                     "ratings_materializer": "inside_human_ground_truth_validator_no_report_supplied_scores",
                     "raw_row_helper_scope": "public_synthetic_math_vectors_only_not_decision_evidence",
                     "record_order": "ascending_raw_reviewer_uuid_then_linked_record",
-                    "source_generation_rating": "minimum_worst_applicable_row_score_per_reviewer",
+                    "applicable_source_unit": "source_generation_with_at_least_one_ordinal_applicable_pair",
+                    "applicability_disagreement": "any_unilateral_source_blocks_agreement_gate_after_linked_adjudication",
+                    "contingency_matrix": "O_ij=sum_s(D_sij)",
+                    "contingency_estimator": "uniform_source_then_uniform_applicable_paired_row",
+                    "eligible_row_universe": "all_validator_linked_distinct_frozen_initial_pairs_in_scope",
+                    "independent_unit_count": "source_generations_with_at_least_one_ordinal_applicable_pair",
+                    "logical_row_key": ["result_id", "dimension"],
+                    "mixed_bilateral_not_applicable": "exclude_na_rows_and_weight_actual_ordinal_pairs_to_source_mass_one",
+                    "source_matrix": "D_sij=count_sij/applicable_pair_count_for_source",
+                    "source_generation_pair_mass": "each_actual_pair_contributes_1/applicable_pair_count_for_source",
                     "adjudicator_effect": "final_dimension_or_applicability_only_not_kappa_rating",
-                    "robustness": "minimum_delete_one_source_generation_kappa",
+                    "robustness": "minimum_delete_one_whole_source_generation_kappa",
+                    "robustness_interpretation": "influence_check_not_sampling_confidence_interval",
                     "stable_pair_key": ["stratum", "dimension"],
                     "statuses": [
+                        "AGREEMENT_APPLICABILITY_DISAGREEMENT",
                         "AGREEMENT_INSUFFICIENT_UNITS",
                         "AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT",
                         "AGREEMENT_POINT_BELOW_FLOOR",
@@ -900,7 +912,7 @@ _TRUSTED_COMPONENT_ROWS = (
                     ],
                     "threshold_numerator": AGREEMENT_FLOOR.numerator,
                     "threshold_denominator": AGREEMENT_FLOOR.denominator,
-                    "unilateral_not_applicable": "linked_adjudication_then_excluded_from_ordinal_kappa",
+                    "unilateral_not_applicable": "linked_adjudication_then_source_excluded_and_agreement_gate_blocked",
                     "undefined": "fail_closed",
                 },
                 "candidate_claims_reported_separately": True,
@@ -1060,6 +1072,54 @@ def minimum_power_bound_n(base: Fraction, tail_alpha: Fraction) -> int:
     return n
 
 
+def _quadratic_weighted_kappa_from_matrix(
+    raw_matrix: Sequence[Sequence[Fraction]],
+) -> Optional[Fraction]:
+    """Return exact quadratic kappa from a non-empty 5x5 rational matrix."""
+
+    if type(raw_matrix) not in (list, tuple) or len(raw_matrix) != 5:
+        raise ContractError("AGREEMENT_VECTOR_INVALID")
+    matrix: List[List[Fraction]] = []
+    for raw_row in raw_matrix:
+        if type(raw_row) not in (list, tuple) or len(raw_row) != 5:
+            raise ContractError("AGREEMENT_VECTOR_INVALID")
+        row: List[Fraction] = []
+        for value in raw_row:
+            if type(value) not in (int, Fraction) or value < 0:
+                raise ContractError("AGREEMENT_VECTOR_INVALID")
+            row.append(Fraction(value))
+        matrix.append(row)
+    n = sum((sum(row) for row in matrix), Fraction(0))
+    if n <= 0:
+        raise ContractError("AGREEMENT_VECTOR_INVALID")
+    rows = [sum(row, Fraction(0)) for row in matrix]
+    columns = [
+        sum((matrix[i][j] for i in range(5)), Fraction(0))
+        for j in range(5)
+    ]
+    observed = sum(
+        (
+            (16 - (i - j) ** 2) * matrix[i][j]
+            for i in range(5)
+            for j in range(5)
+        ),
+        Fraction(0),
+    )
+    expected = sum(
+        (
+            (16 - (i - j) ** 2) * rows[i] * columns[j]
+            for i in range(5)
+            for j in range(5)
+        ),
+        Fraction(0),
+    )
+    numerator = n * observed - expected
+    denominator = 16 * n * n - expected
+    if denominator == 0:
+        return None
+    return numerator / denominator
+
+
 def quadratic_weighted_kappa(
     first: Sequence[int], second: Sequence[int]
 ) -> Optional[Fraction]:
@@ -1073,31 +1133,48 @@ def quadratic_weighted_kappa(
         raise ContractError("AGREEMENT_CATEGORY_INVALID")
     if any(type(score) is not int or score < 0 or score > 4 for score in second):
         raise ContractError("AGREEMENT_CATEGORY_INVALID")
-    matrix = [[0 for _ in range(5)] for _ in range(5)]
+    matrix = [[Fraction(0) for _ in range(5)] for _ in range(5)]
     for left, right in zip(first, second):
         matrix[left][right] += 1
-    n = len(first)
-    rows = [sum(row) for row in matrix]
-    columns = [sum(matrix[i][j] for i in range(5)) for j in range(5)]
-    observed = sum(
-        (16 - (i - j) ** 2) * matrix[i][j]
-        for i in range(5)
-        for j in range(5)
-    )
-    expected = sum(
-        (16 - (i - j) ** 2) * rows[i] * columns[j]
-        for i in range(5)
-        for j in range(5)
-    )
-    numerator = n * observed - expected
-    denominator = 16 * n * n - expected
-    if denominator == 0:
-        return None
-    return Fraction(numerator, denominator)
+    return _quadratic_weighted_kappa_from_matrix(matrix)
+
+
+def source_weighted_quadratic_kappa(
+    paired_ratings_by_source: Sequence[Sequence[Tuple[int, int]]],
+) -> Optional[Fraction]:
+    """Give every source total mass one while preserving every actual pair."""
+
+    if type(paired_ratings_by_source) not in (list, tuple):
+        raise ContractError("INVALID_TYPE")
+    if not paired_ratings_by_source:
+        raise ContractError("AGREEMENT_VECTOR_INVALID")
+    matrix = [[Fraction(0) for _ in range(5)] for _ in range(5)]
+    for raw_source_ratings in paired_ratings_by_source:
+        if type(raw_source_ratings) not in (list, tuple) or not raw_source_ratings:
+            raise ContractError("AGREEMENT_VECTOR_INVALID")
+        source_ratings: List[Tuple[int, int]] = []
+        for raw_pair in raw_source_ratings:
+            if type(raw_pair) not in (list, tuple) or len(raw_pair) != 2:
+                raise ContractError("AGREEMENT_VECTOR_INVALID")
+            left, right = raw_pair
+            if (
+                type(left) is not int
+                or type(right) is not int
+                or left < 0
+                or left > 4
+                or right < 0
+                or right > 4
+            ):
+                raise ContractError("AGREEMENT_CATEGORY_INVALID")
+            source_ratings.append((left, right))
+        pair_mass = Fraction(1, len(source_ratings))
+        for left, right in source_ratings:
+            matrix[left][right] += pair_mass
+    return _quadratic_weighted_kappa_from_matrix(matrix)
 
 
 def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
-    """Collapse frozen initial row ratings to one worst rating per source."""
+    """Group actual frozen rating pairs into equal-weight source units."""
 
     if type(rows) not in (list, tuple):
         raise ContractError("INVALID_TYPE")
@@ -1107,6 +1184,7 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     stable_pair: Optional[Tuple[str, str]] = None
     seen_initial_records: Set[str] = set()
     seen_adjudications: Set[str] = set()
+    seen_result_ids: Set[str] = set()
     expected_fields = {
         "applicability_adjudication",
         "candidate",
@@ -1114,6 +1192,7 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         "first",
         "initial_record_ids",
         "profile",
+        "result_id",
         "reviewer_pair",
         "second",
         "source_generation_id",
@@ -1139,6 +1218,10 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         elif row_scope != scope:
             raise ContractError("AGREEMENT_SCOPE_MIXED")
         source_id = _require_uuid(row["source_generation_id"])
+        result_id = _require_uuid(row["result_id"])
+        if result_id in seen_result_ids:
+            raise ContractError("AGREEMENT_LOGICAL_ROW_DUPLICATE")
+        seen_result_ids.add(result_id)
         if source_id not in source_rows:
             source_order.append(source_id)
             source_rows[source_id] = []
@@ -1146,7 +1229,7 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         if len(raw_pair) != 2:
             raise ContractError("STABLE_REVIEWER_PAIR_INVALID")
         pair = tuple(_require_uuid(value) for value in raw_pair)
-        if len(set(pair)) != 2:
+        if len(set(pair)) != 2 or pair != tuple(sorted(pair)):
             raise ContractError("STABLE_REVIEWER_PAIR_INVALID")
         if stable_pair is None:
             stable_pair = pair
@@ -1194,8 +1277,7 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         source_rows[source_id].append((left, right))
 
     source_ids: List[str] = []
-    first: List[int] = []
-    second: List[int] = []
+    paired_ratings_by_source: List[Tuple[Tuple[int, int], ...]] = []
     bilateral_na_sources = 0
     unilateral_na_sources = 0
     for source_id in source_order:
@@ -1212,12 +1294,10 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
             bilateral_na_sources += 1
             continue
         source_ids.append(source_id)
-        first.append(min(left for left, _right in applicable))
-        second.append(min(right for _left, right in applicable))
+        paired_ratings_by_source.append(tuple(applicable))
     return {
         "bilateral_not_applicable_source_count": bilateral_na_sources,
-        "first": first,
-        "second": second,
+        "paired_ratings_by_source": paired_ratings_by_source,
         "source_generation_ids": source_ids,
         "unilateral_not_applicable_source_count": unilateral_na_sources,
     }
@@ -1227,20 +1307,20 @@ def agreement_gate(rows: Sequence[Mapping[str, Any]]) -> str:
     """Apply the exact proposed point and delete-one-source robustness gate."""
 
     vectors = agreement_unit_vectors(rows)
-    first = vectors["first"]
-    second = vectors["second"]
-    if len(first) < AGREEMENT_MINIMUM_N:
+    if vectors["unilateral_not_applicable_source_count"]:
+        return "AGREEMENT_APPLICABILITY_DISAGREEMENT"
+    source_ratings = vectors["paired_ratings_by_source"]
+    if len(source_ratings) < AGREEMENT_MINIMUM_N:
         return "AGREEMENT_INSUFFICIENT_UNITS"
-    point = quadratic_weighted_kappa(first, second)
+    point = source_weighted_quadratic_kappa(source_ratings)
     if point is None:
         return "AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT"
     if point < AGREEMENT_FLOOR:
         return "AGREEMENT_POINT_BELOW_FLOOR"
     robustness: List[Fraction] = []
-    for index in range(len(first)):
-        leave_one = quadratic_weighted_kappa(
-            list(first[:index]) + list(first[index + 1 :]),
-            list(second[:index]) + list(second[index + 1 :]),
+    for index in range(len(source_ratings)):
+        leave_one = source_weighted_quadratic_kappa(
+            list(source_ratings[:index]) + list(source_ratings[index + 1 :])
         )
         if leave_one is None:
             return "AGREEMENT_UNCERTAINTY_UNDEFINED"
@@ -3031,6 +3111,7 @@ def _validate_human_ground_truth(
                         row["ground_truth_id"] for row in ordered_initials
                     ],
                     "profile": result["profile_version"],
+                    "result_id": result_id,
                     "reviewer_pair": [
                         row["reviewer_id"] for row in ordered_initials
                     ],

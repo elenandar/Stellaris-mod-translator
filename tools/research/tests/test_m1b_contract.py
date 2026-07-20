@@ -22,7 +22,7 @@ README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
 EXPECTED_FIXTURE_CASES = 171
 EXPECTED_POSITIVE_CASES = 3
 EXPECTED_BUNDLE_HASH = (
-    "8992351db59d99deec8809a7228458577cca09c11f0d3c2fe15567315c4108d9"
+    "10f41321d013c0fa73dea0d689be51f43c721c3f2cef21eb8b8b4fcceff1fdf0"
 )
 
 
@@ -229,6 +229,16 @@ class SyntheticContractCaseTests(unittest.TestCase):
             {component["acceptance_state"] for component in bundle["components"]},
             {"proposed"},
         )
+        analysis_component = next(
+            component
+            for component in bundle["components"]
+            if component["kind"] == "analysis_policy"
+        )
+        self.assertEqual(analysis_component["version"], "m1b-analysis-policy-v3")
+        self.assertEqual(
+            analysis_component["generation"], contract.PROTOCOL_GENERATION
+        )
+        self.assertEqual(self.base["protocol"]["generation"], 103)
 
     def test_component_hash_has_a_fixed_public_vector(self) -> None:
         component = self.base["definition_bundle"]["components"][0]
@@ -239,7 +249,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(
             actual,
-            "00a5ff494e7bc07e7e4eb7ef18ee0b8dad7ef0b7f0a3d8c08b39e6a91e83bf34",
+            "e65d2776085a868b50986355fc2f5db5f426a020165ce4c11d05c2a1fe36f76c",
         )
         self.assertEqual(actual, component["sha256"])
 
@@ -391,12 +401,33 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "inside_human_ground_truth_validator_no_report_supplied_scores",
         )
         self.assertEqual(
+            analysis["agreement"]["contingency_estimator"],
+            "uniform_source_then_uniform_applicable_paired_row",
+        )
+        self.assertEqual(
+            analysis["agreement"]["source_generation_pair_mass"],
+            "each_actual_pair_contributes_1/applicable_pair_count_for_source",
+        )
+        self.assertEqual(
+            analysis["agreement"]["logical_row_key"],
+            ["result_id", "dimension"],
+        )
+        self.assertEqual(
+            analysis["agreement"]["source_matrix"],
+            "D_sij=count_sij/applicable_pair_count_for_source",
+        )
+        self.assertEqual(
+            analysis["agreement"]["robustness_interpretation"],
+            "influence_check_not_sampling_confidence_interval",
+        )
+        self.assertEqual(
             analysis["statistical_dimension_or_gate_values"],
             sorted(contract.STATISTICAL_DIMENSIONS_OR_GATES),
         )
         self.assertEqual(
             analysis["agreement"]["statuses"],
             [
+                "AGREEMENT_APPLICABILITY_DISAGREEMENT",
                 "AGREEMENT_INSUFFICIENT_UNITS",
                 "AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT",
                 "AGREEMENT_POINT_BELOW_FLOOR",
@@ -709,6 +740,7 @@ class MethodologyAndStateTests(unittest.TestCase):
                     f"00000000-0000-4000-8000-{index + 2000:012x}",
                 ],
                 "profile": "profile_a",
+                "result_id": f"00000000-0000-4000-8000-{index + 5000:012x}",
                 "reviewer_pair": [
                     "00000000-0000-4000-8000-000000000901",
                     "00000000-0000-4000-8000-000000000902",
@@ -815,6 +847,12 @@ class MethodologyAndStateTests(unittest.TestCase):
             contract.agreement_gate(rows),
             "AGREEMENT_PASS",
         )
+        replayed_rows = copy.deepcopy(rows)
+        replayed_rows.append(copy.deepcopy(replayed_rows[4]))
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_unit_vectors(replayed_rows)
+        self.assertEqual(raised.exception.code, "AGREEMENT_LOGICAL_ROW_DUPLICATE")
+
         duplicate_rows = copy.deepcopy(rows)
         repeated = copy.deepcopy(duplicate_rows[4])
         repeated["first"] = 1
@@ -823,18 +861,25 @@ class MethodologyAndStateTests(unittest.TestCase):
             "00000000-0000-4000-8000-000000003001",
             "00000000-0000-4000-8000-000000003002",
         ]
+        repeated["result_id"] = "00000000-0000-4000-8000-000000003003"
         duplicate_rows.append(repeated)
         vectors = contract.agreement_unit_vectors(duplicate_rows)
         self.assertEqual(
             len(vectors["source_generation_ids"]), len(rows)
         )
-        self.assertEqual(vectors["first"][4], 1)
-        self.assertEqual(vectors["second"][4], 2)
+        self.assertEqual(
+            vectors["paired_ratings_by_source"][4], ((4, 4), (1, 2))
+        )
         mixed_rows = copy.deepcopy(rows)
         mixed_rows[-1]["candidate"] = "candidate_b"
         with self.assertRaises(contract.ContractError) as raised:
             contract.agreement_gate(mixed_rows)
         self.assertEqual(raised.exception.code, "AGREEMENT_SCOPE_MIXED")
+        noncanonical_pair = copy.deepcopy(rows)
+        noncanonical_pair[0]["reviewer_pair"].reverse()
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_gate(noncanonical_pair)
+        self.assertEqual(raised.exception.code, "STABLE_REVIEWER_PAIR_INVALID")
         unilateral = copy.deepcopy(rows)
         unilateral[0]["first"] = None
         with self.assertRaises(contract.ContractError) as raised:
@@ -849,7 +894,104 @@ class MethodologyAndStateTests(unittest.TestCase):
             "initial_record_ids": unilateral[0]["initial_record_ids"],
         }
         self.assertEqual(
-            contract.agreement_gate(unilateral), "AGREEMENT_INSUFFICIENT_UNITS"
+            contract.agreement_gate(unilateral),
+            "AGREEMENT_APPLICABILITY_DISAGREEMENT",
+        )
+
+    def test_equal_source_weighting_preserves_actual_rating_pairs(self) -> None:
+        first = [index % 4 for index in range(46)]
+        rows = self._agreement_rows(first, [4] * 46)
+        crossed_rows = []
+        for index, row in enumerate(rows, start=1):
+            crossed_rows.append(row)
+            crossed = copy.deepcopy(row)
+            crossed["first"] = 4
+            crossed["second"] = row["first"]
+            crossed["initial_record_ids"] = [
+                f"00000000-0000-4000-8000-{index + 3000:012x}",
+                f"00000000-0000-4000-8000-{index + 4000:012x}",
+            ]
+            crossed["result_id"] = (
+                f"00000000-0000-4000-8000-{index + 6000:012x}"
+            )
+            crossed_rows.append(crossed)
+
+        self.assertTrue(
+            all(row["first"] != row["second"] for row in crossed_rows)
+        )
+        vectors = contract.agreement_unit_vectors(crossed_rows)
+        paired = vectors["paired_ratings_by_source"]
+        self.assertEqual(len(paired), 46)
+        self.assertTrue(all(len(source_pairs) == 2 for source_pairs in paired))
+        self.assertEqual(paired[0], ((0, 4), (4, 0)))
+        observed = contract.source_weighted_quadratic_kappa(paired)
+        self.assertIs(type(observed), Fraction)
+        self.assertEqual(observed, Fraction(-13689, 18971))
+        self.assertEqual(
+            contract.source_weighted_quadratic_kappa(list(reversed(paired))),
+            observed,
+        )
+        self.assertEqual(
+            contract.source_weighted_quadratic_kappa(
+                [tuple(reversed(source_pairs)) for source_pairs in paired]
+            ),
+            observed,
+        )
+        transposed = [
+            tuple((right, left) for left, right in source_pairs)
+            for source_pairs in paired
+        ]
+        self.assertEqual(
+            contract.source_weighted_quadratic_kappa(transposed), observed
+        )
+        single_pair_sources = [
+            ((left, right),) for left, right in zip(first, [4] * 46)
+        ]
+        self.assertEqual(
+            contract.source_weighted_quadratic_kappa(single_pair_sources),
+            contract.quadratic_weighted_kappa(first, [4] * 46),
+        )
+        sparse = [((0, 0),), ((4, 0),)]
+        repeated_within_source = [tuple([(0, 0)] * 100), ((4, 0),)]
+        self.assertEqual(
+            contract.source_weighted_quadratic_kappa(sparse),
+            contract.source_weighted_quadratic_kappa(repeated_within_source),
+        )
+        self.assertEqual(
+            contract.agreement_gate(crossed_rows),
+            "AGREEMENT_POINT_BELOW_FLOOR",
+        )
+
+        passing_rows = self._agreement_rows(
+            [0, 1, 2, 3, 4] * 9 + [0],
+            [0, 1, 3, 2, 4] * 9 + [0],
+        )
+        repeated_same_pair = copy.deepcopy(passing_rows[0])
+        repeated_same_pair["initial_record_ids"] = [
+            "00000000-0000-4000-8000-000000007001",
+            "00000000-0000-4000-8000-000000007002",
+        ]
+        repeated_same_pair["result_id"] = (
+            "00000000-0000-4000-8000-000000007003"
+        )
+        whole_source_rows = passing_rows + [repeated_same_pair]
+        with mock.patch.object(
+            contract,
+            "source_weighted_quadratic_kappa",
+            wraps=contract.source_weighted_quadratic_kappa,
+        ) as estimator:
+            self.assertEqual(
+                contract.agreement_gate(whole_source_rows), "AGREEMENT_PASS"
+            )
+        calls = [call.args[0] for call in estimator.call_args_list]
+        self.assertEqual(len(calls[0]), 46)
+        self.assertTrue(all(len(source_rows) == 45 for source_rows in calls[1:]))
+        self.assertEqual(
+            sum(
+                any(len(source_pairs) == 2 for source_pairs in source_rows)
+                for source_rows in calls
+            ),
+            46,
         )
 
     def test_critical_false_accepts_collapse_by_source_generation_and_class(self) -> None:
@@ -1295,7 +1437,10 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         self.assertIsNone(materialized[0]["applicability_adjudication"])
         self.assertEqual(
-            contract.agreement_unit_vectors(materialized)["first"], [4]
+            contract.agreement_unit_vectors(materialized)[
+                "paired_ratings_by_source"
+            ],
+            [((4, 2),)],
         )
         self.assertEqual(
             contract.agreement_gate(materialized),
@@ -1332,7 +1477,35 @@ class MethodologyAndStateTests(unittest.TestCase):
             ),
         ]
         registry, samples, results = self._validated_state(document)
-        contract._validate_human_ground_truth(records, registry, results, samples)
+        bilateral_materialized = []
+        contract._validate_human_ground_truth(
+            records, registry, results, samples, bilateral_materialized
+        )
+        bilateral_vectors = contract.agreement_unit_vectors(
+            bilateral_materialized
+        )
+        self.assertEqual(
+            bilateral_vectors["bilateral_not_applicable_source_count"], 1
+        )
+        self.assertEqual(bilateral_vectors["source_generation_ids"], [])
+
+        mixed = self._agreement_rows([None], [None])
+        numeric = copy.deepcopy(mixed[0])
+        numeric["first"] = 2
+        numeric["second"] = 3
+        numeric["initial_record_ids"] = [
+            "00000000-0000-4000-8000-000000008001",
+            "00000000-0000-4000-8000-000000008002",
+        ]
+        numeric["result_id"] = "00000000-0000-4000-8000-000000008003"
+        mixed.append(numeric)
+        mixed_vectors = contract.agreement_unit_vectors(mixed)
+        self.assertEqual(
+            mixed_vectors["paired_ratings_by_source"], [((2, 3),)]
+        )
+        self.assertEqual(
+            mixed_vectors["bilateral_not_applicable_source_count"], 0
+        )
 
         unilateral = copy.deepcopy(records)
         unilateral[1]["status"] = "human_pass"
@@ -1378,7 +1551,7 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         self.assertEqual(
             contract.agreement_gate(materialized),
-            "AGREEMENT_INSUFFICIENT_UNITS",
+            "AGREEMENT_APPLICABILITY_DISAGREEMENT",
         )
 
     def test_critical_false_accept_is_derived_only_after_actual_approval(self) -> None:
