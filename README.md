@@ -13,7 +13,8 @@ Production-реализация ещё не начата. Персональны
 Текущая synthetic proposal identity — protocol v4/generation 104 и analysis
 policy v4/generation 104. Она закрывает tuning/holdout pooling в decision-grade
 statistics, сохраняет reviewer-specific finding outcomes и запрещает content
-review отсутствующего output. Synthetic corpus bytes не менялись: corpus
+review отсутствующего output; любые две initial finding reviews требуют
+distinct human identities. Synthetic corpus bytes не менялись: corpus
 v3/generation 304 остаётся тем же. Это contract hardening, а не запуск M1B-1 и
 не quality verdict.
 

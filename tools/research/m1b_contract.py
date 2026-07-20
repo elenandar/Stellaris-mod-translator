@@ -801,6 +801,7 @@ _TRUSTED_COMPONENT_ROWS = (
                 "initial_hgt_reviewers_per_dimension": 2,
                 "finding_adjudication": "exact_two_conflicting_initial_ids_distinct_third_human_drives_final_outcome",
                 "finding_outcome_disagreement": "any_decision_severity_hard_fail_or_mandatory_review_difference",
+                "finding_initial_reviewer_identity": "distinct_human_identities_when_two_initial_reviews_exist",
                 "ordinal_categories": [0, 1, 2, 3, 4],
                 "ordinal_pass_minimum": 3,
                 "reviewer_roles": sorted(REVIEWER_ROLES),
@@ -2956,11 +2957,16 @@ def _validate_findings(
             if model_review_count:
                 raise ContractError("MODEL_REVIEW_NOT_HUMAN")
             raise ContractError("FINDING_REVIEW_OUTCOME_MISSING")
+        duplicate_initial_reviewer = len(human_reviewers) != len(
+            set(human_reviewers)
+        )
+        if duplicate_initial_reviewer:
+            if severity == "critical" or category in CRITICAL_CATEGORIES:
+                raise ContractError("DUPLICATE_CRITICAL_REVIEWER")
+            raise ContractError("DUPLICATE_FINDING_REVIEWER")
         if not descriptive_only and (
             severity == "critical" or category in CRITICAL_CATEGORIES
         ):
-            if len(human_reviewers) != len(set(human_reviewers)):
-                raise ContractError("DUPLICATE_CRITICAL_REVIEWER")
             if len(human_reviewers) < 2:
                 raise ContractError("CRITICAL_REVIEW_COUNT_INSUFFICIENT")
             if len(human_reviewers) != 2:

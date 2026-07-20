@@ -308,6 +308,9 @@ applicability либо mandatory-review disposition. До aggregation:
 Executable finding-review v4 хранит reviewer-specific closed outcome
 `decision`, `severity`, `hard_fail`, `mandatory_review` и повторно bind-ит exact
 `finding_id`, category и dimension вместе с mapping/blinding provenance.
+Если finding содержит две initial human reviews, их reviewer identities обязаны
+быть distinct независимо от category/severity и от того, совпали ли outcomes;
+два review IDs одного человека не создают две независимые initial records.
 Top-level finding outcome не self-asserted: он обязан совпасть с matching
 initial outcomes либо с отдельным outcome третьего adjudicator-а. Два initial
 outcome `medium` и `high` всегда являются disagreement; до exact adjudication

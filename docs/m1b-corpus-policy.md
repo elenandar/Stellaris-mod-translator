@@ -160,8 +160,9 @@ primary HGT запрещён; optional `secondary_unblinded` evidence не за�
 Finding-review records не содержат raw annotations, но сохраняют exact
 finding/category/dimension, reviewer-specific closed severity/hard-fail/
 mandatory-review outcome и mapping/blinding provenance. Эти initial outcomes
-immutable; top-level downgrade без matching outcome либо third-human
-adjudication не является sanitized evidence.
+immutable; любые две initial human reviews требуют distinct human identities,
+а top-level downgrade без matching outcome либо third-human adjudication не
+является sanitized evidence.
 
 Public evidence для official/private corpus не публикует row-level sample или
 reviewer mapping. Synthetic conformance fixtures могут содержать только явно

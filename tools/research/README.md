@@ -133,15 +133,15 @@ v4/generation 104, document,
 fixture and output schema v4, synthetic corpus v3/generation 304, and 17
 components. The table has 173 cases: 3 controlled successes and 170 exact
 controlled failures. Bundle SHA-256 is
-`9922093ab990769bff85f6f51c5ba6009d8036359bbf080a865d2ff1053a9fd7`;
+`18940d254087317b46bd8c78a00a1526b741907dc3dc0c1eb28b9a9f8bc22cd4`;
 the public synthetic corpus SHA-256 is
 `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`.
 The fixture file SHA-256 is
-`cd314f4753c615c0a962c2e302c098630c99d6f9d6448e487bebd87f5ff9a78d`.
+`fca4fabea3781f53d1759475b0a1d3a8c97c3b03cb785e04051961fb2422fba4`.
 Decision-grade agreement, D1-D5/statistical, and CFA helpers are holdout-only;
 tuning remains explicitly split-scoped diagnostics. Finding reviews preserve
-reviewer-specific closed outcomes, and no-output/no-attempt rows reject all
-content findings and human/model reviews.
+reviewer-specific closed outcomes and distinct initial human identities, while
+no-output/no-attempt rows reject all content findings and human/model reviews.
 These identities bind public declarative definitions and synthetic corpus
 bytes. They do not prove provider context/tokenizer binding or exact executable
 implementation identity; `CONTEXT_LIMIT_BINDING_UNPROVEN` and

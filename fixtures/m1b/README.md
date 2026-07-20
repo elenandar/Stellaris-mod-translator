@@ -34,13 +34,13 @@ The fixture uses:
 - analysis policy `m1b-analysis-policy-v4`, generation `104`;
 - `17` byte-exact public proposal components;
 - bundle SHA-256
-  `9922093ab990769bff85f6f51c5ba6009d8036359bbf080a865d2ff1053a9fd7`;
+  `18940d254087317b46bd8c78a00a1526b741907dc3dc0c1eb28b9a9f8bc22cd4`;
 - public synthetic corpus SHA-256
   `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`;
 - fixed first-component vector
   `6e3b9bfbaaef3793dd1a84ed5a6c37b8a249be4de5e2b889c13e84b83a15a9e1`;
 - fixture file SHA-256
-  `cd314f4753c615c0a962c2e302c098630c99d6f9d6448e487bebd87f5ff9a78d`.
+  `fca4fabea3781f53d1759475b0a1d3a8c97c3b03cb785e04051961fb2422fba4`.
 
 All definitions remain `proposed`; none is `owner_accepted`. The bundle binds
 declarative definitions and the public synthetic corpus, not the exact current
@@ -79,7 +79,8 @@ Without Ollama or a live model, the table and unit tests cover:
   split-scoped CFA source/class aggregation;
 - immutable reviewer-specific finding outcomes for decision/severity/hard-fail/
   mandatory-review, exact third-human adjudication, top-level downgrade
-  rejection, and no model-review human credit;
+  rejection, distinct identities for two initial human reviews, and no
+  model-review human credit;
 - no-output and no-attempt rows reject findings and human/model content reviews;
   self-identifying output permits only descriptive secondary-unblinded evidence;
 - partial-report evidence restrictions, context self-assertion rejection, and

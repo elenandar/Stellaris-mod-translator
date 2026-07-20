@@ -23,10 +23,10 @@ README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
 EXPECTED_FIXTURE_CASES = 173
 EXPECTED_POSITIVE_CASES = 3
 EXPECTED_FIXTURE_SHA256 = (
-    "cd314f4753c615c0a962c2e302c098630c99d6f9d6448e487bebd87f5ff9a78d"
+    "fca4fabea3781f53d1759475b0a1d3a8c97c3b03cb785e04051961fb2422fba4"
 )
 EXPECTED_BUNDLE_HASH = (
-    "9922093ab990769bff85f6f51c5ba6009d8036359bbf080a865d2ff1053a9fd7"
+    "18940d254087317b46bd8c78a00a1526b741907dc3dc0c1eb28b9a9f8bc22cd4"
 )
 
 
@@ -1744,6 +1744,17 @@ class MethodologyAndStateTests(unittest.TestCase):
             contract._validate_findings([finding], [wrong_links], registry, results)
         self.assertEqual(raised.exception.code, "ADJUDICATION_LINK_INVALID")
 
+        duplicate_initial = copy.deepcopy(finding)
+        duplicate_initial["reviews"][1]["reviewer_id"] = duplicate_initial[
+            "reviews"
+        ][0]["reviewer_id"]
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings(
+                [duplicate_initial], [copy.deepcopy(adjudication)], registry, results
+            )
+        self.assertEqual(raised.exception.code, "DUPLICATE_FINDING_REVIEWER")
+
         matching = copy.deepcopy(finding)
         matching["severity"] = "medium"
         matching["mandatory_review"] = False
@@ -1755,6 +1766,18 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         self.assertTrue(matched[0]["confirmed"])
         self.assertEqual(matched_count, 2)
+
+        duplicate_matching = copy.deepcopy(matching)
+        duplicate_matching["reviews"][1]["reviewer_id"] = duplicate_matching[
+            "reviews"
+        ][0]["reviewer_id"]
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings(
+                [duplicate_matching], [], registry, results
+            )
+        self.assertEqual(raised.exception.code, "DUPLICATE_FINDING_REVIEWER")
+
         registry, _, results = self._validated_state(document)
         with self.assertRaises(contract.ContractError) as raised:
             contract._validate_findings(

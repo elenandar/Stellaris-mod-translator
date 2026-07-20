@@ -724,6 +724,9 @@ Critical-risk classes получают две разные initial human identit
 sample, atom/occurrence, result, finding, review либо другим opaque-ID class.
 Closed mapping finding category -> dimension задана rubric; mismatch invalidates
 record до aggregation.
+Любые две initial human finding reviews обязаны принадлежать distinct human
+identities; разные review IDs одного человека не считаются независимыми и не
+могут создать либо закрыть disagreement.
 
 ## Обязательные measurements
 
