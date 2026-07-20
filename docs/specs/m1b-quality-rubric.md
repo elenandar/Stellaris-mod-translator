@@ -2,8 +2,8 @@
 
 - Статус: `M1B: NOT_EVALUATED`; proposal для owner review, human scoring и
   holdout ещё не выполнялись
-- Версия proposal: `m1b-quality-rubric-v5`; analysis policy
-  `m1b-analysis-policy-v4`; protocol generation `105`; definition state:
+- Версия proposal: `m1b-quality-rubric-v6`; analysis policy
+  `m1b-analysis-policy-v5`; protocol generation `106`; definition state:
   `proposed`
 - Quality verdict: отсутствует
 - Gate state: `M1A: BLOCKED`; `M2: FORBIDDEN`
@@ -47,10 +47,15 @@ Executable analysis принимает closed `split` (`tuning`/`holdout`) и
 dimensions либо `critical_false_accept`/`editorial_approval`. Unknown token не
 создаёт post-hoc gate. CFA input отдельно требует один из closed risk classes и
 сворачивает events по source generation внутри
-candidate/profile/split/class. Decision-grade helper принимает только frozen
-`holdout`; tuning aggregates явно маркируются как diagnostics и имеют
-`decision_grade_eligible=false`. Missing/unknown split и mixed-split scope
-fail closed; tuning никогда не увеличивает holdout `n`, numerator или gate.
+candidate/profile/split/class. Agreement, statistical и CFA decision-grade
+helpers принимают только exact полный row multiset, materialized validator-ом из
+frozen corpus/results/findings/HGT и связанный с internal sealed provenance.
+Caller split, UUID membership или изменённый row не создают trusted input.
+Decision helpers принимают только `holdout`; tuning aggregates явно маркируются
+как diagnostics и имеют `decision_grade_eligible=false`. Все raw helpers также
+diagnostic-only: ни raw agreement/statistical input, ни raw CFA minimum не дают
+decision evidence. Missing/unknown split и mixed-split scope fail closed; tuning
+никогда не увеличивает holdout `n`, numerator или gate.
 
 Одна source generation может дать по одному trial нескольким strata, потому что
 это разные conjunctive claims. Эти вклады нельзя складывать в общий binomial
@@ -187,22 +192,33 @@ Executable `dimension_records.status` использует закрытый enum
 `not_applicable`, `not_evaluated`, `blinding_failed`. Последний status допустим
 только для D2-D5 self-identifying model output в terminal state
 `blinding_failed`; это denominator failure, не missing evidence. В partial
-M1B-0 D1 может показывать только
-synthetic conformance, а D2–D5 остаются `not_evaluated`; это не human evidence.
+M1B-0 только output-bearing synthetic row может показывать D1 synthetic
+conformance. Canonical no-attempt row использует
+`technical_conformance=not_observed`, пустые `observed_atoms` и D1–D5
+`not_evaluated`; это не technical success и не human evidence.
 Для любой row D2–D5 status `human_pass`, `human_fail` либо `not_applicable`
 обязан быть выведен из matching `human_ground_truth`; при отсутствии записи
 допустим только `not_evaluated`. Self-asserted human status отклоняется как
 `MANDATORY_HUMAN_EVIDENCE_MISSING` независимо от `editorial_status`.
-В complete holdout каждая D2–D5 имеет `human_pass`, `human_fail` либо
-human-confirmed `not_applicable` и соответствующую `human_ground_truth`.
+В complete holdout это требование относится к каждому output, который прошёл
+primary blinding и пригоден для blinded content review: каждая D2–D5 имеет
+`human_pass`, `human_fail` либо human-confirmed `not_applicable` и matching
+`human_ground_truth`. Self-identifying output является закрытым исключением:
+D2–D5=`blinding_failed`, primary HGT запрещён, secondary evidence descriptive.
 
 No-output row является отдельным fail-closed case: executable сочетание
-`technical_conformance=not_observed` и `terminal_status=controlled_failure`
-требует пустые `observed_atoms` и `not_evaluated` во всех D1–D5. D2–D5 нельзя
+`technical_conformance=not_observed` с `terminal_status=controlled_failure` либо
+primary `terminal_status=not_applicable` требует пустые `observed_atoms` и
+`not_evaluated` во всех D1–D5. D2–D5 нельзя
 оценивать по отсутствующему output; findings, human/model finding reviews и
 любая `human_ground_truth` для такой row запрещены. Controlled failure остаётся
 в denominator с zero human-quality success; `not_evaluated` здесь не означает
-missing review успешного output.
+missing review успешного output. При materialization decision statistical scopes
+любая no-output row, включая controlled failure и no-attempt, становится
+applicable failure для D1–D5, CFA gate и editorial approval, поэтому не может
+исчезнуть из quality denominator. Она не добавляется в отдельный CFA event-rate
+denominator: отсутствие output не создаёт безопасную exposure и уже fail closed
+в quality gates.
 
 ## Severity taxonomy
 
@@ -247,10 +263,12 @@ Presentation randomized и blinded по
 [benchmark contract](m1b-benchmark-contract.md). Reviewer не видит model/profile,
 другие оценки и machine/model-review disposition.
 
-Для каждой заранее определённой critical-risk category обязательны две независимые
+Для каждой заранее определённой critical-risk category output, прошедшего primary
+blinding и пригодного для blinded content review, обязательны две независимые
 initial разметки разными human reviewers. Один reviewer под двумя ID недопустим.
 Model reviewer, automated checker и автор candidate output не удовлетворяют
-human count.
+human count. Self-identifying output является закрытым exception: primary
+reviews/HGT запрещены, secondary evidence descriptive only.
 
 Каждый holdout output, который прошёл primary blinding и пригоден для blinded
 review, получает human ground truth для каждой D2–D5: ordinal score либо
@@ -273,7 +291,7 @@ human/model content reviews, D2–D5 labels или `human_ground_truth` и не
 исключаются из denominator. Их нельзя
 превратить в quality success искусственной записью `not_applicable`.
 
-Executable v4 `human_ground_truth` row содержит ровно `adjudicates`,
+Executable schema v4 `human_ground_truth` row содержит ровно `adjudicates`,
 `applicability_reason`, `dimension`, `evidence_tier`, `ground_truth_id`,
 `mapping_generation`, `ordinal_score`, `result_id`, `review_stage`,
 `reviewer_blinding`, `reviewer_id`, `reviewer_role`, `status`. Ordinal score
@@ -284,10 +302,10 @@ Executable v4 `human_ground_truth` row содержит ровно `adjudicates`
 Evidence tiers разделены: `primary_blinded` участвует в primary gate,
 `compromised_primary` сохраняет неизменяемое evidence после external mapping
 leak, а `secondary_unblinded` может только информировать owner review. Текущий
-M1B-0 v4 report является только partial synthetic contract и всегда отклоняет
+M1B-0 document schema v4 является только partial synthetic contract и всегда отклоняет
 `complete_benchmark` кодом `PARTIAL_REPORT_CANNOT_BE_COMPLETE`. Будущий live
-report требует отдельной owner-accepted schema/analysis definition; ни один v4
-status не подменяет это evidence.
+report требует отдельной owner-accepted schema/analysis definition; ни один
+document-schema-v4 status не подменяет это evidence.
 
 Один reviewer ID имеет одну immutable role во всём document. Reviewer ID не
 может совпадать с candidate, sample, source cluster, atom/occurrence, result,
@@ -302,10 +320,14 @@ applicability либо mandatory-review disposition. До aggregation:
 3. третий независимый human adjudicator видит оба frozen initial records, но не
    model identity;
 4. top-level `adjudications` либо ground-truth row со stage `adjudication`
-   ссылается ровно на два conflicting initial IDs и сохраняется отдельно;
-5. unresolved disagreement блокирует verdict для category.
+   ссылается ровно на два distinct существующих conflicting initial IDs того же
+   result/dimension и current mapping generation и сохраняется отдельно;
+5. ровно один distinct third-human adjudicator разрешает disagreement; agreeing
+   initials, orphan/cross-scope/duplicate link либо extra adjudicator invalid;
+6. каждая HGT row обязана быть потреблена ровно своим complete logical scope;
+   unresolved либо orphan evidence блокирует document до aggregation.
 
-Executable finding-review v4 хранит reviewer-specific closed outcome
+Executable finding-review schema v4 хранит reviewer-specific closed outcome
 `decision`, `severity`, `hard_fail`, `mandatory_review` и повторно bind-ит exact
 `finding_id`, category и dimension вместе с mapping/blinding provenance.
 Если finding содержит две initial human reviews, их reviewer identities обязаны
@@ -372,11 +394,14 @@ Closed result set ровно такой: `AGREEMENT_APPLICABILITY_DISAGREEMENT`,
 детерминирован raw ASCII ascending reviewer UUID: linked record первого UUID
 формирует первую ось, linked record второго — вторую; перестановка не зависит от
 score либо candidate.
-Decision-grade rows materialize только внутри HGT validator из уже связанных
-frozen initial records и сохраняют split исходного sample. Agreement gate
-принимает только однородный holdout scope; tuning доступен лишь через отдельный
-split-marked diagnostic helper. Generic row helper принимает только public
-synthetic math vectors и сам по себе не является live/selection evidence.
+Decision-grade agreement rows materialize только внутри HGT validator из уже
+связанных frozen initial records и сохраняют split исходного sample; statistical
+и CFA rows materialize из тех же validated frozen sources/results/findings.
+Каждый gate требует sealed exact-complete provenance для своего scope и принимает
+только однородный holdout. Tuning доступен лишь через отдельный split-marked
+diagnostic helper. Generic raw agreement/statistical/CFA helpers принимают public
+synthetic math vectors, всегда возвращают no decision eligibility (и no raw CFA
+minimum) и сами по себе не являются live/selection evidence.
 
 При external mapping leak affected initial records сохраняются как
 `compromised_primary`; replacement использует новую mapping generation и только
@@ -398,15 +423,17 @@ primary agreement/quality gate.
 
 - `critical_risk` — number/sign/comparator/duration, negation/modality,
   condition/cause/effect, actor/target identity, lore entity/title, unknown
-  syntax либо typed-atom/control mutation risk; требует две разные initial human
-  reviews и не допускает auto-accept;
+  syntax либо typed-atom/control mutation risk; для primary-blinded reviewable
+  output требует две разные initial human reviews и не допускает auto-accept;
+  self-identifying output вместо reviews получает fail-closed exception;
 - `mandatory_human` — все narrative, dialogue, humor/wordplay, ambiguous
   gender/case, unresolved lore/terminology/context classes, любой critical-risk,
   disagreement, repair/fallback и любой `high`/`critical` finding;
 - `auto_eligible_candidate` — только заранее перечисленный до holdout UI либо
   mechanics class без critical-risk/ambiguity/repair/fallback; это лишь
-  benchmark label, не разрешение production auto-accept. Даже он получает human
-  ground truth в holdout.
+  benchmark label, не разрешение production auto-accept. Любой его holdout output,
+  прошедший primary blinding и пригодный для blinded review, получает human ground
+  truth; self-identifying exception остаётся fail-closed и primary HGT не получает.
 
 В текущей executable synthetic taxonomy ограничение уже closed: risk class
 `auto_eligible_candidate` допустим только при primary stratum `ui` или
@@ -416,8 +443,10 @@ primary agreement/quality gate.
 решение о будущей production auto-eligibility.
 
 Неперечисленная комбинация получает `mandatory_human`. Exact class rules и
-auto-eligible list остаются proposal до owner acceptance и freeze. Независимо от
-model score обязательный human gate получают:
+auto-eligible list остаются proposal до owner acceptance и freeze. Для output,
+прошедшего primary blinding и пригодного для content review, независимо от model
+score обязательный human gate получают перечисленные ниже classes. Self-identifying
+output остаётся отдельным fail-closed exception без primary HGT:
 
 - narrative/dialogue, humor/wordplay и character voice;
 - lore entity/title либо термин без accepted glossary decision;

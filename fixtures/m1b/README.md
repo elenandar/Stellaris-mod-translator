@@ -11,7 +11,8 @@ fixed UUIDv4-shaped values are deterministic fixture IDs, not live identities.
 `3` controlled successes and `170` failures with one exact controlled code each.
 The successful cases are:
 
-- `positive` — partial public synthetic D1 conformance with zero model calls;
+- `positive` — canonical partial no-attempt state: zero model calls, technical
+  `not_observed`, empty atoms, D1–D5 `not_evaluated`, zero technical successes;
 - `human-fallback-success-zero-model-calls` — the declared human-fallback lane
   succeeds with `human_fallback_count=1` and `model_call_count=0`;
 - `context-overflow-controlled-failure` — a no-output controlled failure with no
@@ -19,28 +20,29 @@ The successful cases are:
 
 None is a complete benchmark. Document schema `m1b-synthetic-contract-v4`
 always rejects `complete_benchmark`; the positive document declares only three
-of six future primary assignments. D1 is `synthetic_conformant`, while D2-D5 and
-editorial state remain `not_evaluated`.
+of six future primary assignments and makes no attempt/output/D1 claim. Only the
+separate human-fallback transition has output-bearing synthetic D1 conformance;
+D2–D5 and editorial state remain `not_evaluated`.
 
 ## Frozen public proposal identities
 
 The fixture uses:
 
 - fixture schema `m1b-synthetic-contract-cases-v4`;
-- protocol `m1b-benchmark-contract-v4`, generation `105`;
+- protocol `m1b-benchmark-contract-v5`, generation `106`;
 - output schema `m1b-synthetic-output-v4`;
 - corpus `m1b-synthetic-corpus-v3`, generation `304`;
-- quality rubric `m1b-quality-rubric-v5`;
-- analysis policy `m1b-analysis-policy-v4`, generation `105`;
+- quality rubric `m1b-quality-rubric-v6`, generation `106`;
+- analysis policy `m1b-analysis-policy-v5`, generation `106`;
 - `17` byte-exact public proposal components;
 - bundle SHA-256
-  `97f7096de99d36a507f3df0c7e025b25cd6f0a3c573dc5f66f5aa15dd671fd1e`;
+  `940b22477fab4358c18343e94f326d12d1bc00cff806e572e95e17afcf43efa7`;
 - public synthetic corpus SHA-256
   `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`;
 - fixed first-component vector
-  `ef5c91cea7d9397e035e87676f32deb3410296417277d09d3f1dee76272bbd48`;
+  `d5b58199ada27f8b1a74c3d2d3537efbca976d682c01ec1c99f720f03cedbf38`;
 - fixture file SHA-256
-  `98978b6f17198f81cd1c0dd29039e5ed039b744fdd019d80bb01e9e1f423ce66`.
+  `9bd43b21c7d7bf6e9ff70004df0eed37810593b2e75cc532200ac2a71c0f022f`.
 
 All definitions remain `proposed`; none is `owner_accepted`. The bundle binds
 declarative definitions and the public synthetic corpus, not the exact current
@@ -69,19 +71,25 @@ Without Ollama or a live model, the table and unit tests cover:
 - external mapping compromise versus non-recoverable self-identification,
   positive mapping generations, global reviewer exposure, and exact blinding
   aggregate derivation;
-- HGT-derived unique logical rows and canonical stable reviewer pairs, exact
+- HGT-derived unique logical rows, exact two-existing-conflicting-initial linkage,
+  same-result/dimension/current-mapping scope, one distinct third human, full HGT
+  consumption, and canonical stable reviewer pairs; exact
   `0..4` source-balanced quadratic kappa, bilateral and unilateral
   `not_applicable`, equal-source weighting of actual paired rows, zero variance,
   insufficient coverage, every delete-one-whole-source robustness branch, and
   explicit split provenance with no tuning/holdout pooling;
 - source-generation conservative collapse, descriptive-only overall totals,
-  three-candidate family correction, holdout-only decision helpers, and closed
-  split-scoped CFA source/class aggregation;
+  three-candidate family correction, and closed split-scoped CFA source/class
+  aggregation; all three holdout-only decision entrypoints accept only exact
+  scopes revalidated/materialized by the closed provenance issuer;
 - immutable reviewer-specific finding outcomes for decision/severity/hard-fail/
   mandatory-review, exact third-human adjudication, top-level downgrade
   rejection, distinct identities for two initial human reviews, and no
   model-review human credit;
 - no-output and no-attempt rows reject findings and human/model content reviews;
+  no-attempt rows have zero technical success, and every no-output row becomes a
+  conservative failure in trusted quality/gate scopes instead of disappearing
+  from denominators;
   self-identifying output permits only descriptive secondary-unblinded evidence;
 - partial-report evidence restrictions, context self-assertion rejection, and
   the external implementation-identity blocker.
@@ -90,11 +98,14 @@ Self-identifying model-output rows require exactly one model call. Their
 denominator/secondary/aggregate transitions are checked by offline state
 validators, but a full M1B-0 document containing such a live observation stops
 at `CONTEXT_LIMIT_BINDING_UNPROVEN`; the fixture does not pretend that a model
-was called. Generic agreement rows are public synthetic math vectors only.
-Decision-grade agreement rows are materialized inside the HGT validator from
-linked frozen initial records and retain the source sample split. Tuning math is
-available only as explicitly marked diagnostics and cannot satisfy a holdout
-gate.
+was called. Generic agreement, statistical, and CFA rows are public synthetic
+math vectors only and never expose decision eligibility or a satisfied raw CFA
+minimum. The closed issuer revalidates exact document identity, canonical
+corpus, results, findings, and HGT before materializing complete per-scope rows
+and recognizing the issued opaque provenance object. Decision-grade agreement
+rows retain linked frozen initial records and the source sample split. Tuning
+math is available only as explicitly marked diagnostics and cannot satisfy a
+holdout gate.
 
 For official/private data, exact values, positions, row IDs, content-derived
 hashes, and reviewer/source mappings must remain local. Only controlled codes

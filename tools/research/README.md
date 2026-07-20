@@ -128,20 +128,25 @@ under review. The offline [synthetic fixture contract](../../fixtures/m1b/README
 is checked by [`m1b_contract.py`](m1b_contract.py) without Ollama, network, corpus,
 game, Workshop, launcher, or active-path access.
 
-Current public proposal identity is protocol v4/generation 105, analysis policy
-v4/generation 105, document,
+Current public proposal identity is protocol v5/generation 106, analysis policy
+v5/generation 106, document,
 fixture and output schema v4, synthetic corpus v3/generation 304, and 17
 components. The table has 173 cases: 3 controlled successes and 170 exact
 controlled failures. Bundle SHA-256 is
-`97f7096de99d36a507f3df0c7e025b25cd6f0a3c573dc5f66f5aa15dd671fd1e`;
+`940b22477fab4358c18343e94f326d12d1bc00cff806e572e95e17afcf43efa7`;
 the public synthetic corpus SHA-256 is
 `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`.
 The fixture file SHA-256 is
-`98978b6f17198f81cd1c0dd29039e5ed039b744fdd019d80bb01e9e1f423ce66`.
-Decision-grade agreement, D1-D5/statistical, and CFA helpers are holdout-only;
-tuning remains explicitly split-scoped diagnostics. Finding reviews preserve
-reviewer-specific closed outcomes and distinct initial human identities, while
-no-output/no-attempt rows reject all content findings and human/model reviews.
+`9bd43b21c7d7bf6e9ff70004df0eed37810593b2e75cc532200ac2a71c0f022f`.
+Decision-grade agreement, D1-D5/statistical, and CFA helpers are holdout-only and
+require exact document state revalidated/materialized by the closed provenance
+issuer; raw inputs and tuning remain explicitly split-scoped diagnostics.
+Finding reviews preserve reviewer-specific closed outcomes and distinct initial
+human identities. HGT adjudication requires two existing conflicting same-scope
+initials, one distinct third human, and full consumption. No-output/no-attempt
+rows reject all content findings and human/model reviews; no-attempt has zero
+technical success and every no-output row is a conservative trusted quality/gate
+failure.
 These identities bind public declarative definitions and synthetic corpus
 bytes. They do not prove provider context/tokenizer binding or exact executable
 implementation identity; `CONTEXT_LIMIT_BINDING_UNPROVEN` and

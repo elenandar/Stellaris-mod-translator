@@ -23,10 +23,10 @@ README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
 EXPECTED_FIXTURE_CASES = 173
 EXPECTED_POSITIVE_CASES = 3
 EXPECTED_FIXTURE_SHA256 = (
-    "98978b6f17198f81cd1c0dd29039e5ed039b744fdd019d80bb01e9e1f423ce66"
+    "9bd43b21c7d7bf6e9ff70004df0eed37810593b2e75cc532200ac2a71c0f022f"
 )
 EXPECTED_BUNDLE_HASH = (
-    "97f7096de99d36a507f3df0c7e025b25cd6f0a3c573dc5f66f5aa15dd671fd1e"
+    "940b22477fab4358c18343e94f326d12d1bc00cff806e572e95e17afcf43efa7"
 )
 
 
@@ -239,16 +239,66 @@ class SyntheticContractCaseTests(unittest.TestCase):
             {component["acceptance_state"] for component in bundle["components"]},
             {"proposed"},
         )
+        self.assertEqual(
+            {
+                component["kind"]: (
+                    component["version"],
+                    component["generation"],
+                )
+                for component in bundle["components"]
+            },
+            {
+                "benchmark_contract": ("m1b-benchmark-contract-v5", 106),
+                "output_schema": ("m1b-synthetic-output-v4", 105),
+                "prompt_policy": ("m1b-synthetic-prompt-policy-v1", 101),
+                "candidate_profile.glm_4_7_flash": (
+                    "m1b-primary-common-profile-v1",
+                    202,
+                ),
+                "candidate_profile.deepseek_r1_32b": (
+                    "m1b-primary-common-profile-v1",
+                    202,
+                ),
+                "candidate_profile.gpt_oss_20b": (
+                    "m1b-primary-common-profile-v1",
+                    202,
+                ),
+                "corpus_policy": ("m1b-corpus-policy-v3", 105),
+                "split_policy": ("m1b-split-policy-v4", 106),
+                "generation_policy": ("m1b-generation-policy-v2", 105),
+                "context_limit_policy": ("m1b-context-limit-policy-v2", 105),
+                "randomization_blinding_policy": (
+                    "m1b-randomization-blinding-policy-v3",
+                    105,
+                ),
+                "quality_rubric": ("m1b-quality-rubric-v6", 106),
+                "measurement_policy": ("m1b-measurement-policy-v4", 106),
+                "retention_leakage_policy": (
+                    "m1b-retention-leakage-policy-v1",
+                    101,
+                ),
+                "validator_policy": ("m1b-validator-policy-v5", 106),
+                "analysis_policy": ("m1b-analysis-policy-v5", 106),
+                "implementation_identity_policy": (
+                    "m1b-implementation-identity-policy-v1",
+                    105,
+                ),
+            },
+        )
         analysis_component = next(
             component
             for component in bundle["components"]
             if component["kind"] == "analysis_policy"
         )
-        self.assertEqual(analysis_component["version"], "m1b-analysis-policy-v4")
+        self.assertEqual(analysis_component["version"], "m1b-analysis-policy-v5")
         self.assertEqual(
             analysis_component["generation"], contract.PROTOCOL_GENERATION
         )
-        self.assertEqual(self.base["protocol"]["generation"], 105)
+        self.assertEqual(self.base["protocol"]["generation"], 106)
+        self.assertEqual(
+            self.base["protocol"]["protocol_version"],
+            "m1b-benchmark-contract-v5",
+        )
 
     def test_component_hash_has_a_fixed_public_vector(self) -> None:
         component = self.base["definition_bundle"]["components"][0]
@@ -259,7 +309,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(
             actual,
-            "ef5c91cea7d9397e035e87676f32deb3410296417277d09d3f1dee76272bbd48",
+            "d5b58199ada27f8b1a74c3d2d3537efbca976d682c01ec1c99f720f03cedbf38",
         )
         self.assertEqual(actual, component["sha256"])
 
@@ -285,6 +335,14 @@ class SyntheticContractCaseTests(unittest.TestCase):
                 "attempt_stage",
                 "attempt_index",
             ],
+        )
+        self.assertEqual(
+            benchmark["no_attempt_state"],
+            "not_applicable_not_observed_empty_atoms_all_dimensions_not_evaluated_zero_accounting",
+        )
+        self.assertEqual(
+            benchmark["trusted_analysis"],
+            "complete_validator_materialized_frozen_scope_required_for_decision_grade",
         )
         output = definitions["output_schema"]
         self.assertEqual(output["result_fields"], list(contract._RESULT_FIELDS))
@@ -324,6 +382,13 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(split["decision_grade_split"], "holdout")
         self.assertEqual(split["splits"], sorted(contract.SPLITS))
+        self.assertEqual(
+            split["decision_row_binding"],
+            "exact_complete_validator_materialized_result_source_split_scope",
+        )
+        self.assertEqual(
+            split["caller_split_or_uuid_membership_only"], "never_trusted"
+        )
         for candidate in self.base["candidate_profiles"]:
             definition = definitions["candidate_profile." + candidate["candidate"]]
             self.assertEqual(
@@ -361,6 +426,19 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(
             validator["materialized_final_encoding"],
             "reuse_last_budgeted_encoding",
+        )
+        self.assertEqual(validator["no_attempt_cross_field_state"], "fail_closed")
+        self.assertEqual(
+            validator["hgt_rows"],
+            "every_adjudication_exactly_linked_and_every_record_consumed",
+        )
+        self.assertEqual(
+            validator["trusted_analysis_materialization"],
+            "after_frozen_corpus_validated_results_findings_and_hgt",
+        )
+        self.assertEqual(
+            validator["trusted_analysis_issuance"],
+            "closed_validator_revalidates_exact_document_source_state",
         )
         self.assertEqual(validator["json_integer_min"], contract.MIN_JSON_INTEGER)
         self.assertEqual(validator["json_integer_max"], contract.MAX_JSON_INTEGER)
@@ -424,6 +502,11 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "agreement_gate_holdout_only",
         )
         self.assertEqual(
+            analysis["agreement"]["decision_grade_provenance"],
+            "sealed_exact_complete_materialized_scope",
+        )
+        self.assertFalse(analysis["agreement"]["raw_decision_grade_eligible"])
+        self.assertEqual(
             analysis["agreement"]["ratings_materializer"],
             "inside_human_ground_truth_validator_no_report_supplied_scores",
         )
@@ -450,6 +533,26 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(
             analysis["statistical_dimension_or_gate_values"],
             sorted(contract.STATISTICAL_DIMENSIONS_OR_GATES),
+        )
+        self.assertEqual(
+            analysis["statistical_outcome"]["decision_grade_provenance"],
+            "sealed_exact_complete_materialized_scope",
+        )
+        self.assertFalse(
+            analysis["statistical_outcome"]["diagnostic_decision_grade_eligible"]
+        )
+        self.assertEqual(
+            analysis["critical_false_accept_decision_grade_provenance"],
+            "sealed_exact_complete_materialized_scope",
+        )
+        self.assertEqual(
+            analysis["critical_false_accept_no_output"],
+            "excluded_from_cfa_denominator_but_quality_gate_failure",
+        )
+        self.assertFalse(analysis["critical_false_accept_raw_minimum"])
+        self.assertEqual(
+            analysis["statistical_outcome"]["no_output"],
+            "applicable_failure_in_every_dimension_and_gate",
         )
         self.assertEqual(
             analysis["agreement"]["statuses"],
@@ -497,7 +600,11 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(measurement["model_output_success_model_call_count"], 1)
         self.assertEqual(
             measurement["not_applicable_state"],
-            "not_observed_mapping0_zero_accounting_no_human",
+            "not_observed_empty_atoms_D1_D5_not_evaluated_mapping0_zero_accounting_zero_technical_success_no_human",
+        )
+        self.assertEqual(
+            measurement["technical_success_aggregate"],
+            "has_output_and_synthetic_conformant_only",
         )
         self.assertEqual(
             measurement["no_output_content_evidence"],
@@ -508,7 +615,22 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         quality = definitions["quality_rubric"]
         self.assertTrue(quality["human_status_requires_ground_truth"])
-        self.assertEqual(quality["initial_hgt_reviewers_per_dimension"], 2)
+        self.assertEqual(
+            quality["primary_blinded_reviewable_output_initial_hgt_reviewers_per_dimension"],
+            2,
+        )
+        self.assertEqual(
+            quality["hgt_adjudication"],
+            "exact_two_existing_conflicting_same_result_dimension_initial_ids_current_mapping_distinct_third_human_fully_consumed",
+        )
+        self.assertEqual(
+            quality["self_identifying_output_hgt"],
+            "primary_forbidden_secondary_unblinded_descriptive_only",
+        )
+        self.assertEqual(
+            quality["no_attempt_dimensions"],
+            "D1_D5_not_evaluated_no_technical_success",
+        )
         self.assertEqual(
             quality["critical_false_accept_definition"],
             "editorially_approved_and_confirmed_underlying_critical_same_result_dimension",
@@ -620,13 +742,13 @@ class SyntheticContractCaseTests(unittest.TestCase):
             )
         )
         for result in self.base["conformance_results"]:
-            self.assertEqual(result["observed_atoms"], expected)
+            self.assertEqual(result["observed_atoms"], [])
 
     def test_positive_separates_technical_human_and_editorial_state(self) -> None:
         self.assertEqual(self.base["findings"], [])
         self.assertEqual(self.base["human_ground_truth"], [])
         for result in self.base["conformance_results"]:
-            self.assertEqual(result["technical_conformance"], "synthetic_conformant")
+            self.assertEqual(result["technical_conformance"], "not_observed")
             self.assertEqual(result["editorial_status"], "not_evaluated")
             dimensions = {
                 row["dimension"]: row["status"]
@@ -635,7 +757,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
             self.assertEqual(
                 dimensions,
                 {
-                    "schema_atom_stability": "synthetic_conformant",
+                    "schema_atom_stability": "not_evaluated",
                     "meaning_accuracy": "not_evaluated",
                     "terminology_lore": "not_evaluated",
                     "literary_russian": "not_evaluated",
@@ -656,6 +778,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(self.base["provider_policy"]["persistence_status"], "not_probed")
         self.assertFalse(self.base["provider_policy"]["fallback"])
         self.assertEqual(report["human_ground_truth_count"], 0)
+        self.assertEqual(report["technical_conformant_count"], 0)
 
     def test_positive_result_has_exact_aggregate_counts(self) -> None:
         self.assertEqual(
@@ -723,6 +846,16 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         return registry, samples, results
 
+    def _trusted_provenance(
+        self, document, *, agreement_rows=(), findings=()
+    ):
+        if agreement_rows or findings:
+            raise AssertionError("trusted provenance must be issued from document rows")
+        registry, samples, results = self._validated_state(document)
+        contract._validate_synthetic_corpus_freeze(document["corpus"])
+        provenance = contract._materialize_trusted_analysis_provenance(document)
+        return registry, samples, results, provenance
+
     @staticmethod
     def _ground_truth(
         identifier,
@@ -736,13 +869,14 @@ class MethodologyAndStateTests(unittest.TestCase):
         stage="initial",
         blinding="never_unblinded",
         adjudicates=None,
+        dimension="meaning_accuracy",
     ):
         return {
             "adjudicates": [] if adjudicates is None else list(adjudicates),
             "applicability_reason": (
                 "frozen_not_applicable" if status == "not_applicable" else None
             ),
-            "dimension": "meaning_accuracy",
+            "dimension": dimension,
             "evidence_tier": tier,
             "ground_truth_id": identifier,
             "mapping_generation": mapping,
@@ -755,13 +889,24 @@ class MethodologyAndStateTests(unittest.TestCase):
             "status": status,
         }
 
-    @staticmethod
-    def _mark_primary_output(result, *, blinding="passed", mapping=1):
+    def _mark_primary_output(self, result, *, blinding="passed", mapping=1):
+        sample = next(
+            sample
+            for sample in self.base["corpus"]["samples"]
+            if sample["sample_id"] == result["sample_id"]
+        )
+        result["technical_conformance"] = "synthetic_conformant"
+        result["observed_atoms"] = copy.deepcopy(sample["expected_atoms"])
+        result["dimension_records"][0]["status"] = "synthetic_conformant"
         result["blinding_status"] = blinding
         result["mapping_generation"] = mapping
         result["terminal_status"] = "success"
         result["accounting"]["initial_attempt_count"] = 1
         result["accounting"]["model_call_count"] = 1
+
+    @staticmethod
+    def _agreement_math_status(rows):
+        return contract.agreement_diagnostic(rows)["diagnostic_status"]
 
     @staticmethod
     def _finding_review(
@@ -967,14 +1112,20 @@ class MethodologyAndStateTests(unittest.TestCase):
         holdout = self._agreement_rows(scores, scores, split="holdout")
         self.assertEqual(
             contract.agreement_diagnostic(tuning),
-            {"split": "tuning", "status": "AGREEMENT_INSUFFICIENT_UNITS"},
+            {
+                "decision_grade_eligible": False,
+                "diagnostic_status": "AGREEMENT_INSUFFICIENT_UNITS",
+                "split": "tuning",
+            },
         )
         self.assertEqual(
-            contract.agreement_gate(holdout), "AGREEMENT_INSUFFICIENT_UNITS"
+            self._agreement_math_status(holdout), "AGREEMENT_INSUFFICIENT_UNITS"
         )
         with self.assertRaises(contract.ContractError) as raised:
-            contract.agreement_gate(tuning)
-        self.assertEqual(raised.exception.code, "DECISION_GRADE_SPLIT_INVALID")
+            contract.agreement_gate(holdout)
+        self.assertEqual(
+            raised.exception.code, "DECISION_GRADE_PROVENANCE_REQUIRED"
+        )
         with self.assertRaises(contract.ContractError) as raised:
             contract.agreement_unit_vectors(tuning + holdout)
         self.assertEqual(raised.exception.code, "STATISTICAL_SPLIT_MIXED")
@@ -996,7 +1147,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             split="holdout",
         )
         tuning_failure = self._agreement_rows([0], [4], split="tuning")
-        self.assertEqual(contract.agreement_gate(passing_holdout), "AGREEMENT_PASS")
+        self.assertEqual(self._agreement_math_status(passing_holdout), "AGREEMENT_PASS")
         with self.assertRaises(contract.ContractError) as raised:
             contract.agreement_gate(passing_holdout + tuning_failure)
         self.assertEqual(raised.exception.code, "STATISTICAL_SPLIT_MIXED")
@@ -1025,11 +1176,15 @@ class MethodologyAndStateTests(unittest.TestCase):
                 "decision_grade_eligible"
             ]
         )
+        self.assertFalse(
+            contract.statistical_unit_summary([holdout_stat])[
+                "decision_grade_eligible"
+            ]
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_statistical_unit_summary([holdout_stat])
         self.assertEqual(
-            contract.decision_grade_statistical_unit_summary([holdout_stat])[
-                "per_stratum_denominators"
-            ]["ui"],
-            1,
+            raised.exception.code, "DECISION_GRADE_PROVENANCE_REQUIRED"
         )
         with self.assertRaises(contract.ContractError) as raised:
             contract.statistical_unit_summary([tuning_stat, holdout_stat])
@@ -1068,11 +1223,15 @@ class MethodologyAndStateTests(unittest.TestCase):
             ],
             100,
         )
-        holdout_summary = contract.decision_grade_critical_false_accept_summary(
-            holdout_cfa
-        )
+        holdout_summary = contract.critical_false_accept_summary(holdout_cfa)
         self.assertEqual(holdout_summary["source_generation_count"], 103)
+        self.assertFalse(holdout_summary["decision_grade_eligible"])
         self.assertFalse(holdout_summary["meets_decision_minimum"])
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_critical_false_accept_summary(holdout_cfa)
+        self.assertEqual(
+            raised.exception.code, "DECISION_GRADE_PROVENANCE_REQUIRED"
+        )
         with self.assertRaises(contract.ContractError) as raised:
             contract.critical_false_accept_summary(tuning_cfa + holdout_cfa)
         self.assertEqual(raised.exception.code, "STATISTICAL_SPLIT_MIXED")
@@ -1091,6 +1250,230 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         self.assertFalse(tuning_203["decision_grade_eligible"])
         self.assertFalse(tuning_203["meets_decision_minimum"])
+        holdout_203 = contract.critical_false_accept_summary(
+            cfa_rows(203, "holdout", 4000)
+        )
+        self.assertFalse(holdout_203["decision_grade_eligible"])
+        self.assertFalse(holdout_203["meets_decision_minimum"])
+
+    def test_trusted_analysis_provenance_binds_complete_frozen_scope(self) -> None:
+        document = copy.deepcopy(self.base)
+        tuning_result = document["conformance_results"][0]
+        self._mark_primary_output(tuning_result)
+        holdout_result = document["conformance_results"][1]
+        holdout_result["sample_id"] = (
+            "00000000-0000-4000-8000-000000000012"
+        )
+        self._mark_primary_output(holdout_result)
+        records = []
+        for index, dimension in enumerate(contract._QUALITY_DIMENSION_ORDER[1:]):
+            holdout_result["dimension_records"][index + 1]["status"] = "human_pass"
+            records.extend(
+                (
+                    self._ground_truth(
+                        f"00000000-0000-4000-8000-{81 + index * 2:012x}",
+                        "00000000-0000-4000-8000-000000000061",
+                        holdout_result["result_id"],
+                        dimension=dimension,
+                    ),
+                    self._ground_truth(
+                        f"00000000-0000-4000-8000-{82 + index * 2:012x}",
+                        "00000000-0000-4000-8000-000000000062",
+                        holdout_result["result_id"],
+                        dimension=dimension,
+                    ),
+                )
+            )
+        document["human_ground_truth"] = records
+        _, _, _, provenance = self._trusted_provenance(document)
+        with self.assertRaises(AttributeError):
+            object.__setattr__(provenance, "_registered_sources", frozenset())
+
+        holdout_stat_scope = (
+            holdout_result["candidate_id"],
+            contract.PROFILE_VERSION,
+            "holdout",
+            "schema_atom_stability",
+        )
+        holdout_stat = contract._trusted_analysis_rows(
+            provenance, row_kind="statistical", scope=holdout_stat_scope
+        )
+        trusted_summary = contract.decision_grade_statistical_unit_summary(
+            holdout_stat, provenance=provenance
+        )
+        self.assertTrue(trusted_summary["decision_grade_eligible"])
+        self.assertEqual(trusted_summary["per_stratum_denominators"]["ui"], 1)
+
+        holdout_cfa_scope = (
+            holdout_result["candidate_id"],
+            contract.PROFILE_VERSION,
+            "holdout",
+            "auto_eligible_candidate",
+        )
+        holdout_cfa = contract._trusted_analysis_rows(
+            provenance, row_kind="cfa", scope=holdout_cfa_scope
+        )
+        trusted_cfa = contract.decision_grade_critical_false_accept_summary(
+            holdout_cfa, provenance=provenance
+        )
+        self.assertTrue(trusted_cfa["decision_grade_eligible"])
+        self.assertFalse(trusted_cfa["meets_decision_minimum"])
+
+        tuning_scope = (
+            tuning_result["candidate_id"],
+            contract.PROFILE_VERSION,
+            "tuning",
+            "schema_atom_stability",
+        )
+        tuning_stat = contract._trusted_analysis_rows(
+            provenance, row_kind="statistical", scope=tuning_scope
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_statistical_unit_summary(
+                tuning_stat, provenance=provenance
+            )
+        self.assertEqual(raised.exception.code, "DECISION_GRADE_SPLIT_INVALID")
+
+        relabeled = copy.deepcopy(tuning_stat)
+        relabeled[0]["split"] = "holdout"
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_statistical_unit_summary(
+                relabeled, provenance=provenance
+            )
+        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
+
+        tuning_cfa_scope = (
+            tuning_result["candidate_id"],
+            contract.PROFILE_VERSION,
+            "tuning",
+            "mandatory_human",
+        )
+        relabeled_cfa = contract._trusted_analysis_rows(
+            provenance, row_kind="cfa", scope=tuning_cfa_scope
+        )
+        relabeled_cfa[0]["split"] = "holdout"
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_critical_false_accept_summary(
+                relabeled_cfa, provenance=provenance
+            )
+        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
+
+        tampered = copy.deepcopy(holdout_stat)
+        tampered[0]["success"] = False
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_statistical_unit_summary(
+                tampered, provenance=provenance
+            )
+        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
+
+        arbitrary_stat = [
+            {
+                **holdout_stat[0],
+                "source_generation_id": (
+                    f"00000000-0000-4000-8000-{index + 1000:012x}"
+                ),
+            }
+            for index in range(46)
+        ]
+        self.assertFalse(
+            contract.statistical_unit_summary(arbitrary_stat)[
+                "decision_grade_eligible"
+            ]
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_statistical_unit_summary(
+                arbitrary_stat, provenance=provenance
+            )
+        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_UNREGISTERED")
+
+        arbitrary_cfa = [
+            {
+                **holdout_cfa[0],
+                "source_generation_id": (
+                    f"00000000-0000-4000-8000-{index + 3000:012x}"
+                ),
+            }
+            for index in range(203)
+        ]
+        raw_cfa = contract.critical_false_accept_summary(arbitrary_cfa)
+        self.assertFalse(raw_cfa["decision_grade_eligible"])
+        self.assertFalse(raw_cfa["meets_decision_minimum"])
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_critical_false_accept_summary(
+                arbitrary_cfa, provenance=provenance
+            )
+        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_UNREGISTERED")
+
+        arbitrary_agreement = self._agreement_rows(
+            [0, 1, 2, 3, 4] * 9 + [0],
+            [0, 1, 3, 2, 4] * 9 + [0],
+        )
+        self.assertEqual(
+            self._agreement_math_status(arbitrary_agreement), "AGREEMENT_PASS"
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_gate(arbitrary_agreement, provenance=provenance)
+        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_UNREGISTERED")
+
+        constructed = contract._TrustedAnalysisProvenance()
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_statistical_unit_summary(
+                holdout_stat, provenance=constructed
+            )
+        self.assertEqual(
+            raised.exception.code, "DECISION_GRADE_PROVENANCE_REQUIRED"
+        )
+
+        invented_source = copy.deepcopy(document)
+        invented_source["corpus"]["samples"][1]["source_generation_id"] = (
+            "00000000-0000-4000-8000-000000009999"
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._materialize_trusted_analysis_provenance(invented_source)
+        self.assertEqual(raised.exception.code, "CORPUS_DEFINITION_MISMATCH")
+
+    def test_no_attempt_is_a_conservative_trusted_gate_failure(self) -> None:
+        document = copy.deepcopy(self.base)
+        result = document["conformance_results"][1]
+        result["sample_id"] = "00000000-0000-4000-8000-000000000012"
+        provenance = contract._materialize_trusted_analysis_provenance(document)
+
+        for dimension_or_gate in (
+            *contract._QUALITY_DIMENSION_ORDER,
+            "critical_false_accept",
+            "editorial_approval",
+        ):
+            with self.subTest(dimension_or_gate=dimension_or_gate):
+                scope = (
+                    result["candidate_id"],
+                    contract.PROFILE_VERSION,
+                    "holdout",
+                    dimension_or_gate,
+                )
+                rows = contract._trusted_analysis_rows(
+                    provenance, row_kind="statistical", scope=scope
+                )
+                self.assertEqual(len(rows), 1)
+                self.assertTrue(rows[0]["applicable"])
+                self.assertFalse(rows[0]["success"])
+                summary = contract.decision_grade_statistical_unit_summary(
+                    rows, provenance=provenance
+                )
+                self.assertEqual(summary["per_stratum_denominators"]["ui"], 1)
+                self.assertEqual(summary["per_stratum_successes"]["ui"], 0)
+
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._trusted_analysis_rows(
+                provenance,
+                row_kind="cfa",
+                scope=(
+                    result["candidate_id"],
+                    contract.PROFILE_VERSION,
+                    "holdout",
+                    "auto_eligible_candidate",
+                ),
+            )
+        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
 
     def test_exact_quadratic_kappa_and_robustness_vectors(self) -> None:
         first = [0, 1, 2, 3, 4]
@@ -1110,7 +1493,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             Fraction(217, 240),
         )
         self.assertEqual(
-            contract.agreement_gate(rows),
+            self._agreement_math_status(rows),
             "AGREEMENT_PASS",
         )
         replayed_rows = copy.deepcopy(rows)
@@ -1139,17 +1522,17 @@ class MethodologyAndStateTests(unittest.TestCase):
         mixed_rows = copy.deepcopy(rows)
         mixed_rows[-1]["candidate"] = "candidate_b"
         with self.assertRaises(contract.ContractError) as raised:
-            contract.agreement_gate(mixed_rows)
+            contract.agreement_diagnostic(mixed_rows)
         self.assertEqual(raised.exception.code, "AGREEMENT_SCOPE_MIXED")
         noncanonical_pair = copy.deepcopy(rows)
         noncanonical_pair[0]["reviewer_pair"].reverse()
         with self.assertRaises(contract.ContractError) as raised:
-            contract.agreement_gate(noncanonical_pair)
+            contract.agreement_diagnostic(noncanonical_pair)
         self.assertEqual(raised.exception.code, "STABLE_REVIEWER_PAIR_INVALID")
         unilateral = copy.deepcopy(rows)
         unilateral[0]["first"] = None
         with self.assertRaises(contract.ContractError) as raised:
-            contract.agreement_gate(unilateral)
+            contract.agreement_diagnostic(unilateral)
         self.assertEqual(
             raised.exception.code,
             "AGREEMENT_APPLICABILITY_ADJUDICATION_REQUIRED",
@@ -1160,7 +1543,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             "initial_record_ids": unilateral[0]["initial_record_ids"],
         }
         self.assertEqual(
-            contract.agreement_gate(unilateral),
+            self._agreement_math_status(unilateral),
             "AGREEMENT_APPLICABILITY_DISAGREEMENT",
         )
 
@@ -1224,7 +1607,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             contract.source_weighted_quadratic_kappa(repeated_within_source),
         )
         self.assertEqual(
-            contract.agreement_gate(crossed_rows),
+            self._agreement_math_status(crossed_rows),
             "AGREEMENT_POINT_BELOW_FLOOR",
         )
 
@@ -1247,7 +1630,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             wraps=contract.source_weighted_quadratic_kappa,
         ) as estimator:
             self.assertEqual(
-                contract.agreement_gate(whole_source_rows), "AGREEMENT_PASS"
+                self._agreement_math_status(whole_source_rows), "AGREEMENT_PASS"
             )
         calls = [call.args[0] for call in estimator.call_args_list]
         self.assertEqual(len(calls[0]), 46)
@@ -1283,7 +1666,7 @@ class MethodologyAndStateTests(unittest.TestCase):
         self.assertEqual(
             summary,
             {
-                "decision_grade_eligible": True,
+                "decision_grade_eligible": False,
                 "event_count": 1,
                 "meets_decision_minimum": False,
                 "source_generation_count": 2,
@@ -1301,11 +1684,13 @@ class MethodologyAndStateTests(unittest.TestCase):
 
     def test_zero_variance_and_insufficient_agreement_fail_closed(self) -> None:
         self.assertEqual(
-            contract.agreement_gate(self._agreement_rows([4] * 46, [4] * 46)),
+            self._agreement_math_status(
+                self._agreement_rows([4] * 46, [4] * 46)
+            ),
             "AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT",
         )
         self.assertEqual(
-            contract.agreement_gate(
+            self._agreement_math_status(
                 self._agreement_rows(
                     [0, 1, 2, 3, 4] * 9,
                     [0, 1, 2, 3, 4] * 9,
@@ -1333,7 +1718,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             contract.quadratic_weighted_kappa(first, second), Fraction(708, 1145)
         )
         self.assertEqual(
-            contract.agreement_gate(self._agreement_rows(first, second)),
+            self._agreement_math_status(self._agreement_rows(first, second)),
             "AGREEMENT_ROBUSTNESS_BELOW_FLOOR",
         )
 
@@ -1346,7 +1731,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             1,
         )
         self.assertEqual(
-            contract.agreement_gate(
+            self._agreement_math_status(
                 self._agreement_rows(mostly_constant_first, mostly_constant_second)
             ),
             "AGREEMENT_UNCERTAINTY_UNDEFINED",
@@ -1904,6 +2289,24 @@ class MethodologyAndStateTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "CONTENT_EVIDENCE_WITHOUT_OUTPUT")
 
+        registry, samples, results = self._validated_state(not_attempted_document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_human_ground_truth(
+                [
+                    self._ground_truth(
+                        "00000000-0000-4000-8000-000000000081",
+                        "00000000-0000-4000-8000-000000000061",
+                        not_attempted_document["conformance_results"][0]["result_id"],
+                    )
+                ],
+                registry,
+                results,
+                samples,
+            )
+        self.assertEqual(
+            raised.exception.code, "HUMAN_GROUND_TRUTH_WITHOUT_OUTPUT"
+        )
+
         model_review = self._finding_review(
             "00000000-0000-4000-8000-000000000051",
             "00000000-0000-4000-8000-000000000061",
@@ -1930,6 +2333,62 @@ class MethodologyAndStateTests(unittest.TestCase):
                 results,
             )
         self.assertEqual(raised.exception.code, "CONTENT_EVIDENCE_WITHOUT_OUTPUT")
+
+    def test_no_attempt_state_rejects_any_output_or_dimension_claim(self) -> None:
+        contract.validate_document(copy.deepcopy(self.base))
+        mutations = (
+            (
+                "technical",
+                lambda result: result.__setitem__(
+                    "technical_conformance", "synthetic_conformant"
+                ),
+                "TECHNICAL_CONFORMANCE_MISMATCH",
+            ),
+            (
+                "observed_atom",
+                lambda result: result.__setitem__(
+                    "observed_atoms",
+                    [copy.deepcopy(self.base["corpus"]["samples"][0]["expected_atoms"][0])],
+                ),
+                "TECHNICAL_CONFORMANCE_MISMATCH",
+            ),
+            (
+                "d1",
+                lambda result: result["dimension_records"][0].__setitem__(
+                    "status", "synthetic_conformant"
+                ),
+                "DIMENSION_STATUS_INVALID",
+            ),
+            (
+                "d2",
+                lambda result: result["dimension_records"][1].__setitem__(
+                    "status", "human_pass"
+                ),
+                "DIMENSION_STATUS_INVALID",
+            ),
+        )
+        for label, mutate, expected_code in mutations:
+            with self.subTest(state=label):
+                document = copy.deepcopy(self.base)
+                mutate(document["conformance_results"][0])
+                with self.assertRaises(contract.ContractError) as raised:
+                    contract.validate_document(document)
+                self.assertEqual(raised.exception.code, expected_code)
+
+        overflow = contract.parse_json_bytes(
+            contract.materialize_fixture_case(
+                self.manifest, "context-overflow-controlled-failure"
+            )
+        )
+        _, _, overflow_results = self._validated_state(overflow)
+        overflow_result = overflow_results[
+            "00000000-0000-4000-8000-000000000031"
+        ]
+        self.assertFalse(overflow_result["has_output"])
+        self.assertEqual(
+            overflow_result["technical_conformance"], "not_observed"
+        )
+        self.assertEqual(overflow_result["terminal_status"], "controlled_failure")
 
     def test_adjudicator_is_linked_distinct_and_drives_final_status(self) -> None:
         document = copy.deepcopy(self.base)
@@ -1978,11 +2437,25 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         self.assertEqual(
             contract.agreement_diagnostic(materialized),
-            {"split": "tuning", "status": "AGREEMENT_INSUFFICIENT_UNITS"},
+            {
+                "decision_grade_eligible": False,
+                "diagnostic_status": "AGREEMENT_INSUFFICIENT_UNITS",
+                "split": "tuning",
+            },
+        )
+        trusted_document = copy.deepcopy(document)
+        trusted_document["human_ground_truth"] = records
+        provenance = contract._materialize_trusted_analysis_provenance(
+            trusted_document
         )
         with self.assertRaises(contract.ContractError) as raised:
-            contract.agreement_gate(materialized)
+            contract.agreement_gate(materialized, provenance=provenance)
         self.assertEqual(raised.exception.code, "DECISION_GRADE_SPLIT_INVALID")
+        relabeled = copy.deepcopy(materialized)
+        relabeled[0]["split"] = "holdout"
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_gate(relabeled, provenance=provenance)
+        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
 
         same_reviewer = copy.deepcopy(records)
         same_reviewer[2]["reviewer_id"] = same_reviewer[0]["reviewer_id"]
@@ -1992,6 +2465,197 @@ class MethodologyAndStateTests(unittest.TestCase):
                 same_reviewer, registry, results, samples
             )
         self.assertEqual(raised.exception.code, "ADJUDICATOR_NOT_DISTINCT")
+
+    def test_hgt_adjudication_rejects_orphan_cross_scope_and_extra_links(self) -> None:
+        first_id = "00000000-0000-4000-8000-000000000081"
+        second_id = "00000000-0000-4000-8000-000000000082"
+        adjudication_id = "00000000-0000-4000-8000-000000000083"
+        fake_id = "00000000-0000-4000-8000-000000000099"
+        reviewers = (
+            "00000000-0000-4000-8000-000000000061",
+            "00000000-0000-4000-8000-000000000062",
+            "00000000-0000-4000-8000-000000000063",
+            "00000000-0000-4000-8000-000000000064",
+        )
+
+        def output_document(second_output=False):
+            document = copy.deepcopy(self.base)
+            self._mark_primary_output(document["conformance_results"][0])
+            if second_output:
+                self._mark_primary_output(document["conformance_results"][1])
+            return document
+
+        def assert_hgt_code(document, records, expected_code):
+            registry, samples, results = self._validated_state(document)
+            with self.assertRaises(contract.ContractError) as raised:
+                contract._validate_human_ground_truth(
+                    records, registry, results, samples
+                )
+            self.assertEqual(raised.exception.code, expected_code)
+
+        result_id = self.base["conformance_results"][0]["result_id"]
+        orphan = self._ground_truth(
+            adjudication_id,
+            reviewers[2],
+            result_id,
+            stage="adjudication",
+            adjudicates=[first_id, second_id],
+        )
+        assert_hgt_code(
+            output_document(), [orphan], "ADJUDICATION_LINK_INVALID"
+        )
+
+        one_initial = self._ground_truth(first_id, reviewers[0], result_id)
+        dangling = self._ground_truth(
+            adjudication_id,
+            reviewers[2],
+            result_id,
+            stage="adjudication",
+            adjudicates=[first_id, fake_id],
+        )
+        assert_hgt_code(
+            output_document(),
+            [one_initial, dangling],
+            "ADJUDICATION_LINK_INVALID",
+        )
+        assert_hgt_code(
+            output_document(), [one_initial], "REVIEWER_PAIR_INCOMPLETE"
+        )
+
+        cross_result_document = output_document(second_output=True)
+        other_result_id = cross_result_document["conformance_results"][1]["result_id"]
+        cross_result_records = [
+            self._ground_truth(first_id, reviewers[0], other_result_id),
+            self._ground_truth(
+                second_id,
+                reviewers[1],
+                other_result_id,
+                score=2,
+                status="human_fail",
+            ),
+            orphan,
+        ]
+        assert_hgt_code(
+            cross_result_document,
+            cross_result_records,
+            "ADJUDICATION_LINK_INVALID",
+        )
+
+        cross_dimension_records = [
+            self._ground_truth(
+                first_id,
+                reviewers[0],
+                result_id,
+                dimension="terminology_lore",
+            ),
+            self._ground_truth(
+                second_id,
+                reviewers[1],
+                result_id,
+                dimension="terminology_lore",
+            ),
+            orphan,
+        ]
+        cross_dimension_document = output_document()
+        cross_dimension_document["conformance_results"][0]["dimension_records"][
+            2
+        ]["status"] = "human_pass"
+        assert_hgt_code(
+            cross_dimension_document,
+            cross_dimension_records,
+            "ADJUDICATION_LINK_INVALID",
+        )
+
+        duplicate_link = copy.deepcopy(orphan)
+        duplicate_link["adjudicates"] = [first_id, first_id]
+        assert_hgt_code(
+            output_document(),
+            [one_initial, duplicate_link],
+            "ADJUDICATION_LINK_INVALID",
+        )
+
+        agreeing_records = [
+            self._ground_truth(first_id, reviewers[0], result_id),
+            self._ground_truth(second_id, reviewers[1], result_id),
+            orphan,
+        ]
+        assert_hgt_code(
+            output_document(), agreeing_records, "ADJUDICATION_LINK_INVALID"
+        )
+
+        disagreement_records = [
+            self._ground_truth(first_id, reviewers[0], result_id),
+            self._ground_truth(
+                second_id,
+                reviewers[1],
+                result_id,
+                score=2,
+                status="human_fail",
+            ),
+        ]
+        second_adjudicator = self._ground_truth(
+            "00000000-0000-4000-8000-000000000084",
+            reviewers[3],
+            result_id,
+            stage="adjudication",
+            adjudicates=[first_id, second_id],
+        )
+        assert_hgt_code(
+            output_document(),
+            disagreement_records + [orphan, second_adjudicator],
+            "ADJUDICATION_LINK_INVALID",
+        )
+
+    def test_hgt_trusted_holdout_materialization_uses_frozen_split(self) -> None:
+        document = copy.deepcopy(self.base)
+        result = document["conformance_results"][0]
+        result["sample_id"] = "00000000-0000-4000-8000-000000000012"
+        self._mark_primary_output(result)
+        human_dimensions = [
+            "meaning_accuracy",
+            "terminology_lore",
+            "literary_russian",
+            "context_voice_style",
+        ]
+        records = []
+        for index, dimension in enumerate(human_dimensions):
+            result["dimension_records"][index + 1]["status"] = "human_pass"
+            records.extend(
+                (
+                    self._ground_truth(
+                        f"00000000-0000-4000-8000-{81 + index * 2:012x}",
+                        "00000000-0000-4000-8000-000000000061",
+                        result["result_id"],
+                        dimension=dimension,
+                    ),
+                    self._ground_truth(
+                        f"00000000-0000-4000-8000-{82 + index * 2:012x}",
+                        "00000000-0000-4000-8000-000000000062",
+                        result["result_id"],
+                        dimension=dimension,
+                    ),
+                )
+            )
+        registry, samples, results = self._validated_state(document)
+        materialized = []
+        contract._validate_human_ground_truth(
+            records, registry, results, samples, materialized
+        )
+        self.assertEqual(
+            [row["split"] for row in materialized], ["holdout"] * 4
+        )
+        trusted_document = copy.deepcopy(document)
+        trusted_document["human_ground_truth"] = records
+        provenance = contract._materialize_trusted_analysis_provenance(
+            trusted_document
+        )
+        meaning_rows = [
+            row for row in materialized if row["dimension"] == "meaning_accuracy"
+        ]
+        self.assertEqual(
+            contract.agreement_gate(meaning_rows, provenance=provenance),
+            "AGREEMENT_INSUFFICIENT_UNITS",
+        )
 
     def test_not_applicable_pair_is_separate_and_one_sided_na_needs_adjudication(self) -> None:
         document = copy.deepcopy(self.base)
@@ -2089,8 +2753,9 @@ class MethodologyAndStateTests(unittest.TestCase):
         self.assertEqual(
             contract.agreement_diagnostic(materialized),
             {
+                "decision_grade_eligible": False,
+                "diagnostic_status": "AGREEMENT_APPLICABILITY_DISAGREEMENT",
                 "split": "tuning",
-                "status": "AGREEMENT_APPLICABILITY_DISAGREEMENT",
             },
         )
 

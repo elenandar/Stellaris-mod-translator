@@ -6,11 +6,11 @@
       "components": [
         {
           "acceptance_state": "proposed",
-          "definition": "{\"assignment_tuple\":[\"candidate_id\",\"sample_id\",\"profile_version\",\"profile_generation\",\"experiment_lane\",\"attempt_stage\",\"attempt_index\"],\"benchmark_states\":[[false,\"partial_synthetic_conformance\"],[true,\"complete_benchmark\"]],\"document_schema\":\"m1b-synthetic-contract-v4\",\"m1b0_complete_state\":\"always_rejected_PARTIAL_REPORT_CANNOT_BE_COMPLETE\",\"partial_primary_human_evidence\":\"forbidden\",\"partial_secondary_exception\":\"self_identifying_output_secondary_unblinded_only\",\"protocol_generation\":105,\"root_fields\":[\"adjudications\",\"aggregate_report\",\"benchmark_state\",\"candidate_profiles\",\"conformance_results\",\"context_limit_binding\",\"corpus\",\"coverage\",\"definition_bundle\",\"findings\",\"human_ground_truth\",\"implementation_identity\",\"protocol\",\"provider_policy\",\"request_boundary\",\"schema_version\"]}",
-          "generation": 105,
+          "definition": "{\"assignment_tuple\":[\"candidate_id\",\"sample_id\",\"profile_version\",\"profile_generation\",\"experiment_lane\",\"attempt_stage\",\"attempt_index\"],\"benchmark_states\":[[false,\"partial_synthetic_conformance\"],[true,\"complete_benchmark\"]],\"document_schema\":\"m1b-synthetic-contract-v4\",\"m1b0_complete_state\":\"always_rejected_PARTIAL_REPORT_CANNOT_BE_COMPLETE\",\"no_attempt_state\":\"not_applicable_not_observed_empty_atoms_all_dimensions_not_evaluated_zero_accounting\",\"partial_primary_human_evidence\":\"forbidden\",\"partial_secondary_exception\":\"self_identifying_output_secondary_unblinded_only\",\"protocol_generation\":106,\"root_fields\":[\"adjudications\",\"aggregate_report\",\"benchmark_state\",\"candidate_profiles\",\"conformance_results\",\"context_limit_binding\",\"corpus\",\"coverage\",\"definition_bundle\",\"findings\",\"human_ground_truth\",\"implementation_identity\",\"protocol\",\"provider_policy\",\"request_boundary\",\"schema_version\"],\"trusted_analysis\":\"complete_validator_materialized_frozen_scope_required_for_decision_grade\"}",
+          "generation": 106,
           "kind": "benchmark_contract",
-          "sha256": "ef5c91cea7d9397e035e87676f32deb3410296417277d09d3f1dee76272bbd48",
-          "version": "m1b-benchmark-contract-v4"
+          "sha256": "d5b58199ada27f8b1a74c3d2d3537efbca976d682c01ec1c99f720f03cedbf38",
+          "version": "m1b-benchmark-contract-v5"
         },
         {
           "acceptance_state": "proposed",
@@ -62,11 +62,11 @@
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"auto_eligible_strata\":[\"mechanics\",\"ui\"],\"decision_grade_split\":\"holdout\",\"diagnostic_split\":\"tuning_separate_never_satisfies_holdout_gate\",\"related_variants_same_split\":true,\"risk_classes\":[\"auto_eligible_candidate\",\"critical_risk\",\"mandatory_human\"],\"source_cluster_generation_binding\":\"immutable_one_generation\",\"source_generation_identity\":\"opaque_local_mapping\",\"source_generation_within_stratum_collapse\":\"conservative_one_unit\",\"splits\":[\"holdout\",\"tuning\"],\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"]}",
-          "generation": 105,
+          "definition": "{\"auto_eligible_strata\":[\"mechanics\",\"ui\"],\"caller_split_or_uuid_membership_only\":\"never_trusted\",\"decision_grade_split\":\"holdout\",\"decision_row_binding\":\"exact_complete_validator_materialized_result_source_split_scope\",\"diagnostic_split\":\"tuning_separate_never_satisfies_holdout_gate\",\"related_variants_same_split\":true,\"risk_classes\":[\"auto_eligible_candidate\",\"critical_risk\",\"mandatory_human\"],\"source_cluster_generation_binding\":\"immutable_one_generation\",\"source_generation_identity\":\"opaque_local_mapping\",\"source_generation_within_stratum_collapse\":\"conservative_one_unit\",\"splits\":[\"holdout\",\"tuning\"],\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"]}",
+          "generation": 106,
           "kind": "split_policy",
-          "sha256": "c6472164661c3672cd58d2f208cb61da30871301ca3761e77b0853f4ebc66e6e",
-          "version": "m1b-split-policy-v3"
+          "sha256": "b99e543efdb1fb6ad2fdf1f709dcaf88ee5492f756a8f36e94372d9d2a1dc945",
+          "version": "m1b-split-policy-v4"
         },
         {
           "acceptance_state": "proposed",
@@ -94,19 +94,19 @@
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"critical_false_accept_definition\":\"editorially_approved_and_confirmed_underlying_critical_same_result_dimension\",\"dimensions\":[\"schema_atom_stability\",\"meaning_accuracy\",\"terminology_lore\",\"literary_russian\",\"context_voice_style\"],\"finding_adjudication\":\"exact_two_conflicting_initial_ids_distinct_third_human_drives_final_outcome\",\"finding_dimension_mapping\":{\"atom_duplicate\":[\"schema_atom_stability\"],\"atom_extra\":[\"schema_atom_stability\"],\"atom_kind_mutation\":[\"schema_atom_stability\"],\"atom_missing\":[\"schema_atom_stability\"],\"atom_multiplicity_mutation\":[\"schema_atom_stability\"],\"atom_position_mutation\":[\"schema_atom_stability\"],\"atom_value_mutation\":[\"schema_atom_stability\"],\"context_voice_style_error\":[\"context_voice_style\"],\"critical_false_accept\":[\"context_voice_style\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"literary_error\":[\"literary_russian\"],\"lore_error\":[\"terminology_lore\"],\"meaning_inversion\":[\"meaning_accuracy\"],\"negation_error\":[\"meaning_accuracy\"],\"number_error\":[\"meaning_accuracy\"],\"schema_violation\":[\"schema_atom_stability\"],\"terminology_error\":[\"terminology_lore\"]},\"finding_initial_reviewer_identity\":\"distinct_human_identities_when_two_initial_reviews_exist\",\"finding_outcome_disagreement\":\"any_decision_severity_hard_fail_or_mandatory_review_difference\",\"finding_outcome_fields\":[\"decision\",\"severity\",\"hard_fail\",\"mandatory_review\"],\"finding_review_evidence_tiers\":[\"compromised_primary\",\"non_human\",\"primary_blinded\",\"secondary_unblinded\"],\"human_status_requires_ground_truth\":true,\"initial_hgt_reviewers_per_dimension\":2,\"missing_ground_truth_status\":\"not_evaluated\",\"missing_reviewer_outcome\":\"reject\",\"ordinal_categories\":[0,1,2,3,4],\"ordinal_pass_minimum\":3,\"reviewer_roles\":[\"human_reviewer\",\"model_reviewer\"],\"safely_caught_critical_defect_is_false_accept\":false,\"severities\":[\"none\",\"low\",\"medium\",\"high\",\"critical\"]}",
-          "generation": 105,
+          "definition": "{\"critical_false_accept_definition\":\"editorially_approved_and_confirmed_underlying_critical_same_result_dimension\",\"dimensions\":[\"schema_atom_stability\",\"meaning_accuracy\",\"terminology_lore\",\"literary_russian\",\"context_voice_style\"],\"finding_adjudication\":\"exact_two_conflicting_initial_ids_distinct_third_human_drives_final_outcome\",\"finding_dimension_mapping\":{\"atom_duplicate\":[\"schema_atom_stability\"],\"atom_extra\":[\"schema_atom_stability\"],\"atom_kind_mutation\":[\"schema_atom_stability\"],\"atom_missing\":[\"schema_atom_stability\"],\"atom_multiplicity_mutation\":[\"schema_atom_stability\"],\"atom_position_mutation\":[\"schema_atom_stability\"],\"atom_value_mutation\":[\"schema_atom_stability\"],\"context_voice_style_error\":[\"context_voice_style\"],\"critical_false_accept\":[\"context_voice_style\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"literary_error\":[\"literary_russian\"],\"lore_error\":[\"terminology_lore\"],\"meaning_inversion\":[\"meaning_accuracy\"],\"negation_error\":[\"meaning_accuracy\"],\"number_error\":[\"meaning_accuracy\"],\"schema_violation\":[\"schema_atom_stability\"],\"terminology_error\":[\"terminology_lore\"]},\"finding_initial_reviewer_identity\":\"distinct_human_identities_when_two_initial_reviews_exist\",\"finding_outcome_disagreement\":\"any_decision_severity_hard_fail_or_mandatory_review_difference\",\"finding_outcome_fields\":[\"decision\",\"severity\",\"hard_fail\",\"mandatory_review\"],\"finding_review_evidence_tiers\":[\"compromised_primary\",\"non_human\",\"primary_blinded\",\"secondary_unblinded\"],\"hgt_adjudication\":\"exact_two_existing_conflicting_same_result_dimension_initial_ids_current_mapping_distinct_third_human_fully_consumed\",\"human_status_requires_ground_truth\":true,\"missing_ground_truth_status\":\"not_evaluated\",\"missing_reviewer_outcome\":\"reject\",\"no_attempt_dimensions\":\"D1_D5_not_evaluated_no_technical_success\",\"ordinal_categories\":[0,1,2,3,4],\"ordinal_pass_minimum\":3,\"primary_blinded_reviewable_output_initial_hgt_reviewers_per_dimension\":2,\"reviewer_roles\":[\"human_reviewer\",\"model_reviewer\"],\"safely_caught_critical_defect_is_false_accept\":false,\"self_identifying_output_hgt\":\"primary_forbidden_secondary_unblinded_descriptive_only\",\"severities\":[\"none\",\"low\",\"medium\",\"high\",\"critical\"]}",
+          "generation": 106,
           "kind": "quality_rubric",
-          "sha256": "45ec585d19b3f2d7c5b53965c93858009b38881a2baed569698ec0d0042b6165",
-          "version": "m1b-quality-rubric-v5"
+          "sha256": "220a56232b672ffbe215ee18d067a5a279bbacf2596d3993aac1d2a71eb6f978",
+          "version": "m1b-quality-rubric-v6"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"accounting_fields\":[\"cold_latency_observation_count\",\"fallback_attempt_count\",\"human_fallback_count\",\"initial_attempt_count\",\"memory_observation_count\",\"model_call_count\",\"model_fallback_count\",\"repair_attempt_count\",\"repair_failure_count\",\"repair_success_count\",\"retry_attempt_count\",\"terminal_failure_count\",\"warm_latency_observation_count\"],\"cold_warm_separate\":true,\"human_fallback_model_call_count\":0,\"model_output_success_model_call_count\":1,\"no_output_content_evidence\":\"findings_reviews_and_ground_truth_forbidden\",\"not_applicable_state\":\"not_observed_mapping0_zero_accounting_no_human\",\"provider_fallback_false_allows_declared_human_lane\":true,\"row_derived_accounting\":true,\"self_identification_terminal_status\":\"blinding_failed\",\"terminal_failure_in_denominator\":true}",
-          "generation": 105,
+          "definition": "{\"accounting_fields\":[\"cold_latency_observation_count\",\"fallback_attempt_count\",\"human_fallback_count\",\"initial_attempt_count\",\"memory_observation_count\",\"model_call_count\",\"model_fallback_count\",\"repair_attempt_count\",\"repair_failure_count\",\"repair_success_count\",\"retry_attempt_count\",\"terminal_failure_count\",\"warm_latency_observation_count\"],\"cold_warm_separate\":true,\"human_fallback_model_call_count\":0,\"model_output_success_model_call_count\":1,\"no_output_content_evidence\":\"findings_reviews_and_ground_truth_forbidden\",\"not_applicable_state\":\"not_observed_empty_atoms_D1_D5_not_evaluated_mapping0_zero_accounting_zero_technical_success_no_human\",\"provider_fallback_false_allows_declared_human_lane\":true,\"row_derived_accounting\":true,\"self_identification_terminal_status\":\"blinding_failed\",\"technical_success_aggregate\":\"has_output_and_synthetic_conformant_only\",\"terminal_failure_in_denominator\":true}",
+          "generation": 106,
           "kind": "measurement_policy",
-          "sha256": "ad2d4d15249eaf0373726442a723affd8de91f156d3821678b44e1003664d2c4",
-          "version": "m1b-measurement-policy-v3"
+          "sha256": "194d87ef56600b13d7171ed8cd54f89acabdf42e1fc51eb3bdecf80b2c53b549",
+          "version": "m1b-measurement-policy-v4"
         },
         {
           "acceptance_state": "proposed",
@@ -118,19 +118,19 @@
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"closed_schema\":true,\"component_framing\":\"m1b-length-framed-sha256-v1\",\"fixture_schema\":\"m1b-synthetic-contract-cases-v4\",\"json_integer_max\":9223372036854775807,\"json_integer_min\":-9223372036854775808,\"materialization_preencode_reserve_bytes\":4194304,\"materialization_work_accounting\":\"accepted_initial_compact_document_plus_each_accepted_post_patch_compact_document\",\"materialized_final_encoding\":\"reuse_last_budgeted_encoding\",\"max_fixture_patch_count\":256,\"max_input_bytes\":4194304,\"max_input_bytes_boundaries\":[\"fixture_manifest_file\",\"materialized_fixture_document\",\"standalone_document\"],\"max_materialization_work_bytes\":16777216,\"offline\":true,\"output_fields\":[\"codes\",\"counts\",\"status\"],\"strict_json\":{\"duplicate_keys\":\"reject\",\"floats\":\"reject\",\"nonfinite\":\"reject\",\"unicode\":\"strict_utf8_scalars\"}}",
-          "generation": 105,
+          "definition": "{\"closed_schema\":true,\"component_framing\":\"m1b-length-framed-sha256-v1\",\"fixture_schema\":\"m1b-synthetic-contract-cases-v4\",\"hgt_rows\":\"every_adjudication_exactly_linked_and_every_record_consumed\",\"json_integer_max\":9223372036854775807,\"json_integer_min\":-9223372036854775808,\"materialization_preencode_reserve_bytes\":4194304,\"materialization_work_accounting\":\"accepted_initial_compact_document_plus_each_accepted_post_patch_compact_document\",\"materialized_final_encoding\":\"reuse_last_budgeted_encoding\",\"max_fixture_patch_count\":256,\"max_input_bytes\":4194304,\"max_input_bytes_boundaries\":[\"fixture_manifest_file\",\"materialized_fixture_document\",\"standalone_document\"],\"max_materialization_work_bytes\":16777216,\"no_attempt_cross_field_state\":\"fail_closed\",\"offline\":true,\"output_fields\":[\"codes\",\"counts\",\"status\"],\"strict_json\":{\"duplicate_keys\":\"reject\",\"floats\":\"reject\",\"nonfinite\":\"reject\",\"unicode\":\"strict_utf8_scalars\"},\"trusted_analysis_issuance\":\"closed_validator_revalidates_exact_document_source_state\",\"trusted_analysis_materialization\":\"after_frozen_corpus_validated_results_findings_and_hgt\"}",
+          "generation": 106,
           "kind": "validator_policy",
-          "sha256": "8adea154b4690db6780df3b0ba47c63dbffa20db671aa389c941040501e83d1c",
-          "version": "m1b-validator-policy-v4"
+          "sha256": "2f6af70fe24be2c6c4720e14159b4a51476460fe211c84fc220c4bb4b36aeca1",
+          "version": "m1b-validator-policy-v5"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"agreement\":{\"adjudicator_effect\":\"final_dimension_or_applicability_only_not_kappa_rating\",\"applicability_disagreement\":\"any_unilateral_source_blocks_agreement_gate_after_linked_adjudication\",\"applicable_source_unit\":\"source_generation_with_at_least_one_ordinal_applicable_pair\",\"both_not_applicable\":\"separate_applicability_agreement_count\",\"candidate_kappa_pooling\":\"forbidden\",\"candidate_profile_result_key\":[\"candidate\",\"profile\",\"split\",\"stratum\",\"dimension\"],\"categories\":[0,1,2,3,4],\"contingency_estimator\":\"uniform_source_then_uniform_applicable_paired_row\",\"contingency_matrix\":\"O_ij=sum_s(D_sij)\",\"decision_grade_helper\":\"agreement_gate_holdout_only\",\"diagnostic_helper\":\"agreement_diagnostic_split_scoped\",\"eligible_row_universe\":\"all_validator_linked_distinct_frozen_initial_pairs_in_scope\",\"exact_arithmetic\":\"rational\",\"formula\":\"(n*sum(q_ij*O_ij)-sum(q_ij*r_i*c_j))/(16*n*n-sum(q_ij*r_i*c_j))\",\"independent_unit_count\":\"source_generations_with_at_least_one_ordinal_applicable_pair\",\"input_fields\":[\"applicability_adjudication\",\"candidate\",\"dimension\",\"first\",\"initial_record_ids\",\"profile\",\"result_id\",\"reviewer_pair\",\"second\",\"source_generation_id\",\"split\",\"stratum\"],\"logical_row_key\":[\"result_id\",\"dimension\"],\"minimum_n\":46,\"mixed_bilateral_not_applicable\":\"exclude_na_rows_and_weight_actual_ordinal_pairs_to_source_mass_one\",\"point_and_every_delete_one_minimum\":[3,5],\"quadratic_weight_denominator\":16,\"quadratic_weight_formula\":\"q_ij=16-(i-j)^2\",\"ratings_input\":\"validator_linked_frozen_initial_ground_truth_records\",\"ratings_materializer\":\"inside_human_ground_truth_validator_no_report_supplied_scores\",\"raw_row_helper_scope\":\"public_synthetic_math_vectors_only_not_decision_evidence\",\"record_order\":\"ascending_raw_reviewer_uuid_then_linked_record\",\"robustness\":\"minimum_delete_one_whole_source_generation_kappa\",\"robustness_interpretation\":\"influence_check_not_sampling_confidence_interval\",\"source_generation_pair_mass\":\"each_actual_pair_contributes_1/applicable_pair_count_for_source\",\"source_matrix\":\"D_sij=count_sij/applicable_pair_count_for_source\",\"split_scope\":\"single_closed_split_no_pooling\",\"stable_pair_key\":[\"stratum\",\"dimension\"],\"statuses\":[\"AGREEMENT_APPLICABILITY_DISAGREEMENT\",\"AGREEMENT_INSUFFICIENT_UNITS\",\"AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT\",\"AGREEMENT_POINT_BELOW_FLOOR\",\"AGREEMENT_UNCERTAINTY_UNDEFINED\",\"AGREEMENT_ROBUSTNESS_BELOW_FLOOR\",\"AGREEMENT_PASS\"],\"threshold_denominator\":5,\"threshold_numerator\":3,\"undefined\":\"fail_closed\",\"unilateral_not_applicable\":\"linked_adjudication_then_source_excluded_and_agreement_gate_blocked\"},\"candidate_claims_reported_separately\":true,\"candidate_family_alpha\":[1,60],\"candidate_family_count\":3,\"cluster_aware\":true,\"critical_false_accept_ceiling\":[1,50],\"critical_false_accept_decision_grade_split\":\"holdout\",\"critical_false_accept_estimator\":\"event_if_any_confirmed_cfa_in_source_generation_class\",\"critical_false_accept_input_fields\":[\"candidate\",\"event\",\"profile\",\"risk_class\",\"source_generation_id\",\"split\"],\"critical_false_accept_minimum_n\":203,\"critical_false_accept_statistical_unit\":[\"candidate\",\"profile\",\"split\",\"risk_class\",\"source_generation_id\"],\"critical_false_accept_zero_event_upper_bound\":\"1-(1/60)^(1/n)\",\"decision_method\":\"bonferroni_candidates_conjunctive_strata\",\"dimension_confidence_floors\":{\"context_voice_style\":[4,5],\"literary_russian\":[4,5],\"meaning_accuracy\":[9,10],\"terminology_lore\":[17,20]},\"family_wise_alpha\":[1,20],\"marginal_95_interval\":\"descriptive_only_not_selection_evidence\",\"minimum_n_per_dimension_floor\":{\"context_voice_style\":22,\"literary_russian\":22,\"meaning_accuracy\":46,\"terminology_lore\":30},\"naive_pooled_overall_interval\":\"forbidden\",\"overall_summary\":\"descriptive_unique_sources_only\",\"owner_decision_required\":true,\"per_stratum_all_success_planning_rule\":\"floor^n<=1/120\",\"per_stratum_boundary_vectors\":{\"lower_successes_0\":[0,1],\"upper_successes_n\":[1,1]},\"per_stratum_interval\":\"two_sided_exact_clopper_pearson\",\"per_stratum_lower_bound\":\"0_if_successes=0_else_beta_quantile(1/120;successes,n-successes+1)\",\"per_stratum_statistical_unit\":[\"candidate\",\"profile\",\"split\",\"dimension_or_gate\",\"stratum\",\"source_generation_id\"],\"per_stratum_upper_bound\":\"1_if_successes=n_else_beta_quantile(119/120;successes+1,n-successes)\",\"stable_reviewer_pairs\":true,\"statistical_dimension_or_gate_values\":[\"context_voice_style\",\"critical_false_accept\",\"editorial_approval\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"statistical_outcome\":{\"decision_grade_helper\":\"decision_grade_statistical_unit_summary_holdout_only\",\"diagnostic_scope\":\"single_split_explicitly_marked\",\"input_fields\":[\"applicable\",\"candidate\",\"dimension_or_gate\",\"profile\",\"source_generation_id\",\"split\",\"stratum\",\"success\"],\"no_applicable_outcome\":\"STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME\",\"not_applicable\":\"excluded_from_denominator\",\"overall_gate\":\"forbidden\",\"overall_source_outcome\":\"all_applicable_rows_across_strata_success\",\"source_stratum_outcome\":\"all_applicable_rows_success\"},\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"],\"stratum_gate\":\"intersection_union_all_required_strata\",\"two_sided_candidate_tail_alpha\":[1,120]}",
-          "generation": 105,
+          "definition": "{\"agreement\":{\"adjudicator_effect\":\"final_dimension_or_applicability_only_not_kappa_rating\",\"applicability_disagreement\":\"any_unilateral_source_blocks_agreement_gate_after_linked_adjudication\",\"applicable_source_unit\":\"source_generation_with_at_least_one_ordinal_applicable_pair\",\"both_not_applicable\":\"separate_applicability_agreement_count\",\"candidate_kappa_pooling\":\"forbidden\",\"candidate_profile_result_key\":[\"candidate\",\"profile\",\"split\",\"stratum\",\"dimension\"],\"categories\":[0,1,2,3,4],\"contingency_estimator\":\"uniform_source_then_uniform_applicable_paired_row\",\"contingency_matrix\":\"O_ij=sum_s(D_sij)\",\"decision_grade_helper\":\"agreement_gate_holdout_only\",\"decision_grade_provenance\":\"sealed_exact_complete_materialized_scope\",\"diagnostic_helper\":\"agreement_diagnostic_split_scoped\",\"eligible_row_universe\":\"all_validator_linked_distinct_frozen_initial_pairs_in_scope\",\"exact_arithmetic\":\"rational\",\"formula\":\"(n*sum(q_ij*O_ij)-sum(q_ij*r_i*c_j))/(16*n*n-sum(q_ij*r_i*c_j))\",\"independent_unit_count\":\"source_generations_with_at_least_one_ordinal_applicable_pair\",\"input_fields\":[\"applicability_adjudication\",\"candidate\",\"dimension\",\"first\",\"initial_record_ids\",\"profile\",\"result_id\",\"reviewer_pair\",\"second\",\"source_generation_id\",\"split\",\"stratum\"],\"logical_row_key\":[\"result_id\",\"dimension\"],\"minimum_n\":46,\"mixed_bilateral_not_applicable\":\"exclude_na_rows_and_weight_actual_ordinal_pairs_to_source_mass_one\",\"point_and_every_delete_one_minimum\":[3,5],\"quadratic_weight_denominator\":16,\"quadratic_weight_formula\":\"q_ij=16-(i-j)^2\",\"ratings_input\":\"validator_linked_frozen_initial_ground_truth_records\",\"ratings_materializer\":\"inside_human_ground_truth_validator_no_report_supplied_scores\",\"raw_decision_grade_eligible\":false,\"raw_row_helper_scope\":\"public_synthetic_math_vectors_only_not_decision_evidence\",\"record_order\":\"ascending_raw_reviewer_uuid_then_linked_record\",\"robustness\":\"minimum_delete_one_whole_source_generation_kappa\",\"robustness_interpretation\":\"influence_check_not_sampling_confidence_interval\",\"source_generation_pair_mass\":\"each_actual_pair_contributes_1/applicable_pair_count_for_source\",\"source_matrix\":\"D_sij=count_sij/applicable_pair_count_for_source\",\"split_scope\":\"single_closed_split_no_pooling\",\"stable_pair_key\":[\"stratum\",\"dimension\"],\"statuses\":[\"AGREEMENT_APPLICABILITY_DISAGREEMENT\",\"AGREEMENT_INSUFFICIENT_UNITS\",\"AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT\",\"AGREEMENT_POINT_BELOW_FLOOR\",\"AGREEMENT_UNCERTAINTY_UNDEFINED\",\"AGREEMENT_ROBUSTNESS_BELOW_FLOOR\",\"AGREEMENT_PASS\"],\"threshold_denominator\":5,\"threshold_numerator\":3,\"undefined\":\"fail_closed\",\"unilateral_not_applicable\":\"linked_adjudication_then_source_excluded_and_agreement_gate_blocked\"},\"candidate_claims_reported_separately\":true,\"candidate_family_alpha\":[1,60],\"candidate_family_count\":3,\"cluster_aware\":true,\"critical_false_accept_ceiling\":[1,50],\"critical_false_accept_decision_grade_provenance\":\"sealed_exact_complete_materialized_scope\",\"critical_false_accept_decision_grade_split\":\"holdout\",\"critical_false_accept_estimator\":\"event_if_any_confirmed_cfa_in_source_generation_class\",\"critical_false_accept_input_fields\":[\"candidate\",\"event\",\"profile\",\"risk_class\",\"source_generation_id\",\"split\"],\"critical_false_accept_minimum_n\":203,\"critical_false_accept_no_output\":\"excluded_from_cfa_denominator_but_quality_gate_failure\",\"critical_false_accept_raw_minimum\":false,\"critical_false_accept_statistical_unit\":[\"candidate\",\"profile\",\"split\",\"risk_class\",\"source_generation_id\"],\"critical_false_accept_zero_event_upper_bound\":\"1-(1/60)^(1/n)\",\"decision_method\":\"bonferroni_candidates_conjunctive_strata\",\"dimension_confidence_floors\":{\"context_voice_style\":[4,5],\"literary_russian\":[4,5],\"meaning_accuracy\":[9,10],\"terminology_lore\":[17,20]},\"family_wise_alpha\":[1,20],\"marginal_95_interval\":\"descriptive_only_not_selection_evidence\",\"minimum_n_per_dimension_floor\":{\"context_voice_style\":22,\"literary_russian\":22,\"meaning_accuracy\":46,\"terminology_lore\":30},\"naive_pooled_overall_interval\":\"forbidden\",\"overall_summary\":\"descriptive_unique_sources_only\",\"owner_decision_required\":true,\"per_stratum_all_success_planning_rule\":\"floor^n<=1/120\",\"per_stratum_boundary_vectors\":{\"lower_successes_0\":[0,1],\"upper_successes_n\":[1,1]},\"per_stratum_interval\":\"two_sided_exact_clopper_pearson\",\"per_stratum_lower_bound\":\"0_if_successes=0_else_beta_quantile(1/120;successes,n-successes+1)\",\"per_stratum_statistical_unit\":[\"candidate\",\"profile\",\"split\",\"dimension_or_gate\",\"stratum\",\"source_generation_id\"],\"per_stratum_upper_bound\":\"1_if_successes=n_else_beta_quantile(119/120;successes+1,n-successes)\",\"stable_reviewer_pairs\":true,\"statistical_dimension_or_gate_values\":[\"context_voice_style\",\"critical_false_accept\",\"editorial_approval\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"statistical_outcome\":{\"decision_grade_helper\":\"decision_grade_statistical_unit_summary_holdout_only\",\"decision_grade_provenance\":\"sealed_exact_complete_materialized_scope\",\"diagnostic_decision_grade_eligible\":false,\"diagnostic_scope\":\"single_split_explicitly_marked\",\"input_fields\":[\"applicable\",\"candidate\",\"dimension_or_gate\",\"profile\",\"source_generation_id\",\"split\",\"stratum\",\"success\"],\"no_applicable_outcome\":\"STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME\",\"no_output\":\"applicable_failure_in_every_dimension_and_gate\",\"not_applicable\":\"excluded_from_denominator\",\"overall_gate\":\"forbidden\",\"overall_source_outcome\":\"all_applicable_rows_across_strata_success\",\"source_stratum_outcome\":\"all_applicable_rows_success\"},\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"],\"stratum_gate\":\"intersection_union_all_required_strata\",\"two_sided_candidate_tail_alpha\":[1,120]}",
+          "generation": 106,
           "kind": "analysis_policy",
-          "sha256": "70d3b2c3f74c2755ae7dc3f983a2e803a106e3f9e66b4db756f36b8a3c36b227",
-          "version": "m1b-analysis-policy-v4"
+          "sha256": "2ee3b0f9f4aa3c7c7bef809692bb91bac0494af38e33ad398a296916fc5ec6d2",
+          "version": "m1b-analysis-policy-v5"
         },
         {
           "acceptance_state": "proposed",
@@ -142,13 +142,13 @@
         }
       ],
       "framing": "m1b-length-framed-sha256-v1",
-      "sha256": "97f7096de99d36a507f3df0c7e025b25cd6f0a3c573dc5f66f5aa15dd671fd1e"
+      "sha256": "940b22477fab4358c18343e94f326d12d1bc00cff806e572e95e17afcf43efa7"
     },
     "protocol": {
-      "generation": 105,
+      "generation": 106,
       "output_schema_version": "m1b-synthetic-output-v4",
       "prompt_version": "m1b-synthetic-prompt-policy-v1",
-      "protocol_version": "m1b-benchmark-contract-v4"
+      "protocol_version": "m1b-benchmark-contract-v5"
     },
     "provider_policy": {
       "auto_pull": false,
@@ -337,18 +337,18 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 105,
+        "protocol_generation": 106,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
         "initial_result_id": null,
-        "technical_conformance": "synthetic_conformant",
+        "technical_conformance": "not_observed",
         "editorial_status": "not_evaluated",
         "terminal_status": "not_applicable",
         "dimension_records": [
           {
             "dimension": "schema_atom_stability",
-            "status": "synthetic_conformant"
+            "status": "not_evaluated"
           },
           {
             "dimension": "meaning_accuracy",
@@ -367,41 +367,7 @@
             "status": "not_evaluated"
           }
         ],
-        "observed_atoms": [
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000021",
-            "occurrence_id": "00000000-0000-4000-8000-000000000071",
-            "kind": "placeholder",
-            "synthetic_value": "SYNTHETIC_PLACEHOLDER",
-            "occurrence_index": 0,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 0,
-            "position_end": 21,
-            "provenance": "synthetic"
-          },
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000021",
-            "occurrence_id": "00000000-0000-4000-8000-000000000072",
-            "kind": "placeholder",
-            "synthetic_value": "SYNTHETIC_PLACEHOLDER",
-            "occurrence_index": 1,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 22,
-            "position_end": 43,
-            "provenance": "synthetic"
-          },
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000022",
-            "occurrence_id": "00000000-0000-4000-8000-000000000073",
-            "kind": "icon",
-            "synthetic_value": "SYNTHETIC_ICON",
-            "occurrence_index": 0,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 44,
-            "position_end": 58,
-            "provenance": "synthetic"
-          }
-        ],
+        "observed_atoms": [],
         "accounting": {
           "cold_latency_observation_count": 0,
           "fallback_attempt_count": 0,
@@ -428,18 +394,18 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 105,
+        "protocol_generation": 106,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
         "initial_result_id": null,
-        "technical_conformance": "synthetic_conformant",
+        "technical_conformance": "not_observed",
         "editorial_status": "not_evaluated",
         "terminal_status": "not_applicable",
         "dimension_records": [
           {
             "dimension": "schema_atom_stability",
-            "status": "synthetic_conformant"
+            "status": "not_evaluated"
           },
           {
             "dimension": "meaning_accuracy",
@@ -458,41 +424,7 @@
             "status": "not_evaluated"
           }
         ],
-        "observed_atoms": [
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000021",
-            "occurrence_id": "00000000-0000-4000-8000-000000000071",
-            "kind": "placeholder",
-            "synthetic_value": "SYNTHETIC_PLACEHOLDER",
-            "occurrence_index": 0,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 0,
-            "position_end": 21,
-            "provenance": "synthetic"
-          },
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000021",
-            "occurrence_id": "00000000-0000-4000-8000-000000000072",
-            "kind": "placeholder",
-            "synthetic_value": "SYNTHETIC_PLACEHOLDER",
-            "occurrence_index": 1,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 22,
-            "position_end": 43,
-            "provenance": "synthetic"
-          },
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000022",
-            "occurrence_id": "00000000-0000-4000-8000-000000000073",
-            "kind": "icon",
-            "synthetic_value": "SYNTHETIC_ICON",
-            "occurrence_index": 0,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 44,
-            "position_end": 58,
-            "provenance": "synthetic"
-          }
-        ],
+        "observed_atoms": [],
         "accounting": {
           "cold_latency_observation_count": 0,
           "fallback_attempt_count": 0,
@@ -519,18 +451,18 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 105,
+        "protocol_generation": 106,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
         "initial_result_id": null,
-        "technical_conformance": "synthetic_conformant",
+        "technical_conformance": "not_observed",
         "editorial_status": "not_evaluated",
         "terminal_status": "not_applicable",
         "dimension_records": [
           {
             "dimension": "schema_atom_stability",
-            "status": "synthetic_conformant"
+            "status": "not_evaluated"
           },
           {
             "dimension": "meaning_accuracy",
@@ -549,41 +481,7 @@
             "status": "not_evaluated"
           }
         ],
-        "observed_atoms": [
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000021",
-            "occurrence_id": "00000000-0000-4000-8000-000000000071",
-            "kind": "placeholder",
-            "synthetic_value": "SYNTHETIC_PLACEHOLDER",
-            "occurrence_index": 0,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 0,
-            "position_end": 21,
-            "provenance": "synthetic"
-          },
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000021",
-            "occurrence_id": "00000000-0000-4000-8000-000000000072",
-            "kind": "placeholder",
-            "synthetic_value": "SYNTHETIC_PLACEHOLDER",
-            "occurrence_index": 1,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 22,
-            "position_end": 43,
-            "provenance": "synthetic"
-          },
-          {
-            "atom_id": "00000000-0000-4000-8000-000000000022",
-            "occurrence_id": "00000000-0000-4000-8000-000000000073",
-            "kind": "icon",
-            "synthetic_value": "SYNTHETIC_ICON",
-            "occurrence_index": 0,
-            "position_policy": "exact_utf8_byte_span",
-            "position_start": 44,
-            "position_end": 58,
-            "provenance": "synthetic"
-          }
-        ],
+        "observed_atoms": [],
         "accounting": {
           "cold_latency_observation_count": 0,
           "fallback_attempt_count": 0,
@@ -669,7 +567,7 @@
       "human_ground_truth_count": 0,
       "review_count": 0,
       "sample_count": 2,
-      "technical_conformant_count": 3,
+      "technical_conformant_count": 0,
       "tuning_sample_count": 1,
       "cold_latency_observation_count": 0,
       "fallback_attempt_count": 0,
@@ -1482,7 +1380,7 @@
             17,
             "version"
           ],
-          "value": "m1b-validator-policy-v5"
+          "value": "m1b-validator-policy-v999"
         }
       ]
     },
@@ -1635,7 +1533,7 @@
             0,
             "generation"
           ],
-          "value": 106
+          "value": 107
         }
       ]
     },
@@ -1677,7 +1575,7 @@
             0,
             "version"
           ],
-          "value": "m1b-benchmark-contract-v5"
+          "value": "m1b-benchmark-contract-v999"
         }
       ]
     },
@@ -1696,7 +1594,7 @@
             "protocol",
             "protocol_version"
           ],
-          "value": "m1b-benchmark-contract-v5"
+          "value": "m1b-benchmark-contract-v999"
         }
       ]
     },
@@ -1846,7 +1744,7 @@
             "protocol",
             "generation"
           ],
-          "value": 106
+          "value": 107
         }
       ]
     },
@@ -2003,6 +1901,118 @@
           "target": [
             "conformance_results",
             0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
             "observed_atoms",
             0,
             "synthetic_value"
@@ -2020,6 +2030,118 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
+        },
         {
           "operation": "set",
           "target": [
@@ -2080,6 +2202,118 @@
           "target": [
             "conformance_results",
             0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
             "observed_atoms",
             1,
             "occurrence_index"
@@ -2108,39 +2342,6 @@
             "occurrence_index"
           ],
           "value": 0
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            0,
-            "observed_atoms",
-            1,
-            "occurrence_index"
-          ],
-          "value": 0
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            1,
-            "observed_atoms",
-            1,
-            "occurrence_index"
-          ],
-          "value": 0
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            2,
-            "observed_atoms",
-            1,
-            "occurrence_index"
-          ],
-          "value": 0
         }
       ]
     },
@@ -2164,39 +2365,6 @@
             "kind"
           ],
           "value": "formatting"
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            0,
-            "observed_atoms",
-            2,
-            "kind"
-          ],
-          "value": "formatting"
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            1,
-            "observed_atoms",
-            2,
-            "kind"
-          ],
-          "value": "formatting"
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            2,
-            "observed_atoms",
-            2,
-            "kind"
-          ],
-          "value": "formatting"
         }
       ]
     },
@@ -2216,39 +2384,6 @@
             "samples",
             0,
             "expected_atoms",
-            2,
-            "synthetic_value"
-          ],
-          "value": "SYNTHETIC_FAKE"
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            0,
-            "observed_atoms",
-            2,
-            "synthetic_value"
-          ],
-          "value": "SYNTHETIC_FAKE"
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            1,
-            "observed_atoms",
-            2,
-            "synthetic_value"
-          ],
-          "value": "SYNTHETIC_FAKE"
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            2,
-            "observed_atoms",
             2,
             "synthetic_value"
           ],
@@ -2288,72 +2423,6 @@
             "position_end"
           ],
           "value": 73
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            0,
-            "observed_atoms",
-            2,
-            "position_start"
-          ],
-          "value": 59
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            0,
-            "observed_atoms",
-            2,
-            "position_end"
-          ],
-          "value": 73
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            1,
-            "observed_atoms",
-            2,
-            "position_start"
-          ],
-          "value": 59
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            1,
-            "observed_atoms",
-            2,
-            "position_end"
-          ],
-          "value": 73
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            2,
-            "observed_atoms",
-            2,
-            "position_start"
-          ],
-          "value": 59
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            2,
-            "observed_atoms",
-            2,
-            "position_end"
-          ],
-          "value": 73
         }
       ]
     },
@@ -2366,6 +2435,118 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
+        },
         {
           "operation": "set",
           "target": [
@@ -2389,6 +2570,118 @@
       },
       "patches": [
         {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
+        },
+        {
           "operation": "delete",
           "target": [
             "conformance_results",
@@ -2408,6 +2701,118 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
+        },
         {
           "operation": "append",
           "target": [
@@ -2443,6 +2848,118 @@
           "target": [
             "conformance_results",
             0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
             "observed_atoms",
             0,
             "kind"
@@ -2460,6 +2977,118 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
+        },
         {
           "operation": "set",
           "target": [
@@ -2528,6 +3157,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -2710,6 +3404,15 @@
             "status"
           ],
           "value": "not_evaluated"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
         }
       ]
     },
@@ -2718,10 +3421,25 @@
       "expected": {
         "status": "error",
         "codes": [
-          "TERMINAL_STATUS_MISMATCH"
+          "TECHNICAL_CONFORMANCE_MISMATCH"
         ]
       },
       "patches": [
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -2814,6 +3532,71 @@
           "target": [
             "conformance_results",
             0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
             "terminal_status"
           ],
           "value": "success"
@@ -2898,6 +3681,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -3071,6 +3919,71 @@
           "target": [
             "conformance_results",
             0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
             "editorial_status"
           ],
           "value": "editorially_approved"
@@ -3149,6 +4062,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -3261,6 +4239,71 @@
       },
       "patches": [
         {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
           "operation": "append",
           "target": [
             "findings"
@@ -3353,6 +4396,71 @@
       },
       "patches": [
         {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
           "operation": "append",
           "target": [
             "findings"
@@ -3444,6 +4552,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -3553,6 +4726,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -3680,6 +4918,71 @@
       },
       "patches": [
         {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
           "operation": "append",
           "target": [
             "findings"
@@ -3771,6 +5074,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -3940,6 +5308,26 @@
             "model_call_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
         }
       ]
     },
@@ -4129,6 +5517,71 @@
             "mapping_generation"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -4303,6 +5756,71 @@
             "mapping_generation"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -4733,6 +6251,71 @@
             "mapping_generation"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -4776,6 +6359,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -4854,6 +6502,14 @@
             "conformance_results",
             0,
             "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "aggregate_report",
+            "technical_conformant_count"
           ],
           "value": 1
         }
@@ -5087,6 +6743,71 @@
       },
       "patches": [
         {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
           "operation": "append",
           "target": [
             "findings"
@@ -5160,6 +6881,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -5235,6 +7021,71 @@
       },
       "patches": [
         {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
           "operation": "append",
           "target": [
             "findings"
@@ -5308,6 +7159,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -5673,6 +7589,71 @@
           "target": [
             "conformance_results",
             0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
             "blinding_status"
           ],
           "value": "self_identifying_output"
@@ -5809,6 +7790,14 @@
             "model_call_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "aggregate_report",
+            "technical_conformant_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -5821,6 +7810,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -5956,6 +8010,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -6103,6 +8222,71 @@
           "target": [
             "conformance_results",
             0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
             "blinding_status"
           ],
           "value": "self_identifying_output"
@@ -6228,6 +8412,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -6398,6 +8647,14 @@
             "model_call_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "aggregate_report",
+            "technical_conformant_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -6410,6 +8667,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -6696,7 +9018,72 @@
             "aggregate_report",
             "technical_conformant_count"
           ],
-          "value": 4
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -6864,6 +9251,71 @@
             "terminal_failure_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -6876,6 +9328,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -6985,6 +9502,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -7119,6 +9701,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -7297,6 +9944,71 @@
           "target": [
             "conformance_results",
             0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
             "blinding_status"
           ],
           "value": "external_mapping_leak"
@@ -7366,6 +10078,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "append",
           "target": [
@@ -7492,6 +10269,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -7641,6 +10483,26 @@
             "model_call_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
         }
       ]
     },
@@ -7740,7 +10602,7 @@
             "aggregate_report",
             "technical_conformant_count"
           ],
-          "value": 2
+          "value": 0
         }
       ]
     },
@@ -8025,7 +10887,7 @@
             "aggregate_report",
             "technical_conformant_count"
           ],
-          "value": 4
+          "value": 1
         },
         {
           "operation": "set",
@@ -8052,6 +10914,71 @@
             "model_call_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -8332,6 +11259,136 @@
             "model_call_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            4,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            4,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            4,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            4,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            4,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -8344,6 +11401,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -8578,6 +11700,71 @@
             "model_call_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -8716,6 +11903,71 @@
             "model_fallback_count"
           ],
           "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            3,
+            "observed_atoms"
+          ]
         }
       ]
     },
@@ -8848,6 +12100,71 @@
         ]
       },
       "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "synthetic_conformant"
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            0
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            1
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "corpus",
+            "samples",
+            0,
+            "expected_atoms",
+            2
+          ],
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ]
+        },
         {
           "operation": "set",
           "target": [
@@ -9011,6 +12328,15 @@
           "target": [
             "conformance_results"
           ]
+        },
+        {
+          "operation": "copy_append",
+          "source": [
+            "conformance_results"
+          ],
+          "target": [
+            "conformance_results"
+          ]
         }
       ]
     },
@@ -9023,6 +12349,15 @@
         ]
       },
       "patches": [
+        {
+          "operation": "copy_append",
+          "source": [
+            "conformance_results"
+          ],
+          "target": [
+            "conformance_results"
+          ]
+        },
         {
           "operation": "copy_append",
           "source": [
