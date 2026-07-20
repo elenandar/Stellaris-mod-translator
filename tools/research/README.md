@@ -130,7 +130,7 @@ game, Workshop, launcher, or active-path access.
 
 Current public proposal identity is protocol v2/generation 102, document,
 fixture and output schema v3, synthetic corpus v3/generation 304, and 17
-components. The table has 169 cases: 3 controlled successes and 166 exact
+components. The table has 171 cases: 3 controlled successes and 168 exact
 controlled failures. Bundle SHA-256 is
 `8992351db59d99deec8809a7228458577cca09c11f0d3c2fe15567315c4108d9`;
 the public synthetic corpus SHA-256 is

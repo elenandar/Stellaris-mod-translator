@@ -19,7 +19,7 @@ from tools.research import m1b_contract as contract
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPOSITORY_ROOT / "fixtures" / "m1b" / "contract-cases.json"
 README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
-EXPECTED_FIXTURE_CASES = 169
+EXPECTED_FIXTURE_CASES = 171
 EXPECTED_POSITIVE_CASES = 3
 EXPECTED_BUNDLE_HASH = (
     "8992351db59d99deec8809a7228458577cca09c11f0d3c2fe15567315c4108d9"
@@ -126,6 +126,8 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "accounting-count-exceeds-results",
             "retry-zero-hidden-attempt",
             "multiple-model-calls-without-retry",
+            "repair-attempt-index-nonzero",
+            "fallback-attempt-index-nonzero",
             "repair-accounting-mismatch",
             "aggregate-count-mismatch",
             "aggregate-accounting-mismatch",
@@ -184,6 +186,34 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "partial-secondary-evidence-non-self-identifying",
         }
         self.assertTrue(required <= case_ids, sorted(required - case_ids))
+
+    def test_retry_zero_closes_non_primary_indexes_and_sibling_rows(self) -> None:
+        for case_id in (
+            "repair-attempt-index-nonzero",
+            "fallback-attempt-index-nonzero",
+        ):
+            with self.subTest(case=case_id):
+                self.assertEqual(
+                    contract.validate_fixture_case(self.manifest, case_id)["codes"],
+                    ["ASSIGNMENT_EXTRA"],
+                )
+
+        document = contract.parse_json_bytes(
+            contract.materialize_fixture_case(
+                self.manifest, "human-fallback-success-zero-model-calls"
+            )
+        )
+        fallback = next(
+            result
+            for result in document["conformance_results"]
+            if result["experiment_lane"] == "fallback"
+        )
+        sibling = copy.deepcopy(fallback)
+        sibling["result_id"] = "00000000-0000-4000-8000-000000009999"
+        document["conformance_results"].append(sibling)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.validate_document(document)
+        self.assertEqual(raised.exception.code, "ASSIGNMENT_DUPLICATE")
 
     def test_positive_contract_uses_trusted_definition_registry(self) -> None:
         bundle = self.base["definition_bundle"]
@@ -252,6 +282,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(output["count_keys"], list(contract._COUNT_KEYS))
         generation = definitions["generation_policy"]
+        self.assertEqual(generation["retry_limit"], 0)
         self.assertEqual(
             generation["request_boundary"],
             contract._EXPECTED_REQUEST_BOUNDARY,

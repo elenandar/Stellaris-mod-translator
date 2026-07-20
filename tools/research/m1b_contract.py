@@ -2410,7 +2410,7 @@ def _validate_results(
         if assignment in assignments:
             raise ContractError("ASSIGNMENT_DUPLICATE")
         assignments.add(assignment)
-        if lane == "primary" and attempt_index != 0:
+        if attempt_index != 0:
             raise ContractError("ASSIGNMENT_EXTRA")
         if lane == "primary":
             if result["initial_result_id"] is not None:

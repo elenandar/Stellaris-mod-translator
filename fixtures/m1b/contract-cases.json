@@ -7768,7 +7768,7 @@
             4,
             "experiment_lane"
           ],
-          "value": "repair"
+          "value": "fallback"
         },
         {
           "operation": "set",
@@ -7777,16 +7777,7 @@
             4,
             "attempt_stage"
           ],
-          "value": "repair"
-        },
-        {
-          "operation": "set",
-          "target": [
-            "conformance_results",
-            4,
-            "attempt_index"
-          ],
-          "value": 1
+          "value": "fallback"
         },
         {
           "operation": "set",
@@ -7840,7 +7831,7 @@
             "conformance_results",
             4,
             "accounting",
-            "repair_attempt_count"
+            "fallback_attempt_count"
           ],
           "value": 1
         },
@@ -7850,7 +7841,7 @@
             "conformance_results",
             4,
             "accounting",
-            "repair_success_count"
+            "model_fallback_count"
           ],
           "value": 1
         },
@@ -8658,6 +8649,138 @@
             "complete"
           ],
           "value": false
+        }
+      ]
+    },
+    {
+      "id": "repair-attempt-index-nonzero",
+      "expected": {
+        "status": "error",
+        "codes": [
+          "ASSIGNMENT_EXTRA"
+        ]
+      },
+      "patches": [
+        {
+          "operation": "copy_append",
+          "source": [
+            "conformance_results",
+            0
+          ],
+          "target": [
+            "conformance_results"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "result_id"
+          ],
+          "value": "00000000-0000-4000-8000-000000009991"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "experiment_lane"
+          ],
+          "value": "repair"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "attempt_stage"
+          ],
+          "value": "repair"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "initial_result_id"
+          ],
+          "value": "00000000-0000-4000-8000-000000000031"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "attempt_index"
+          ],
+          "value": 7
+        }
+      ]
+    },
+    {
+      "id": "fallback-attempt-index-nonzero",
+      "expected": {
+        "status": "error",
+        "codes": [
+          "ASSIGNMENT_EXTRA"
+        ]
+      },
+      "patches": [
+        {
+          "operation": "copy_append",
+          "source": [
+            "conformance_results",
+            0
+          ],
+          "target": [
+            "conformance_results"
+          ]
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "result_id"
+          ],
+          "value": "00000000-0000-4000-8000-000000009992"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "experiment_lane"
+          ],
+          "value": "fallback"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "attempt_stage"
+          ],
+          "value": "fallback"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "initial_result_id"
+          ],
+          "value": "00000000-0000-4000-8000-000000000031"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            3,
+            "attempt_index"
+          ],
+          "value": 7
         }
       ]
     }

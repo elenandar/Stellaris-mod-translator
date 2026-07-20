@@ -7,8 +7,8 @@ content-derived private hashes, real model tags, or real model digests were
 used. Repeated single-character 64-hex digests are unmistakable placeholders;
 fixed UUIDv4-shaped values are deterministic fixture IDs, not live identities.
 
-`contract-cases.json` contains one `base_document` and `169` table-driven cases:
-`3` controlled successes and `166` failures with one exact controlled code each.
+`contract-cases.json` contains one `base_document` and `171` table-driven cases:
+`3` controlled successes and `168` failures with one exact controlled code each.
 The successful cases are:
 
 - `positive` — partial public synthetic D1 conformance with zero model calls;
@@ -62,7 +62,7 @@ Without Ollama or a live model, the table and unit tests cover:
   states; critical false accept only after actual approval plus a confirmed
   underlying critical defect;
 - truthful primary/repair/model-fallback model calls and zero-call human
-  fallback;
+  fallback, with `attempt_index=0` in every lane when retries are disabled;
 - external mapping compromise versus non-recoverable self-identification,
   positive mapping generations, global reviewer exposure, and exact blinding
   aggregate derivation;
