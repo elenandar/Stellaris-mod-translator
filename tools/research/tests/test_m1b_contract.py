@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import copy
 from fractions import Fraction
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,10 +20,13 @@ from tools.research import m1b_contract as contract
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPOSITORY_ROOT / "fixtures" / "m1b" / "contract-cases.json"
 README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
-EXPECTED_FIXTURE_CASES = 171
+EXPECTED_FIXTURE_CASES = 173
 EXPECTED_POSITIVE_CASES = 3
+EXPECTED_FIXTURE_SHA256 = (
+    "cd314f4753c615c0a962c2e302c098630c99d6f9d6448e487bebd87f5ff9a78d"
+)
 EXPECTED_BUNDLE_HASH = (
-    "10f41321d013c0fa73dea0d689be51f43c721c3f2cef21eb8b8b4fcceff1fdf0"
+    "9922093ab990769bff85f6f51c5ba6009d8036359bbf080a865d2ff1053a9fd7"
 )
 
 
@@ -35,6 +39,10 @@ class SyntheticContractCaseTests(unittest.TestCase):
         cls.base = cls.manifest["base_document"]
 
     def test_all_table_cases_return_exact_controlled_code(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(self.fixture_bytes).hexdigest(),
+            EXPECTED_FIXTURE_SHA256,
+        )
         self.assertEqual(len(self.cases), EXPECTED_FIXTURE_CASES)
         self.assertEqual(
             sum(case["expected"]["status"] == "error" for case in self.cases),
@@ -80,6 +88,8 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "human-ground-truth-without-output",
             "context-overflow-ground-truth-without-output",
             "no-output-cannot-pass-blinding",
+            "no-output-literary-finding-empty-reviews",
+            "no-output-model-review-finding",
             # Exact typed atoms.
             "atom-value-mutation",
             "atom-position-reordered",
@@ -234,11 +244,11 @@ class SyntheticContractCaseTests(unittest.TestCase):
             for component in bundle["components"]
             if component["kind"] == "analysis_policy"
         )
-        self.assertEqual(analysis_component["version"], "m1b-analysis-policy-v3")
+        self.assertEqual(analysis_component["version"], "m1b-analysis-policy-v4")
         self.assertEqual(
             analysis_component["generation"], contract.PROTOCOL_GENERATION
         )
-        self.assertEqual(self.base["protocol"]["generation"], 103)
+        self.assertEqual(self.base["protocol"]["generation"], 104)
 
     def test_component_hash_has_a_fixed_public_vector(self) -> None:
         component = self.base["definition_bundle"]["components"][0]
@@ -249,7 +259,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(
             actual,
-            "e65d2776085a868b50986355fc2f5db5f426a020165ce4c11d05c2a1fe36f76c",
+            "6e3b9bfbaaef3793dd1a84ed5a6c37b8a249be4de5e2b889c13e84b83a15a9e1",
         )
         self.assertEqual(actual, component["sha256"])
 
@@ -306,11 +316,14 @@ class SyntheticContractCaseTests(unittest.TestCase):
             corpus["synthetic_corpus_sha256"],
             contract.SYNTHETIC_CORPUS_SHA256,
         )
+        self.assertEqual(corpus["decision_grade_split"], "holdout")
         split = definitions["split_policy"]
         self.assertEqual(
             split["source_cluster_generation_binding"],
             "immutable_one_generation",
         )
+        self.assertEqual(split["decision_grade_split"], "holdout")
+        self.assertEqual(split["splits"], sorted(contract.SPLITS))
         for candidate in self.base["candidate_profiles"]:
             definition = definitions["candidate_profile." + candidate["candidate"]]
             self.assertEqual(
@@ -387,6 +400,15 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(analysis["critical_false_accept_ceiling"], [1, 50])
         self.assertEqual(analysis["critical_false_accept_minimum_n"], 203)
         self.assertEqual(
+            analysis["critical_false_accept_decision_grade_split"], "holdout"
+        )
+        self.assertIn(
+            "split", analysis["critical_false_accept_input_fields"]
+        )
+        self.assertIn(
+            "split", analysis["statistical_outcome"]["input_fields"]
+        )
+        self.assertEqual(
             analysis["per_stratum_boundary_vectors"],
             {"lower_successes_0": [0, 1], "upper_successes_n": [1, 1]},
         )
@@ -395,6 +417,11 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(
             analysis["agreement"]["candidate_kappa_pooling"], "forbidden"
+        )
+        self.assertIn("split", analysis["agreement"]["input_fields"])
+        self.assertEqual(
+            analysis["agreement"]["decision_grade_helper"],
+            "agreement_gate_holdout_only",
         )
         self.assertEqual(
             analysis["agreement"]["ratings_materializer"],
@@ -472,6 +499,10 @@ class SyntheticContractCaseTests(unittest.TestCase):
             measurement["not_applicable_state"],
             "not_observed_mapping0_zero_accounting_no_human",
         )
+        self.assertEqual(
+            measurement["no_output_content_evidence"],
+            "findings_reviews_and_ground_truth_forbidden",
+        )
         self.assertTrue(
             measurement["provider_fallback_false_allows_declared_human_lane"]
         )
@@ -486,6 +517,11 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(
             quality["missing_ground_truth_status"], "not_evaluated"
         )
+        self.assertEqual(
+            quality["finding_outcome_fields"],
+            ["decision", "severity", "hard_fail", "mandatory_review"],
+        )
+        self.assertEqual(quality["missing_reviewer_outcome"], "reject")
 
     def test_bundle_hash_has_fixed_vector_and_deterministic_order(self) -> None:
         rows = [
@@ -728,7 +764,105 @@ class MethodologyAndStateTests(unittest.TestCase):
         result["accounting"]["model_call_count"] = 1
 
     @staticmethod
-    def _agreement_rows(first, second, *, candidate="candidate_a"):
+    def _finding_review(
+        review_id,
+        reviewer_id,
+        finding_id,
+        *,
+        category="literary_error",
+        dimension="literary_russian",
+        decision="confirmed",
+        severity="low",
+        hard_fail=False,
+        mandatory_review=None,
+        tier="primary_blinded",
+        mapping=1,
+        stage="initial",
+        blinding="never_unblinded",
+        role="human_reviewer",
+        credit="human",
+    ):
+        if mandatory_review is None:
+            mandatory_review = severity in ("high", "critical") or hard_fail
+        return {
+            "category": category,
+            "decision": decision,
+            "dimension": dimension,
+            "evidence_tier": tier,
+            "finding_id": finding_id,
+            "hard_fail": hard_fail,
+            "mandatory_review": mandatory_review,
+            "mapping_generation": mapping,
+            "review_credit": credit,
+            "review_id": review_id,
+            "review_stage": stage,
+            "reviewer_blinding": blinding,
+            "reviewer_id": reviewer_id,
+            "reviewer_role": role,
+            "severity": severity,
+        }
+
+    @staticmethod
+    def _finding(
+        finding_id,
+        result_id,
+        reviews,
+        *,
+        category="literary_error",
+        dimension="literary_russian",
+        severity="low",
+        hard_fail=False,
+        mandatory_review=None,
+    ):
+        if mandatory_review is None:
+            mandatory_review = severity in ("high", "critical") or hard_fail
+        return {
+            "category": category,
+            "dimension": dimension,
+            "finding_id": finding_id,
+            "hard_fail": hard_fail,
+            "mandatory_review": mandatory_review,
+            "result_id": result_id,
+            "reviews": list(reviews),
+            "severity": severity,
+        }
+
+    @staticmethod
+    def _finding_adjudication(
+        adjudication_id,
+        reviewer_id,
+        finding_id,
+        initial_review_ids,
+        *,
+        category="literary_error",
+        dimension="literary_russian",
+        decision="confirmed",
+        severity="low",
+        hard_fail=False,
+        mandatory_review=None,
+        mapping=1,
+    ):
+        if mandatory_review is None:
+            mandatory_review = severity in ("high", "critical") or hard_fail
+        return {
+            "adjudication_id": adjudication_id,
+            "category": category,
+            "decision": decision,
+            "dimension": dimension,
+            "evidence_tier": "primary_blinded",
+            "finding_id": finding_id,
+            "hard_fail": hard_fail,
+            "initial_review_ids": list(initial_review_ids),
+            "mandatory_review": mandatory_review,
+            "mapping_generation": mapping,
+            "reviewer_blinding": "never_unblinded",
+            "reviewer_id": reviewer_id,
+            "reviewer_role": "human_reviewer",
+            "severity": severity,
+        }
+
+    @staticmethod
+    def _agreement_rows(first, second, *, candidate="candidate_a", split="holdout"):
         return [
             {
                 "applicability_adjudication": None,
@@ -747,6 +881,7 @@ class MethodologyAndStateTests(unittest.TestCase):
                 ],
                 "second": right,
                 "source_generation_id": f"00000000-0000-4000-8000-{index:012x}",
+                "split": split,
                 "stratum": "ui",
             }
             for index, (left, right) in enumerate(zip(first, second), start=1)
@@ -786,10 +921,10 @@ class MethodologyAndStateTests(unittest.TestCase):
         source = "00000000-0000-4000-8000-000000000091"
         summary = contract.statistical_unit_summary(
             [
-                {"applicable": True, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "stratum": "ui", "success": True},
-                {"applicable": True, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "stratum": "ui", "success": False},
-                {"applicable": True, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "stratum": "narrative", "success": True},
-                {"applicable": False, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": "00000000-0000-4000-8000-000000000092", "stratum": "narrative", "success": None},
+                {"applicable": True, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "split": "holdout", "stratum": "ui", "success": True},
+                {"applicable": True, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "split": "holdout", "stratum": "ui", "success": False},
+                {"applicable": True, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "split": "holdout", "stratum": "narrative", "success": True},
+                {"applicable": False, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": "00000000-0000-4000-8000-000000000092", "split": "holdout", "stratum": "narrative", "success": None},
             ]
         )
         self.assertEqual(summary["per_stratum_counts"]["ui"], 1)
@@ -805,8 +940,8 @@ class MethodologyAndStateTests(unittest.TestCase):
         self.assertEqual(summary["overall_conservative_success_count"], 0)
         self.assertEqual(summary["overall_confidence_gate"], "forbidden")
         mixed_scope = [
-            {"applicable": True, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "stratum": "ui", "success": True},
-            {"applicable": True, "candidate": "candidate_b", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "stratum": "ui", "success": True},
+            {"applicable": True, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "split": "holdout", "stratum": "ui", "success": True},
+            {"applicable": True, "candidate": "candidate_b", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "split": "holdout", "stratum": "ui", "success": True},
         ]
         with self.assertRaises(contract.ContractError) as raised:
             contract.statistical_unit_summary(mixed_scope)
@@ -819,12 +954,143 @@ class MethodologyAndStateTests(unittest.TestCase):
         with self.assertRaises(contract.ContractError) as raised:
             contract.statistical_unit_summary(
                 [
-                    {"applicable": False, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "stratum": "ui", "success": None}
+                    {"applicable": False, "candidate": "candidate_a", "profile": "profile_a", "dimension_or_gate": "meaning_accuracy", "source_generation_id": source, "split": "holdout", "stratum": "ui", "success": None}
                 ]
             )
         self.assertEqual(
             raised.exception.code, "STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME"
         )
+
+    def test_split_provenance_prevents_tuning_holdout_pooling(self) -> None:
+        scores = [0, 1, 2, 3, 4] * 4 + [0, 1, 2]
+        tuning = self._agreement_rows(scores, scores, split="tuning")
+        holdout = self._agreement_rows(scores, scores, split="holdout")
+        self.assertEqual(
+            contract.agreement_diagnostic(tuning),
+            {"split": "tuning", "status": "AGREEMENT_INSUFFICIENT_UNITS"},
+        )
+        self.assertEqual(
+            contract.agreement_gate(holdout), "AGREEMENT_INSUFFICIENT_UNITS"
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_gate(tuning)
+        self.assertEqual(raised.exception.code, "DECISION_GRADE_SPLIT_INVALID")
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_unit_vectors(tuning + holdout)
+        self.assertEqual(raised.exception.code, "STATISTICAL_SPLIT_MIXED")
+
+        missing = copy.deepcopy(holdout[:1])
+        missing[0].pop("split")
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_unit_vectors(missing)
+        self.assertEqual(raised.exception.code, "UNKNOWN_FIELD")
+        unknown = copy.deepcopy(holdout[:1])
+        unknown[0]["split"] = "synthetic_unknown"
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_unit_vectors(unknown)
+        self.assertEqual(raised.exception.code, "UNKNOWN_SPLIT")
+
+        passing_holdout = self._agreement_rows(
+            [0, 1, 2, 3, 4] * 9 + [0],
+            [0, 1, 3, 2, 4] * 9 + [0],
+            split="holdout",
+        )
+        tuning_failure = self._agreement_rows([0], [4], split="tuning")
+        self.assertEqual(contract.agreement_gate(passing_holdout), "AGREEMENT_PASS")
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_gate(passing_holdout + tuning_failure)
+        self.assertEqual(raised.exception.code, "STATISTICAL_SPLIT_MIXED")
+
+    def test_tuning_cannot_increase_holdout_statistical_or_cfa_denominators(self) -> None:
+        def statistical_row(identifier, split):
+            return {
+                "applicable": True,
+                "candidate": "candidate_a",
+                "dimension_or_gate": "meaning_accuracy",
+                "profile": "profile_a",
+                "source_generation_id": identifier,
+                "split": split,
+                "stratum": "ui",
+                "success": True,
+            }
+
+        tuning_stat = statistical_row(
+            "00000000-0000-4000-8000-000000000091", "tuning"
+        )
+        holdout_stat = statistical_row(
+            "00000000-0000-4000-8000-000000000092", "holdout"
+        )
+        self.assertFalse(
+            contract.statistical_unit_summary([tuning_stat])[
+                "decision_grade_eligible"
+            ]
+        )
+        self.assertEqual(
+            contract.decision_grade_statistical_unit_summary([holdout_stat])[
+                "per_stratum_denominators"
+            ]["ui"],
+            1,
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.statistical_unit_summary([tuning_stat, holdout_stat])
+        self.assertEqual(raised.exception.code, "STATISTICAL_SPLIT_MIXED")
+        missing_stat = copy.deepcopy(holdout_stat)
+        missing_stat.pop("split")
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.statistical_unit_summary([missing_stat])
+        self.assertEqual(raised.exception.code, "UNKNOWN_FIELD")
+        unknown_stat = copy.deepcopy(holdout_stat)
+        unknown_stat["split"] = "synthetic_unknown"
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.statistical_unit_summary([unknown_stat])
+        self.assertEqual(raised.exception.code, "UNKNOWN_SPLIT")
+
+        def cfa_rows(count, split, offset):
+            return [
+                {
+                    "candidate": "candidate_a",
+                    "event": False,
+                    "profile": "profile_a",
+                    "risk_class": "auto_eligible_candidate",
+                    "source_generation_id": (
+                        f"00000000-0000-4000-8000-{offset + index:012x}"
+                    ),
+                    "split": split,
+                }
+                for index in range(count)
+            ]
+
+        tuning_cfa = cfa_rows(100, "tuning", 1000)
+        holdout_cfa = cfa_rows(103, "holdout", 2000)
+        self.assertEqual(
+            contract.critical_false_accept_summary(tuning_cfa)[
+                "source_generation_count"
+            ],
+            100,
+        )
+        holdout_summary = contract.decision_grade_critical_false_accept_summary(
+            holdout_cfa
+        )
+        self.assertEqual(holdout_summary["source_generation_count"], 103)
+        self.assertFalse(holdout_summary["meets_decision_minimum"])
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.critical_false_accept_summary(tuning_cfa + holdout_cfa)
+        self.assertEqual(raised.exception.code, "STATISTICAL_SPLIT_MIXED")
+        missing_cfa = copy.deepcopy(holdout_cfa[:1])
+        missing_cfa[0].pop("split")
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.critical_false_accept_summary(missing_cfa)
+        self.assertEqual(raised.exception.code, "UNKNOWN_FIELD")
+        unknown_cfa = copy.deepcopy(holdout_cfa[:1])
+        unknown_cfa[0]["split"] = "synthetic_unknown"
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.critical_false_accept_summary(unknown_cfa)
+        self.assertEqual(raised.exception.code, "UNKNOWN_SPLIT")
+        tuning_203 = contract.critical_false_accept_summary(
+            cfa_rows(203, "tuning", 3000)
+        )
+        self.assertFalse(tuning_203["decision_grade_eligible"])
+        self.assertFalse(tuning_203["meets_decision_minimum"])
 
     def test_exact_quadratic_kappa_and_robustness_vectors(self) -> None:
         first = [0, 1, 2, 3, 4]
@@ -1001,6 +1267,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             "profile": "profile_a",
             "risk_class": "auto_eligible_candidate",
             "source_generation_id": source,
+            "split": "holdout",
         }
         summary = contract.critical_false_accept_summary(
             [
@@ -1013,7 +1280,16 @@ class MethodologyAndStateTests(unittest.TestCase):
                 ),
             ]
         )
-        self.assertEqual(summary, {"event_count": 1, "source_generation_count": 2})
+        self.assertEqual(
+            summary,
+            {
+                "decision_grade_eligible": True,
+                "event_count": 1,
+                "meets_decision_minimum": False,
+                "source_generation_count": 2,
+                "split": "holdout",
+            },
+        )
         mixed = [dict(base, event=False), dict(base, event=False, candidate="candidate_b")]
         with self.assertRaises(contract.ContractError) as raised:
             contract.critical_false_accept_summary(mixed)
@@ -1286,25 +1562,20 @@ class MethodologyAndStateTests(unittest.TestCase):
         self._mark_primary_output(blinded, mapping=2)
         blinded["dimension_records"][1]["status"] = "human_pass"
         reviewer = "00000000-0000-4000-8000-000000000061"
-        secondary_review = {
-            "decision": "confirmed",
-            "evidence_tier": "secondary_unblinded",
-            "mapping_generation": 1,
-            "review_credit": "human",
-            "review_id": "00000000-0000-4000-8000-000000000051",
-            "review_stage": "secondary",
-            "reviewer_blinding": "unblinded",
-            "reviewer_id": reviewer,
-            "reviewer_role": "human_reviewer",
-        }
-        finding = {
-            "category": "literary_error",
-            "dimension": "literary_russian",
-            "finding_id": "00000000-0000-4000-8000-000000000041",
-            "result_id": self_identifying["result_id"],
-            "reviews": [secondary_review],
-            "severity": "low",
-        }
+        finding_id = "00000000-0000-4000-8000-000000000041"
+        secondary_review = self._finding_review(
+            "00000000-0000-4000-8000-000000000051",
+            reviewer,
+            finding_id,
+            tier="secondary_unblinded",
+            stage="secondary",
+            blinding="unblinded",
+        )
+        finding = self._finding(
+            finding_id,
+            self_identifying["result_id"],
+            [secondary_review],
+        )
         registry, samples, results = self._validated_state(document)
         contract._validate_findings([finding], [], registry, results)
         ground_truth = [
@@ -1357,37 +1628,27 @@ class MethodologyAndStateTests(unittest.TestCase):
             result, blinding="external_mapping_leak", mapping=2
         )
         result_id = result["result_id"]
-        finding = {
-            "category": "literary_error",
-            "dimension": "literary_russian",
-            "finding_id": "00000000-0000-4000-8000-000000000041",
-            "result_id": result_id,
-            "reviews": [
-                {
-                    "decision": "confirmed",
-                    "evidence_tier": "compromised_primary",
-                    "mapping_generation": 1,
-                    "review_credit": "human",
-                    "review_id": "00000000-0000-4000-8000-000000000051",
-                    "review_stage": "initial",
-                    "reviewer_blinding": "unblinded",
-                    "reviewer_id": "00000000-0000-4000-8000-000000000061",
-                    "reviewer_role": "human_reviewer",
-                },
-                {
-                    "decision": "confirmed",
-                    "evidence_tier": "primary_blinded",
-                    "mapping_generation": 2,
-                    "review_credit": "human",
-                    "review_id": "00000000-0000-4000-8000-000000000052",
-                    "review_stage": "initial",
-                    "reviewer_blinding": "never_unblinded",
-                    "reviewer_id": "00000000-0000-4000-8000-000000000062",
-                    "reviewer_role": "human_reviewer",
-                },
+        finding_id = "00000000-0000-4000-8000-000000000041"
+        finding = self._finding(
+            finding_id,
+            result_id,
+            [
+                self._finding_review(
+                    "00000000-0000-4000-8000-000000000051",
+                    "00000000-0000-4000-8000-000000000061",
+                    finding_id,
+                    tier="compromised_primary",
+                    mapping=1,
+                    blinding="unblinded",
+                ),
+                self._finding_review(
+                    "00000000-0000-4000-8000-000000000052",
+                    "00000000-0000-4000-8000-000000000062",
+                    finding_id,
+                    mapping=2,
+                ),
             ],
-            "severity": "low",
-        }
+        )
         registry, _, results = self._validated_state(document)
         contract._validate_findings([finding], [], registry, results)
 
@@ -1397,6 +1658,255 @@ class MethodologyAndStateTests(unittest.TestCase):
         with self.assertRaises(contract.ContractError) as raised:
             contract._validate_findings([missing_fresh], [], registry, results)
         self.assertEqual(raised.exception.code, "BLINDING_FINDING_REVIEW_INVALID")
+
+    def test_reviewer_specific_severity_disagreement_requires_adjudication(self) -> None:
+        document = copy.deepcopy(self.base)
+        result = document["conformance_results"][0]
+        self._mark_primary_output(result)
+        finding_id = "00000000-0000-4000-8000-000000000041"
+        review_ids = [
+            "00000000-0000-4000-8000-000000000051",
+            "00000000-0000-4000-8000-000000000052",
+        ]
+        finding = self._finding(
+            finding_id,
+            result["result_id"],
+            [
+                self._finding_review(
+                    review_ids[0],
+                    "00000000-0000-4000-8000-000000000061",
+                    finding_id,
+                    severity="medium",
+                ),
+                self._finding_review(
+                    review_ids[1],
+                    "00000000-0000-4000-8000-000000000062",
+                    finding_id,
+                    severity="high",
+                ),
+            ],
+            severity="high",
+        )
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings([finding], [], registry, results)
+        self.assertEqual(raised.exception.code, "ADJUDICATION_REQUIRED")
+
+        for changed_fields in (
+            {"hard_fail": True, "mandatory_review": True},
+            {"mandatory_review": True},
+        ):
+            disposition_disagreement = copy.deepcopy(finding)
+            disposition_disagreement["severity"] = "medium"
+            disposition_disagreement["hard_fail"] = changed_fields.get(
+                "hard_fail", False
+            )
+            disposition_disagreement["mandatory_review"] = True
+            for review in disposition_disagreement["reviews"]:
+                review["severity"] = "medium"
+                review["hard_fail"] = False
+                review["mandatory_review"] = False
+            disposition_disagreement["reviews"][1].update(changed_fields)
+            registry, _, results = self._validated_state(document)
+            with self.assertRaises(contract.ContractError) as raised:
+                contract._validate_findings(
+                    [disposition_disagreement], [], registry, results
+                )
+            self.assertEqual(raised.exception.code, "ADJUDICATION_REQUIRED")
+
+        adjudication = self._finding_adjudication(
+            "00000000-0000-4000-8000-000000000091",
+            "00000000-0000-4000-8000-000000000063",
+            finding_id,
+            review_ids,
+            severity="high",
+        )
+        registry, _, results = self._validated_state(document)
+        findings, _, review_count = contract._validate_findings(
+            [finding], [adjudication], registry, results
+        )
+        self.assertEqual(review_count, 3)
+        self.assertTrue(findings[0]["confirmed"])
+        self.assertEqual(findings[0]["severity"], "high")
+        self.assertTrue(findings[0]["mandatory_review"])
+
+        not_distinct = copy.deepcopy(adjudication)
+        not_distinct["reviewer_id"] = finding["reviews"][0]["reviewer_id"]
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings([finding], [not_distinct], registry, results)
+        self.assertEqual(raised.exception.code, "ADJUDICATOR_NOT_DISTINCT")
+
+        wrong_links = copy.deepcopy(adjudication)
+        wrong_links["initial_review_ids"] = [review_ids[0]]
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings([finding], [wrong_links], registry, results)
+        self.assertEqual(raised.exception.code, "ADJUDICATION_LINK_INVALID")
+
+        matching = copy.deepcopy(finding)
+        matching["severity"] = "medium"
+        matching["mandatory_review"] = False
+        matching["reviews"][1]["severity"] = "medium"
+        matching["reviews"][1]["mandatory_review"] = False
+        registry, _, results = self._validated_state(document)
+        matched, _, matched_count = contract._validate_findings(
+            [matching], [], registry, results
+        )
+        self.assertTrue(matched[0]["confirmed"])
+        self.assertEqual(matched_count, 2)
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings(
+                [matching], [copy.deepcopy(adjudication)], registry, results
+            )
+        self.assertEqual(raised.exception.code, "ADJUDICATION_LINK_INVALID")
+
+    def test_finding_outcome_is_required_and_top_level_downgrade_is_rejected(self) -> None:
+        document = copy.deepcopy(self.base)
+        result = document["conformance_results"][0]
+        self._mark_primary_output(result)
+        finding_id = "00000000-0000-4000-8000-000000000041"
+        high_review = self._finding_review(
+            "00000000-0000-4000-8000-000000000051",
+            "00000000-0000-4000-8000-000000000061",
+            finding_id,
+            severity="high",
+        )
+        downgrade = self._finding(
+            finding_id,
+            result["result_id"],
+            [high_review],
+            severity="medium",
+        )
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings([downgrade], [], registry, results)
+        self.assertEqual(raised.exception.code, "FINDING_FINAL_OUTCOME_MISMATCH")
+
+        missing_outcome = copy.deepcopy(downgrade)
+        missing_outcome["reviews"][0].pop("severity")
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings([missing_outcome], [], registry, results)
+        self.assertEqual(raised.exception.code, "MISSING_FIELD")
+
+        no_review = self._finding(finding_id, result["result_id"], [])
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings([no_review], [], registry, results)
+        self.assertEqual(raised.exception.code, "FINDING_REVIEW_OUTCOME_MISSING")
+
+        model_only = self._finding(
+            finding_id,
+            result["result_id"],
+            [
+                self._finding_review(
+                    "00000000-0000-4000-8000-000000000051",
+                    "00000000-0000-4000-8000-000000000061",
+                    finding_id,
+                    severity="high",
+                    tier="non_human",
+                    mapping=0,
+                    blinding="not_applicable",
+                    role="model_reviewer",
+                    credit="non_human",
+                )
+            ],
+            severity="high",
+        )
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings([model_only], [], registry, results)
+        self.assertEqual(raised.exception.code, "MODEL_REVIEW_NOT_HUMAN")
+
+        approved_document = copy.deepcopy(document)
+        approved_document["conformance_results"][0]["editorial_status"] = (
+            "editorially_approved"
+        )
+        registry, samples, results = self._validated_state(approved_document)
+        high_finding = self._finding(
+            finding_id,
+            result["result_id"],
+            [high_review],
+            severity="high",
+        )
+        findings, _, _ = contract._validate_findings(
+            [high_finding], [], registry, results
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_acceptance(
+                results, findings, {}, samples, {"complete": False}
+            )
+        self.assertEqual(raised.exception.code, "HIGH_RISK_EDITORIAL_APPROVAL")
+
+    def test_no_output_rejects_findings_and_human_or_model_reviews(self) -> None:
+        document = copy.deepcopy(self.base)
+        result = document["conformance_results"][0]
+        result["technical_conformance"] = "not_observed"
+        result["terminal_status"] = "controlled_failure"
+        result["failure_code"] = "CONTEXT_OVERFLOW_CONTROLLED"
+        result["observed_atoms"] = []
+        result["dimension_records"][0]["status"] = "not_evaluated"
+        result["accounting"]["initial_attempt_count"] = 1
+        result["accounting"]["terminal_failure_count"] = 1
+        finding_id = "00000000-0000-4000-8000-000000000041"
+
+        registry, _, results = self._validated_state(document)
+        empty_review_finding = self._finding(
+            finding_id, result["result_id"], [], severity="low"
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings(
+                [empty_review_finding], [], registry, results
+            )
+        self.assertEqual(raised.exception.code, "CONTENT_EVIDENCE_WITHOUT_OUTPUT")
+
+        not_attempted_document = copy.deepcopy(self.base)
+        registry, _, results = self._validated_state(not_attempted_document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings(
+                [
+                    self._finding(
+                        finding_id,
+                        not_attempted_document["conformance_results"][0][
+                            "result_id"
+                        ],
+                        [],
+                    )
+                ],
+                [],
+                registry,
+                results,
+            )
+        self.assertEqual(raised.exception.code, "CONTENT_EVIDENCE_WITHOUT_OUTPUT")
+
+        model_review = self._finding_review(
+            "00000000-0000-4000-8000-000000000051",
+            "00000000-0000-4000-8000-000000000061",
+            finding_id,
+            tier="non_human",
+            mapping=0,
+            blinding="not_applicable",
+            role="model_reviewer",
+            credit="non_human",
+        )
+        registry, _, results = self._validated_state(document)
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._validate_findings(
+                [
+                    self._finding(
+                        finding_id,
+                        result["result_id"],
+                        [model_review],
+                        severity="low",
+                    )
+                ],
+                [],
+                registry,
+                results,
+            )
+        self.assertEqual(raised.exception.code, "CONTENT_EVIDENCE_WITHOUT_OUTPUT")
 
     def test_adjudicator_is_linked_distinct_and_drives_final_status(self) -> None:
         document = copy.deepcopy(self.base)
@@ -1432,6 +1942,7 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         self.assertEqual(materialized[0]["first"], 4)
         self.assertEqual(materialized[0]["second"], 2)
+        self.assertEqual(materialized[0]["split"], "tuning")
         self.assertEqual(
             materialized[0]["initial_record_ids"], [first_id, second_id]
         )
@@ -1443,9 +1954,12 @@ class MethodologyAndStateTests(unittest.TestCase):
             [((4, 2),)],
         )
         self.assertEqual(
-            contract.agreement_gate(materialized),
-            "AGREEMENT_INSUFFICIENT_UNITS",
+            contract.agreement_diagnostic(materialized),
+            {"split": "tuning", "status": "AGREEMENT_INSUFFICIENT_UNITS"},
         )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.agreement_gate(materialized)
+        self.assertEqual(raised.exception.code, "DECISION_GRADE_SPLIT_INVALID")
 
         same_reviewer = copy.deepcopy(records)
         same_reviewer[2]["reviewer_id"] = same_reviewer[0]["reviewer_id"]
@@ -1550,8 +2064,11 @@ class MethodologyAndStateTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            contract.agreement_gate(materialized),
-            "AGREEMENT_APPLICABILITY_DISAGREEMENT",
+            contract.agreement_diagnostic(materialized),
+            {
+                "split": "tuning",
+                "status": "AGREEMENT_APPLICABILITY_DISAGREEMENT",
+            },
         )
 
     def test_critical_false_accept_is_derived_only_after_actual_approval(self) -> None:
@@ -1566,43 +2083,51 @@ class MethodologyAndStateTests(unittest.TestCase):
             "00000000-0000-4000-8000-000000000062",
         )
 
-        def reviews(offset):
+        def reviews(offset, finding_id, category):
             return [
-                {
-                    "decision": "confirmed",
-                    "evidence_tier": "primary_blinded",
-                    "mapping_generation": 1,
-                    "review_credit": "human",
-                    "review_id": "00000000-0000-4000-8000-{0:012d}".format(
+                self._finding_review(
+                    "00000000-0000-4000-8000-{0:012d}".format(
                         offset + index
                     ),
-                    "review_stage": "initial",
-                    "reviewer_blinding": "never_unblinded",
-                    "reviewer_id": reviewer,
-                    "reviewer_role": "human_reviewer",
-                }
+                    reviewer,
+                    finding_id,
+                    category=category,
+                    dimension="meaning_accuracy",
+                    severity="critical",
+                    hard_fail=True,
+                )
                 for index, reviewer in enumerate(reviewers)
             ]
 
         result_id = document["conformance_results"][0]["result_id"]
         findings, _, _ = contract._validate_findings(
             [
-                {
-                    "category": "meaning_inversion",
-                    "dimension": "meaning_accuracy",
-                    "finding_id": "00000000-0000-4000-8000-000000000041",
-                    "result_id": result_id,
-                    "reviews": reviews(51),
-                    "severity": "critical",
-                },
-                {
-                    "category": "critical_false_accept",
-                    "dimension": "meaning_accuracy",
-                    "finding_id": "00000000-0000-4000-8000-000000000042",
-                    "result_id": result_id,
-                    "reviews": reviews(53),
-                    "severity": "critical",
-                },
+                self._finding(
+                    "00000000-0000-4000-8000-000000000041",
+                    result_id,
+                    reviews(
+                        51,
+                        "00000000-0000-4000-8000-000000000041",
+                        "meaning_inversion",
+                    ),
+                    category="meaning_inversion",
+                    dimension="meaning_accuracy",
+                    severity="critical",
+                    hard_fail=True,
+                ),
+                self._finding(
+                    "00000000-0000-4000-8000-000000000042",
+                    result_id,
+                    reviews(
+                        53,
+                        "00000000-0000-4000-8000-000000000042",
+                        "critical_false_accept",
+                    ),
+                    category="critical_false_accept",
+                    dimension="meaning_accuracy",
+                    severity="critical",
+                    hard_fail=True,
+                ),
             ],
             [],
             registry,
@@ -1619,14 +2144,19 @@ class MethodologyAndStateTests(unittest.TestCase):
         registry, _, safe_results = self._validated_state(safe_document)
         safe_findings, _, _ = contract._validate_findings(
             [
-                {
-                    "category": "meaning_inversion",
-                    "dimension": "meaning_accuracy",
-                    "finding_id": "00000000-0000-4000-8000-000000000041",
-                    "result_id": result_id,
-                    "reviews": reviews(51),
-                    "severity": "critical",
-                }
+                self._finding(
+                    "00000000-0000-4000-8000-000000000041",
+                    result_id,
+                    reviews(
+                        51,
+                        "00000000-0000-4000-8000-000000000041",
+                        "meaning_inversion",
+                    ),
+                    category="meaning_inversion",
+                    dimension="meaning_accuracy",
+                    severity="critical",
+                    hard_fail=True,
+                )
             ],
             [],
             registry,
@@ -1663,6 +2193,8 @@ class MethodologyAndStateTests(unittest.TestCase):
                 "category": "literary_error",
                 "confirmed": True,
                 "dimension": "literary_russian",
+                "hard_fail": False,
+                "mandatory_review": True,
                 "result_id": "initial",
                 "severity": "high",
             }

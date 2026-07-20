@@ -7,8 +7,8 @@ content-derived private hashes, real model tags, or real model digests were
 used. Repeated single-character 64-hex digests are unmistakable placeholders;
 fixed UUIDv4-shaped values are deterministic fixture IDs, not live identities.
 
-`contract-cases.json` contains one `base_document` and `171` table-driven cases:
-`3` controlled successes and `168` failures with one exact controlled code each.
+`contract-cases.json` contains one `base_document` and `173` table-driven cases:
+`3` controlled successes and `170` failures with one exact controlled code each.
 The successful cases are:
 
 - `positive` — partial public synthetic D1 conformance with zero model calls;
@@ -17,7 +17,7 @@ The successful cases are:
 - `context-overflow-controlled-failure` — a no-output controlled failure with no
   human-quality evidence.
 
-None is a complete benchmark. Document schema `m1b-synthetic-contract-v3`
+None is a complete benchmark. Document schema `m1b-synthetic-contract-v4`
 always rejects `complete_benchmark`; the positive document declares only three
 of six future primary assignments. D1 is `synthetic_conformant`, while D2-D5 and
 editorial state remain `not_evaluated`.
@@ -26,19 +26,21 @@ editorial state remain `not_evaluated`.
 
 The fixture uses:
 
-- fixture schema `m1b-synthetic-contract-cases-v3`;
-- protocol `m1b-benchmark-contract-v3`, generation `103`;
-- output schema `m1b-synthetic-output-v3`;
+- fixture schema `m1b-synthetic-contract-cases-v4`;
+- protocol `m1b-benchmark-contract-v4`, generation `104`;
+- output schema `m1b-synthetic-output-v4`;
 - corpus `m1b-synthetic-corpus-v3`, generation `304`;
-- quality rubric `m1b-quality-rubric-v3`;
-- analysis policy `m1b-analysis-policy-v3`, generation `103`;
+- quality rubric `m1b-quality-rubric-v4`;
+- analysis policy `m1b-analysis-policy-v4`, generation `104`;
 - `17` byte-exact public proposal components;
 - bundle SHA-256
-  `10f41321d013c0fa73dea0d689be51f43c721c3f2cef21eb8b8b4fcceff1fdf0`;
+  `9922093ab990769bff85f6f51c5ba6009d8036359bbf080a865d2ff1053a9fd7`;
 - public synthetic corpus SHA-256
   `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`;
 - fixed first-component vector
-  `e65d2776085a868b50986355fc2f5db5f426a020165ce4c11d05c2a1fe36f76c`.
+  `6e3b9bfbaaef3793dd1a84ed5a6c37b8a249be4de5e2b889c13e84b83a15a9e1`;
+- fixture file SHA-256
+  `cd314f4753c615c0a962c2e302c098630c99d6f9d6448e487bebd87f5ff9a78d`.
 
 All definitions remain `proposed`; none is `owner_accepted`. The bundle binds
 declarative definitions and the public synthetic corpus, not the exact current
@@ -70,9 +72,16 @@ Without Ollama or a live model, the table and unit tests cover:
 - HGT-derived unique logical rows and canonical stable reviewer pairs, exact
   `0..4` source-balanced quadratic kappa, bilateral and unilateral
   `not_applicable`, equal-source weighting of actual paired rows, zero variance,
-  insufficient coverage, and every delete-one-whole-source robustness branch;
+  insufficient coverage, every delete-one-whole-source robustness branch, and
+  explicit split provenance with no tuning/holdout pooling;
 - source-generation conservative collapse, descriptive-only overall totals,
-  three-candidate family correction, and closed CFA source/class aggregation;
+  three-candidate family correction, holdout-only decision helpers, and closed
+  split-scoped CFA source/class aggregation;
+- immutable reviewer-specific finding outcomes for decision/severity/hard-fail/
+  mandatory-review, exact third-human adjudication, top-level downgrade
+  rejection, and no model-review human credit;
+- no-output and no-attempt rows reject findings and human/model content reviews;
+  self-identifying output permits only descriptive secondary-unblinded evidence;
 - partial-report evidence restrictions, context self-assertion rejection, and
   the external implementation-identity blocker.
 
@@ -82,7 +91,9 @@ validators, but a full M1B-0 document containing such a live observation stops
 at `CONTEXT_LIMIT_BINDING_UNPROVEN`; the fixture does not pretend that a model
 was called. Generic agreement rows are public synthetic math vectors only.
 Decision-grade agreement rows are materialized inside the HGT validator from
-linked frozen initial records.
+linked frozen initial records and retain the source sample split. Tuning math is
+available only as explicitly marked diagnostics and cannot satisfy a holdout
+gate.
 
 For official/private data, exact values, positions, row IDs, content-derived
 hashes, and reviewer/source mappings must remain local. Only controlled codes

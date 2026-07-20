@@ -21,8 +21,8 @@ from fractions import Fraction
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 
-DOCUMENT_SCHEMA = "m1b-synthetic-contract-v3"
-FIXTURE_SCHEMA = "m1b-synthetic-contract-cases-v3"
+DOCUMENT_SCHEMA = "m1b-synthetic-contract-v4"
+FIXTURE_SCHEMA = "m1b-synthetic-contract-cases-v4"
 MAX_INPUT_BYTES = 4 * 1024 * 1024
 MAX_FIXTURE_PATCH_COUNT = 256
 MAX_MATERIALIZATION_WORK_BYTES = 16 * 1024 * 1024
@@ -30,12 +30,12 @@ MATERIALIZATION_PREENCODE_RESERVE_BYTES = MAX_INPUT_BYTES
 MAX_JSON_INTEGER = (1 << 63) - 1
 MIN_JSON_INTEGER = -(1 << 63)
 
-PROTOCOL_VERSION = "m1b-benchmark-contract-v3"
-OUTPUT_SCHEMA_VERSION = "m1b-synthetic-output-v3"
+PROTOCOL_VERSION = "m1b-benchmark-contract-v4"
+OUTPUT_SCHEMA_VERSION = "m1b-synthetic-output-v4"
 PROMPT_VERSION = "m1b-synthetic-prompt-policy-v1"
 PROFILE_VERSION = "m1b-primary-common-profile-v1"
 CORPUS_VERSION = "m1b-synthetic-corpus-v3"
-PROTOCOL_GENERATION = 103
+PROTOCOL_GENERATION = 104
 PROFILE_GENERATION = 202
 CORPUS_GENERATION = 304
 
@@ -72,6 +72,7 @@ STRATA = frozenset(
 RISK_CLASSES = frozenset(
     {"auto_eligible_candidate", "critical_risk", "mandatory_human"}
 )
+SPLITS = frozenset({"holdout", "tuning"})
 QUALITY_DIMENSIONS = frozenset(
     {
         "context_voice_style",
@@ -368,13 +369,20 @@ _FINDING_FIELDS = (
     "category",
     "dimension",
     "finding_id",
+    "hard_fail",
+    "mandatory_review",
     "result_id",
     "reviews",
     "severity",
 )
 _REVIEW_FIELDS = (
+    "category",
     "decision",
+    "dimension",
     "evidence_tier",
+    "finding_id",
+    "hard_fail",
+    "mandatory_review",
     "mapping_generation",
     "review_credit",
     "review_id",
@@ -382,17 +390,23 @@ _REVIEW_FIELDS = (
     "reviewer_blinding",
     "reviewer_id",
     "reviewer_role",
+    "severity",
 )
 _ADJUDICATION_FIELDS = (
     "adjudication_id",
+    "category",
     "decision",
+    "dimension",
     "evidence_tier",
     "finding_id",
+    "hard_fail",
     "initial_review_ids",
+    "mandatory_review",
     "mapping_generation",
     "reviewer_blinding",
     "reviewer_id",
     "reviewer_role",
+    "severity",
 )
 _HUMAN_GROUND_TRUTH_FIELDS = (
     "adjudicates",
@@ -668,13 +682,14 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "corpus_policy",
-        "m1b-corpus-policy-v2",
+        "m1b-corpus-policy-v3",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "corpus_class": "synthetic",
                 "corpus_generation": CORPUS_GENERATION,
                 "corpus_version": CORPUS_VERSION,
+                "decision_grade_split": "holdout",
                 "publication": "synthetic_only",
                 "raw_private_publication": False,
                 "synthetic_corpus_framing": "m1b-synthetic-corpus-sha256-v1",
@@ -684,17 +699,19 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "split_policy",
-        "m1b-split-policy-v2",
+        "m1b-split-policy-v3",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "auto_eligible_strata": sorted(_AUTO_ELIGIBLE_STRATA),
+                "decision_grade_split": "holdout",
+                "diagnostic_split": "tuning_separate_never_satisfies_holdout_gate",
                 "related_variants_same_split": True,
                 "risk_classes": sorted(RISK_CLASSES),
                 "source_cluster_generation_binding": "immutable_one_generation",
                 "source_generation_identity": "opaque_local_mapping",
                 "source_generation_within_stratum_collapse": "conservative_one_unit",
-                "splits": ["tuning", "holdout"],
+                "splits": sorted(SPLITS),
                 "strata": sorted(STRATA),
             }
         ),
@@ -720,26 +737,30 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "context_limit_policy",
-        "m1b-context-limit-policy-v1",
+        "m1b-context-limit-policy-v2",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "binding": _EXPECTED_CONTEXT_LIMIT_BINDING,
                 "controlled_overflow_result": "terminal_failure_zero_primary_success",
+                "controlled_overflow_content_evidence": "findings_reviews_and_human_ground_truth_forbidden",
                 "live_observation_before_binding": "forbidden",
+                "not_applicable_content_evidence": "findings_reviews_and_human_ground_truth_forbidden",
                 "silent_truncation": "forbidden",
             }
         ),
     ),
     (
         "randomization_blinding_policy",
-        "m1b-randomization-blinding-policy-v2",
+        "m1b-randomization-blinding-policy-v3",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "blinding_failure": "denominator_failure",
                 "external_mapping_leak": "frozen_compromised_then_fresh_mapping_and_reviewers",
                 "finding_review_provenance": "same_mapping_and_blinding_rules_as_ground_truth",
+                "finding_initial_outcome": "immutable_reviewer_specific_severity_hard_fail_mandatory_review",
+                "finding_top_level_outcome": "derived_from_matching_or_adjudicated_initial_outcome",
                 "mapping": "private",
                 "model_success_blinding_status": "passed_or_incident",
                 "primary_dimension_failure_status": "blinding_failed",
@@ -755,7 +776,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "quality_rubric",
-        "m1b-quality-rubric-v3",
+        "m1b-quality-rubric-v4",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -769,9 +790,17 @@ _TRUSTED_COMPONENT_ROWS = (
                 "finding_review_evidence_tiers": sorted(
                     FINDING_REVIEW_EVIDENCE_TIERS
                 ),
+                "finding_outcome_fields": [
+                    "decision",
+                    "severity",
+                    "hard_fail",
+                    "mandatory_review",
+                ],
                 "missing_ground_truth_status": "not_evaluated",
+                "missing_reviewer_outcome": "reject",
                 "initial_hgt_reviewers_per_dimension": 2,
-                "finding_adjudication": "exact_two_conflicting_initial_ids_distinct_third_human_drives_final_decision",
+                "finding_adjudication": "exact_two_conflicting_initial_ids_distinct_third_human_drives_final_outcome",
+                "finding_outcome_disagreement": "any_decision_severity_hard_fail_or_mandatory_review_difference",
                 "ordinal_categories": [0, 1, 2, 3, 4],
                 "ordinal_pass_minimum": 3,
                 "reviewer_roles": sorted(REVIEWER_ROLES),
@@ -782,7 +811,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "measurement_policy",
-        "m1b-measurement-policy-v2",
+        "m1b-measurement-policy-v3",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -791,6 +820,7 @@ _TRUSTED_COMPONENT_ROWS = (
                 "human_fallback_model_call_count": 0,
                 "model_output_success_model_call_count": 1,
                 "not_applicable_state": "not_observed_mapping0_zero_accounting_no_human",
+                "no_output_content_evidence": "findings_reviews_and_ground_truth_forbidden",
                 "provider_fallback_false_allows_declared_human_lane": True,
                 "row_derived_accounting": True,
                 "self_identification_terminal_status": "blinding_failed",
@@ -814,7 +844,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "validator_policy",
-        "m1b-validator-policy-v3",
+        "m1b-validator-policy-v4",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -847,7 +877,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "analysis_policy",
-        "m1b-analysis-policy-v3",
+        "m1b-analysis-policy-v4",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -857,6 +887,7 @@ _TRUSTED_COMPONENT_ROWS = (
                     "candidate_profile_result_key": [
                         "candidate",
                         "profile",
+                        "split",
                         "stratum",
                         "dimension",
                     ],
@@ -871,8 +902,11 @@ _TRUSTED_COMPONENT_ROWS = (
                         "reviewer_pair",
                         "second",
                         "source_generation_id",
+                        "split",
                         "stratum",
                     ],
+                    "decision_grade_helper": "agreement_gate_holdout_only",
+                    "diagnostic_helper": "agreement_diagnostic_split_scoped",
                     "categories": [0, 1, 2, 3, 4],
                     "exact_arithmetic": "rational",
                     "formula": "(n*sum(q_ij*O_ij)-sum(q_ij*r_i*c_j))/(16*n*n-sum(q_ij*r_i*c_j))",
@@ -887,6 +921,7 @@ _TRUSTED_COMPONENT_ROWS = (
                     "ratings_materializer": "inside_human_ground_truth_validator_no_report_supplied_scores",
                     "raw_row_helper_scope": "public_synthetic_math_vectors_only_not_decision_evidence",
                     "record_order": "ascending_raw_reviewer_uuid_then_linked_record",
+                    "split_scope": "single_closed_split_no_pooling",
                     "applicable_source_unit": "source_generation_with_at_least_one_ordinal_applicable_pair",
                     "applicability_disagreement": "any_unilateral_source_blocks_agreement_gate_after_linked_adjudication",
                     "contingency_matrix": "O_ij=sum_s(D_sij)",
@@ -930,13 +965,16 @@ _TRUSTED_COMPONENT_ROWS = (
                     "profile",
                     "risk_class",
                     "source_generation_id",
+                    "split",
                 ],
                 "critical_false_accept_statistical_unit": [
                     "candidate",
                     "profile",
+                    "split",
                     "risk_class",
                     "source_generation_id",
                 ],
+                "critical_false_accept_decision_grade_split": "holdout",
                 "critical_false_accept_zero_event_upper_bound": "1-(1/60)^(1/n)",
                 "critical_false_accept_minimum_n": 203,
                 "decision_method": "bonferroni_candidates_conjunctive_strata",
@@ -971,6 +1009,7 @@ _TRUSTED_COMPONENT_ROWS = (
                 "per_stratum_statistical_unit": [
                     "candidate",
                     "profile",
+                    "split",
                     "dimension_or_gate",
                     "stratum",
                     "source_generation_id",
@@ -986,9 +1025,12 @@ _TRUSTED_COMPONENT_ROWS = (
                         "dimension_or_gate",
                         "profile",
                         "source_generation_id",
+                        "split",
                         "stratum",
                         "success",
                     ],
+                    "decision_grade_helper": "decision_grade_statistical_unit_summary_holdout_only",
+                    "diagnostic_scope": "single_split_explicitly_marked",
                     "no_applicable_outcome": "STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME",
                     "not_applicable": "excluded_from_denominator",
                     "overall_gate": "forbidden",
@@ -1181,6 +1223,7 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     source_order: List[str] = []
     source_rows: Dict[str, List[Tuple[Optional[int], Optional[int]]]] = {}
     scope: Optional[Tuple[str, str, str, str]] = None
+    scope_split: Optional[str] = None
     stable_pair: Optional[Tuple[str, str]] = None
     seen_initial_records: Set[str] = set()
     seen_adjudications: Set[str] = set()
@@ -1196,6 +1239,7 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         "reviewer_pair",
         "second",
         "source_generation_id",
+        "split",
         "stratum",
     }
     for row in rows:
@@ -1213,6 +1257,13 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
             raise ContractError("UNKNOWN_STRATUM")
         if row_scope[3] not in QUALITY_DIMENSIONS - {"schema_atom_stability"}:
             raise ContractError("UNKNOWN_DIMENSION")
+        row_split = _require_string(row["split"])
+        if row_split not in SPLITS:
+            raise ContractError("UNKNOWN_SPLIT")
+        if scope_split is None:
+            scope_split = row_split
+        elif row_split != scope_split:
+            raise ContractError("STATISTICAL_SPLIT_MIXED")
         if scope is None:
             scope = row_scope
         elif row_scope != scope:
@@ -1298,15 +1349,13 @@ def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     return {
         "bilateral_not_applicable_source_count": bilateral_na_sources,
         "paired_ratings_by_source": paired_ratings_by_source,
+        "split": scope_split,
         "source_generation_ids": source_ids,
         "unilateral_not_applicable_source_count": unilateral_na_sources,
     }
 
 
-def agreement_gate(rows: Sequence[Mapping[str, Any]]) -> str:
-    """Apply the exact proposed point and delete-one-source robustness gate."""
-
-    vectors = agreement_unit_vectors(rows)
+def _agreement_status(vectors: Mapping[str, Any]) -> str:
     if vectors["unilateral_not_applicable_source_count"]:
         return "AGREEMENT_APPLICABILITY_DISAGREEMENT"
     source_ratings = vectors["paired_ratings_by_source"]
@@ -1330,6 +1379,24 @@ def agreement_gate(rows: Sequence[Mapping[str, Any]]) -> str:
     return "AGREEMENT_PASS"
 
 
+def agreement_diagnostic(rows: Sequence[Mapping[str, Any]]) -> Dict[str, str]:
+    """Return a split-scoped diagnostic that never implies holdout eligibility."""
+
+    vectors = agreement_unit_vectors(rows)
+    if vectors["split"] is None:
+        raise ContractError("AGREEMENT_VECTOR_INVALID")
+    return {"split": vectors["split"], "status": _agreement_status(vectors)}
+
+
+def agreement_gate(rows: Sequence[Mapping[str, Any]]) -> str:
+    """Apply the decision-grade gate to one frozen holdout scope only."""
+
+    diagnostic = agreement_diagnostic(rows)
+    if diagnostic["split"] != "holdout":
+        raise ContractError("DECISION_GRADE_SPLIT_INVALID")
+    return diagnostic["status"]
+
+
 def statistical_unit_summary(
     rows: Sequence[Mapping[str, Any]]
 ) -> Dict[str, Any]:
@@ -1342,6 +1409,7 @@ def statistical_unit_summary(
     }
     overall: Dict[str, List[bool]] = {}
     scope: Optional[Tuple[str, str, str]] = None
+    scope_split: Optional[str] = None
     for row in rows:
         if type(row) is not dict:
             raise ContractError("INVALID_TYPE")
@@ -1351,6 +1419,7 @@ def statistical_unit_summary(
             "dimension_or_gate",
             "profile",
             "source_generation_id",
+            "split",
             "stratum",
             "success",
         }:
@@ -1363,6 +1432,13 @@ def statistical_unit_summary(
             raise ContractError("INVALID_ANALYSIS_PARAMETER")
         if row_scope[2] not in STATISTICAL_DIMENSIONS_OR_GATES:
             raise ContractError("UNKNOWN_DIMENSION_OR_GATE")
+        row_split = _require_string(row["split"])
+        if row_split not in SPLITS:
+            raise ContractError("UNKNOWN_SPLIT")
+        if scope_split is None:
+            scope_split = row_split
+        elif row_split != scope_split:
+            raise ContractError("STATISTICAL_SPLIT_MIXED")
         if scope is None:
             scope = row_scope
         elif row_scope != scope:
@@ -1385,6 +1461,7 @@ def statistical_unit_summary(
     if not applicable_source_count:
         raise ContractError("STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME")
     return {
+        "decision_grade_eligible": scope_split == "holdout",
         "overall_confidence_gate": "forbidden",
         "overall_distinct_source_count": len(overall),
         "overall_applicable_source_count": applicable_source_count,
@@ -1415,19 +1492,32 @@ def statistical_unit_summary(
             "candidate": scope[0],
             "profile": scope[1],
             "dimension_or_gate": scope[2],
+            "split": scope_split,
         },
         "stratum_contribution_count": sum(map(len, per_stratum.values())),
     }
 
 
+def decision_grade_statistical_unit_summary(
+    rows: Sequence[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Return D1-D5/gate denominators only for one frozen holdout scope."""
+
+    summary = statistical_unit_summary(rows)
+    if not summary["decision_grade_eligible"]:
+        raise ContractError("DECISION_GRADE_SPLIT_INVALID")
+    return summary
+
+
 def critical_false_accept_summary(
     rows: Sequence[Mapping[str, Any]]
-) -> Dict[str, int]:
+) -> Dict[str, Any]:
     """Collapse CFA rows to one any-event Bernoulli trial per source/class."""
 
     if type(rows) not in (list, tuple):
         raise ContractError("INVALID_TYPE")
     scope: Optional[Tuple[str, str, str]] = None
+    scope_split: Optional[str] = None
     events: Dict[str, bool] = {}
     expected_fields = {
         "candidate",
@@ -1435,6 +1525,7 @@ def critical_false_accept_summary(
         "profile",
         "risk_class",
         "source_generation_id",
+        "split",
     }
     for row in rows:
         if type(row) is not dict:
@@ -1449,6 +1540,13 @@ def critical_false_accept_summary(
             raise ContractError("INVALID_ANALYSIS_PARAMETER")
         if row_scope[2] not in RISK_CLASSES:
             raise ContractError("UNKNOWN_RISK_CLASS")
+        row_split = _require_string(row["split"])
+        if row_split not in SPLITS:
+            raise ContractError("UNKNOWN_SPLIT")
+        if scope_split is None:
+            scope_split = row_split
+        elif row_split != scope_split:
+            raise ContractError("STATISTICAL_SPLIT_MIXED")
         if scope is None:
             scope = row_scope
         elif row_scope != scope:
@@ -1458,9 +1556,23 @@ def critical_false_accept_summary(
     if not events:
         raise ContractError("CFA_UNIT_EMPTY")
     return {
+        "decision_grade_eligible": scope_split == "holdout",
         "event_count": sum(events.values()),
+        "meets_decision_minimum": scope_split == "holdout" and len(events) >= 203,
+        "split": scope_split,
         "source_generation_count": len(events),
     }
+
+
+def decision_grade_critical_false_accept_summary(
+    rows: Sequence[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Return CFA gate accounting only for one frozen holdout scope."""
+
+    summary = critical_false_accept_summary(rows)
+    if not summary["decision_grade_eligible"]:
+        raise ContractError("DECISION_GRADE_SPLIT_INVALID")
+    return summary
 
 
 class ContractError(RuntimeError):
@@ -2613,11 +2725,13 @@ def _validate_results(
             "blinding_status": blinding_status,
             "dimensions": dimensions,
             "editorial_status": editorial,
+            "has_output": terminal_status in ("blinding_failed", "success"),
             "initial_result_id": result["initial_result_id"],
             "lane": lane,
             "mapping_generation": mapping_generation,
             "profile_version": result["profile_version"],
             "sample_id": sample_id,
+            "split": samples[sample_id]["split"],
             "stage": stage,
             "technical_conformance": technical,
             "terminal_status": terminal_status,
@@ -2653,6 +2767,42 @@ def _validate_results(
     return results
 
 
+def _validate_finding_outcome(
+    value: Mapping[str, Any],
+    *,
+    finding_id: str,
+    category: str,
+    dimension: str,
+) -> Tuple[str, str, bool, bool]:
+    if value["finding_id"] != finding_id:
+        raise ContractError("REVIEW_FINDING_LINK_INVALID")
+    if value["category"] != category or value["dimension"] != dimension:
+        raise ContractError("REVIEW_FINDING_LINK_INVALID")
+    decision = _require_string(value["decision"])
+    if decision not in ("confirmed", "dismissed"):
+        raise ContractError("UNKNOWN_REVIEW_DECISION")
+    severity = _require_string(value["severity"])
+    if severity not in SEVERITIES:
+        raise ContractError("UNKNOWN_SEVERITY")
+    hard_fail = _require_bool(value["hard_fail"])
+    mandatory_review = _require_bool(value["mandatory_review"])
+    if decision == "dismissed":
+        if severity != "none" or hard_fail or mandatory_review:
+            raise ContractError("FINDING_REVIEW_OUTCOME_INVALID")
+    else:
+        if severity == "none":
+            raise ContractError("FINDING_REVIEW_OUTCOME_INVALID")
+        if category in CRITICAL_CATEGORIES and (
+            severity != "critical" or not hard_fail or not mandatory_review
+        ):
+            raise ContractError("CRITICAL_SEVERITY_REQUIRED")
+        if severity == "critical" and not hard_fail:
+            raise ContractError("FINDING_REVIEW_OUTCOME_INVALID")
+        if (severity in ("high", "critical") or hard_fail) and not mandatory_review:
+            raise ContractError("FINDING_REVIEW_OUTCOME_INVALID")
+    return decision, severity, hard_fail, mandatory_review
+
+
 def _validate_findings(
     value: Any,
     adjudications_value: Any,
@@ -2680,16 +2830,23 @@ def _validate_findings(
         severity = _require_string(finding["severity"])
         if severity not in SEVERITIES:
             raise ContractError("UNKNOWN_SEVERITY")
-        if category in CRITICAL_CATEGORIES and severity != "critical":
-            raise ContractError("CRITICAL_SEVERITY_REQUIRED")
+        top_level_outcome = (
+            severity,
+            _require_bool(finding["hard_fail"]),
+            _require_bool(finding["mandatory_review"]),
+        )
         if (
             category == "critical_false_accept"
             and results[result_id]["editorial_status"] != "editorially_approved"
         ):
             raise ContractError("CRITICAL_FALSE_ACCEPT_STATE_INVALID")
+        if not results[result_id]["has_output"]:
+            raise ContractError("CONTENT_EVIDENCE_WITHOUT_OUTPUT")
         human_reviewers: List[str] = []
         human_review_ids: List[str] = []
         compromised_reviewers: Set[str] = set()
+        descriptive_outcomes: List[Tuple[str, str, bool, bool]] = []
+        human_outcomes: List[Tuple[str, str, bool, bool]] = []
         model_review_count = 0
         for raw_review in _require_list(finding["reviews"]):
             review = _require_object(
@@ -2697,6 +2854,12 @@ def _validate_findings(
                 _REVIEW_FIELDS,
             )
             review_id = registry.define(review["review_id"], "review")
+            outcome = _validate_finding_outcome(
+                review,
+                finding_id=finding_id,
+                category=category,
+                dimension=dimension,
+            )
             role = _require_string(review["reviewer_role"])
             reviewer_id = registry.reviewer(review["reviewer_id"], role)
             credit = _require_string(review["review_credit"])
@@ -2738,6 +2901,7 @@ def _validate_findings(
                     primary_credit = True
                     human_reviewers.append(reviewer_id)
                     human_review_ids.append(review_id)
+                    human_outcomes.append(outcome)
                 elif evidence_tier == "compromised_primary":
                     if (
                         stage != "initial"
@@ -2757,14 +2921,12 @@ def _validate_findings(
                         or mapping_generation != results[result_id]["mapping_generation"]
                     ):
                         raise ContractError("BLINDING_SECONDARY_SCOPE_INVALID")
+                    descriptive_outcomes.append(outcome)
                 else:
                     raise ContractError("HUMAN_EVIDENCE_TIER_INVALID")
                 registry.bind_reviewer_blinding(reviewer_id, reviewer_blinding)
-            decision = _require_string(review["decision"])
-            if decision not in ("confirmed", "dismissed"):
-                raise ContractError("UNKNOWN_REVIEW_DECISION")
             reviews_by_id[review_id] = {
-                "decision": decision,
+                "outcome": outcome,
                 "finding_id": finding_id,
                 "primary_credit": primary_credit,
                 "reviewer_id": reviewer_id,
@@ -2778,36 +2940,58 @@ def _validate_findings(
                 raise ContractError("BLINDING_FINDING_REVIEW_INVALID")
             if set(human_reviewers) & compromised_reviewers:
                 raise ContractError("BLINDING_REVIEWER_REUSE")
-        mandatory = severity in ("high", "critical") or category in CRITICAL_CATEGORIES
-        if mandatory and not human_reviewers:
+        mandatory = (
+            top_level_outcome[2]
+            or severity in ("high", "critical")
+            or category in CRITICAL_CATEGORIES
+        )
+        descriptive_only = results[result_id]["blinding_status"] == "self_identifying_output"
+        if not descriptive_only and not human_reviewers:
             if model_review_count:
                 raise ContractError("MODEL_REVIEW_NOT_HUMAN")
-            raise ContractError("MANDATORY_HUMAN_EVIDENCE_MISSING")
-        if severity == "critical" or category in CRITICAL_CATEGORIES:
+            if mandatory:
+                raise ContractError("MANDATORY_HUMAN_EVIDENCE_MISSING")
+            raise ContractError("FINDING_REVIEW_OUTCOME_MISSING")
+        if descriptive_only and not descriptive_outcomes:
+            if model_review_count:
+                raise ContractError("MODEL_REVIEW_NOT_HUMAN")
+            raise ContractError("FINDING_REVIEW_OUTCOME_MISSING")
+        if not descriptive_only and (
+            severity == "critical" or category in CRITICAL_CATEGORIES
+        ):
             if len(human_reviewers) != len(set(human_reviewers)):
                 raise ContractError("DUPLICATE_CRITICAL_REVIEWER")
             if len(human_reviewers) < 2:
                 raise ContractError("CRITICAL_REVIEW_COUNT_INSUFFICIENT")
             if len(human_reviewers) != 2:
                 raise ContractError("CRITICAL_REVIEW_COUNT_INVALID")
-        initial_decisions = {
-            reviews_by_id[review_id]["decision"]
-            for review_id in reviews_by_id
-            if reviews_by_id[review_id]["finding_id"] == finding_id
-            and reviews_by_id[review_id]["primary_credit"]
-        }
-        disagreement = len(initial_decisions) > 1
+        elif len(human_review_ids) > 2:
+            raise ContractError("FINDING_INITIAL_REVIEW_COUNT_INVALID")
+        initial_outcomes = set(human_outcomes)
+        disagreement = len(initial_outcomes) > 1
         if disagreement and len(human_review_ids) != 2:
             raise ContractError("ADJUDICATION_LINK_INVALID")
+        final_outcome: Optional[Tuple[str, str, bool, bool]]
+        if disagreement:
+            final_outcome = None
+        elif initial_outcomes:
+            final_outcome = next(iter(initial_outcomes))
+        else:
+            final_outcome = descriptive_outcomes[0]
+            if any(outcome != final_outcome for outcome in descriptive_outcomes[1:]):
+                raise ContractError("FINDING_REVIEW_OUTCOME_INVALID")
         findings_by_id[finding_id] = {
             "category": category,
-            "confirmed": not initial_decisions or initial_decisions == {"confirmed"},
+            "confirmed": False,
             "dimension": dimension,
             "disagreement": disagreement,
+            "final_outcome": final_outcome,
             "human_review_ids": frozenset(human_review_ids),
             "human_reviewer_ids": frozenset(human_reviewers),
             "result_id": result_id,
             "severity": severity,
+            "top_level_outcome": top_level_outcome,
+            "descriptive_only": descriptive_only,
         }
 
     adjudicated: Set[str] = set()
@@ -2831,7 +3015,7 @@ def _validate_findings(
             for review in linked
         ):
             raise ContractError("ADJUDICATION_LINK_INVALID")
-        if {review["decision"] for review in linked} != {"confirmed", "dismissed"}:
+        if len({review["outcome"] for review in linked}) != 2:
             raise ContractError("ADJUDICATION_LINK_INVALID")
         if set(review_ids) != finding["human_review_ids"]:
             raise ContractError("ADJUDICATION_LINK_INVALID")
@@ -2851,10 +3035,13 @@ def _validate_findings(
         registry.bind_reviewer_blinding(reviewer_id, "never_unblinded")
         if reviewer_id in finding["human_reviewer_ids"]:
             raise ContractError("ADJUDICATOR_NOT_DISTINCT")
-        decision = _require_string(adjudication["decision"])
-        if decision not in ("confirmed", "dismissed"):
-            raise ContractError("UNKNOWN_REVIEW_DECISION")
-        finding["confirmed"] = decision == "confirmed"
+        outcome = _validate_finding_outcome(
+            adjudication,
+            finding_id=finding_id,
+            category=finding["category"],
+            dimension=finding["dimension"],
+        )
+        finding["final_outcome"] = outcome
         adjudicated.add(finding_id)
         review_count += 1
     if any(
@@ -2864,6 +3051,18 @@ def _validate_findings(
         raise ContractError("ADJUDICATION_REQUIRED")
 
     findings = list(findings_by_id.values())
+    for finding in findings:
+        final_outcome = finding["final_outcome"]
+        if final_outcome is None:
+            raise ContractError("ADJUDICATION_REQUIRED")
+        if finding["top_level_outcome"] != final_outcome[1:]:
+            raise ContractError("FINDING_FINAL_OUTCOME_MISMATCH")
+        finding["confirmed"] = (
+            not finding["descriptive_only"] and final_outcome[0] == "confirmed"
+        )
+        finding["severity"] = final_outcome[1]
+        finding["hard_fail"] = final_outcome[2]
+        finding["mandatory_review"] = final_outcome[3]
     for finding in findings:
         if finding["category"] != "critical_false_accept" or not finding["confirmed"]:
             continue
@@ -2881,6 +3080,8 @@ def _validate_findings(
     critical_count = sum(
         finding["confirmed"]
         and (
+            finding["hard_fail"]
+            or
             finding["severity"] == "critical"
             or finding["category"] in CRITICAL_CATEGORIES
         )
@@ -2994,7 +3195,7 @@ def _validate_human_ground_truth(
     stable_pairs: Dict[Tuple[str, str], frozenset] = {}
     for result_id, result in results.items():
         sample = samples[result["sample_id"]]
-        has_output = result["terminal_status"] in ("blinding_failed", "success")
+        has_output = result["has_output"]
         result_rows = [
             row
             for key, rows in rows_by_key.items()
@@ -3117,6 +3318,7 @@ def _validate_human_ground_truth(
                     ],
                     "second": ordered_initials[1]["ordinal_score"],
                     "source_generation_id": sample["source_generation_id"],
+                    "split": sample["split"],
                     "stratum": sample["stratum"],
                 }
             )
@@ -3150,7 +3352,11 @@ def _validate_acceptance(
     risky_results = {
         finding["result_id"]
         for finding in findings
-        if finding["confirmed"] and finding["severity"] in ("high", "critical")
+        if finding["confirmed"]
+        and (
+            finding["hard_fail"]
+            or finding["severity"] in ("high", "critical")
+        )
     }
     false_accept_results = {
         finding["result_id"]
@@ -3416,11 +3622,11 @@ def validate_document(document: Any) -> Dict[str, int]:
         samples,
         agreement_rows,
     )
-    agreement_scopes: Dict[Tuple[str, str, str, str], List[Dict[str, Any]]] = {}
+    agreement_scopes: Dict[Tuple[str, str, str, str, str], List[Dict[str, Any]]] = {}
     for row in agreement_rows:
         scope = tuple(
             row[field]
-            for field in ("candidate", "profile", "stratum", "dimension")
+            for field in ("candidate", "profile", "split", "stratum", "dimension")
         )
         agreement_scopes.setdefault(scope, []).append(row)
     for rows in agreement_scopes.values():
@@ -3439,6 +3645,7 @@ def validate_document(document: Any) -> Dict[str, int]:
         (
             results[finding["result_id"]]["candidate_id"],
             results[finding["result_id"]]["profile_version"],
+            samples[results[finding["result_id"]]["sample_id"]]["split"],
             samples[results[finding["result_id"]]["sample_id"]][
                 "source_generation_id"
             ],

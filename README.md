@@ -10,6 +10,13 @@ Production-реализация ещё не начата. Персональны
 
 После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Сейчас M1B protocol находится under review: `M1B: NOT_EVALUATED`, feasibility verdict отсутствует и benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
 
+Текущая synthetic proposal identity — protocol v4/generation 104 и analysis
+policy v4/generation 104. Она закрывает tuning/holdout pooling в decision-grade
+statistics, сохраняет reviewer-specific finding outcomes и запрещает content
+review отсутствующего output. Synthetic corpus bytes не менялись: corpus
+v3/generation 304 остаётся тем же. Это contract hardening, а не запуск M1B-1 и
+не quality verdict.
+
 ## Контракт MVP
 
 - один владелец, один текущий Mac и выбранные игровые наборы модов;

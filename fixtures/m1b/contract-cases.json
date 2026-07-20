@@ -1,24 +1,24 @@
 {
-  "schema": "m1b-synthetic-contract-cases-v3",
+  "schema": "m1b-synthetic-contract-cases-v4",
   "base_document": {
-    "schema_version": "m1b-synthetic-contract-v3",
+    "schema_version": "m1b-synthetic-contract-v4",
     "definition_bundle": {
       "components": [
         {
           "acceptance_state": "proposed",
-          "definition": "{\"assignment_tuple\":[\"candidate_id\",\"sample_id\",\"profile_version\",\"profile_generation\",\"experiment_lane\",\"attempt_stage\",\"attempt_index\"],\"benchmark_states\":[[false,\"partial_synthetic_conformance\"],[true,\"complete_benchmark\"]],\"document_schema\":\"m1b-synthetic-contract-v3\",\"m1b0_complete_state\":\"always_rejected_PARTIAL_REPORT_CANNOT_BE_COMPLETE\",\"partial_primary_human_evidence\":\"forbidden\",\"partial_secondary_exception\":\"self_identifying_output_secondary_unblinded_only\",\"protocol_generation\":103,\"root_fields\":[\"adjudications\",\"aggregate_report\",\"benchmark_state\",\"candidate_profiles\",\"conformance_results\",\"context_limit_binding\",\"corpus\",\"coverage\",\"definition_bundle\",\"findings\",\"human_ground_truth\",\"implementation_identity\",\"protocol\",\"provider_policy\",\"request_boundary\",\"schema_version\"]}",
-          "generation": 103,
+          "definition": "{\"assignment_tuple\":[\"candidate_id\",\"sample_id\",\"profile_version\",\"profile_generation\",\"experiment_lane\",\"attempt_stage\",\"attempt_index\"],\"benchmark_states\":[[false,\"partial_synthetic_conformance\"],[true,\"complete_benchmark\"]],\"document_schema\":\"m1b-synthetic-contract-v4\",\"m1b0_complete_state\":\"always_rejected_PARTIAL_REPORT_CANNOT_BE_COMPLETE\",\"partial_primary_human_evidence\":\"forbidden\",\"partial_secondary_exception\":\"self_identifying_output_secondary_unblinded_only\",\"protocol_generation\":104,\"root_fields\":[\"adjudications\",\"aggregate_report\",\"benchmark_state\",\"candidate_profiles\",\"conformance_results\",\"context_limit_binding\",\"corpus\",\"coverage\",\"definition_bundle\",\"findings\",\"human_ground_truth\",\"implementation_identity\",\"protocol\",\"provider_policy\",\"request_boundary\",\"schema_version\"]}",
+          "generation": 104,
           "kind": "benchmark_contract",
-          "sha256": "e65d2776085a868b50986355fc2f5db5f426a020165ce4c11d05c2a1fe36f76c",
-          "version": "m1b-benchmark-contract-v3"
+          "sha256": "6e3b9bfbaaef3793dd1a84ed5a6c37b8a249be4de5e2b889c13e84b83a15a9e1",
+          "version": "m1b-benchmark-contract-v4"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"accounting_fields\":[\"cold_latency_observation_count\",\"fallback_attempt_count\",\"human_fallback_count\",\"initial_attempt_count\",\"memory_observation_count\",\"model_call_count\",\"model_fallback_count\",\"repair_attempt_count\",\"repair_failure_count\",\"repair_success_count\",\"retry_attempt_count\",\"terminal_failure_count\",\"warm_latency_observation_count\"],\"adjudication_fields\":[\"adjudication_id\",\"decision\",\"evidence_tier\",\"finding_id\",\"initial_review_ids\",\"mapping_generation\",\"reviewer_blinding\",\"reviewer_id\",\"reviewer_role\"],\"atom_fields\":[\"atom_id\",\"kind\",\"occurrence_id\",\"occurrence_index\",\"position_end\",\"position_policy\",\"position_start\",\"provenance\",\"synthetic_value\"],\"blinding_statuses\":[\"external_mapping_leak\",\"not_observed\",\"passed\",\"self_identifying_output\"],\"controlled_failure_codes\":[\"CONTEXT_OVERFLOW_CONTROLLED\"],\"count_keys\":[\"candidates\",\"findings\",\"holdout_samples\",\"human_ground_truth\",\"results\",\"reviews\",\"samples\",\"tuning_samples\"],\"coverage_fields\":[\"declared_primary_assignment_count\",\"per_candidate\",\"per_stratum\",\"required_primary_assignment_count\"],\"dimension_statuses\":[\"blinding_failed\",\"human_fail\",\"human_pass\",\"not_applicable\",\"not_evaluated\",\"synthetic_conformant\",\"synthetic_nonconformant\"],\"dimensions\":[\"schema_atom_stability\",\"meaning_accuracy\",\"terminology_lore\",\"literary_russian\",\"context_voice_style\"],\"editorial_statuses\":[\"editorially_approved\",\"editorially_rejected\",\"not_evaluated\"],\"finding_fields\":[\"category\",\"dimension\",\"finding_id\",\"result_id\",\"reviews\",\"severity\"],\"human_ground_truth_fields\":[\"adjudicates\",\"applicability_reason\",\"dimension\",\"evidence_tier\",\"ground_truth_id\",\"mapping_generation\",\"ordinal_score\",\"result_id\",\"review_stage\",\"reviewer_blinding\",\"reviewer_id\",\"reviewer_role\",\"status\"],\"result_fields\":[\"accounting\",\"attempt_index\",\"attempt_stage\",\"blinding_status\",\"candidate_id\",\"corpus_generation\",\"dimension_records\",\"editorial_status\",\"experiment_lane\",\"failure_code\",\"initial_result_id\",\"mapping_generation\",\"observed_atoms\",\"profile_generation\",\"profile_version\",\"protocol_generation\",\"result_id\",\"sample_id\",\"technical_conformance\",\"terminal_status\"],\"review_fields\":[\"decision\",\"evidence_tier\",\"mapping_generation\",\"review_credit\",\"review_id\",\"review_stage\",\"reviewer_blinding\",\"reviewer_id\",\"reviewer_role\"],\"sample_fields\":[\"expected_atoms\",\"risk_class\",\"sample_id\",\"source_generation_id\",\"source_unit_cluster_id\",\"stratum\"],\"schema_version\":\"m1b-synthetic-output-v3\",\"technical_conformance\":[\"not_observed\",\"synthetic_conformant\",\"synthetic_nonconformant\"],\"terminal_statuses\":[\"blinding_failed\",\"controlled_failure\",\"not_applicable\",\"success\"]}",
-          "generation": 103,
+          "definition": "{\"accounting_fields\":[\"cold_latency_observation_count\",\"fallback_attempt_count\",\"human_fallback_count\",\"initial_attempt_count\",\"memory_observation_count\",\"model_call_count\",\"model_fallback_count\",\"repair_attempt_count\",\"repair_failure_count\",\"repair_success_count\",\"retry_attempt_count\",\"terminal_failure_count\",\"warm_latency_observation_count\"],\"adjudication_fields\":[\"adjudication_id\",\"category\",\"decision\",\"dimension\",\"evidence_tier\",\"finding_id\",\"hard_fail\",\"initial_review_ids\",\"mandatory_review\",\"mapping_generation\",\"reviewer_blinding\",\"reviewer_id\",\"reviewer_role\",\"severity\"],\"atom_fields\":[\"atom_id\",\"kind\",\"occurrence_id\",\"occurrence_index\",\"position_end\",\"position_policy\",\"position_start\",\"provenance\",\"synthetic_value\"],\"blinding_statuses\":[\"external_mapping_leak\",\"not_observed\",\"passed\",\"self_identifying_output\"],\"controlled_failure_codes\":[\"CONTEXT_OVERFLOW_CONTROLLED\"],\"count_keys\":[\"candidates\",\"findings\",\"holdout_samples\",\"human_ground_truth\",\"results\",\"reviews\",\"samples\",\"tuning_samples\"],\"coverage_fields\":[\"declared_primary_assignment_count\",\"per_candidate\",\"per_stratum\",\"required_primary_assignment_count\"],\"dimension_statuses\":[\"blinding_failed\",\"human_fail\",\"human_pass\",\"not_applicable\",\"not_evaluated\",\"synthetic_conformant\",\"synthetic_nonconformant\"],\"dimensions\":[\"schema_atom_stability\",\"meaning_accuracy\",\"terminology_lore\",\"literary_russian\",\"context_voice_style\"],\"editorial_statuses\":[\"editorially_approved\",\"editorially_rejected\",\"not_evaluated\"],\"finding_fields\":[\"category\",\"dimension\",\"finding_id\",\"hard_fail\",\"mandatory_review\",\"result_id\",\"reviews\",\"severity\"],\"human_ground_truth_fields\":[\"adjudicates\",\"applicability_reason\",\"dimension\",\"evidence_tier\",\"ground_truth_id\",\"mapping_generation\",\"ordinal_score\",\"result_id\",\"review_stage\",\"reviewer_blinding\",\"reviewer_id\",\"reviewer_role\",\"status\"],\"result_fields\":[\"accounting\",\"attempt_index\",\"attempt_stage\",\"blinding_status\",\"candidate_id\",\"corpus_generation\",\"dimension_records\",\"editorial_status\",\"experiment_lane\",\"failure_code\",\"initial_result_id\",\"mapping_generation\",\"observed_atoms\",\"profile_generation\",\"profile_version\",\"protocol_generation\",\"result_id\",\"sample_id\",\"technical_conformance\",\"terminal_status\"],\"review_fields\":[\"category\",\"decision\",\"dimension\",\"evidence_tier\",\"finding_id\",\"hard_fail\",\"mandatory_review\",\"mapping_generation\",\"review_credit\",\"review_id\",\"review_stage\",\"reviewer_blinding\",\"reviewer_id\",\"reviewer_role\",\"severity\"],\"sample_fields\":[\"expected_atoms\",\"risk_class\",\"sample_id\",\"source_generation_id\",\"source_unit_cluster_id\",\"stratum\"],\"schema_version\":\"m1b-synthetic-output-v4\",\"technical_conformance\":[\"not_observed\",\"synthetic_conformant\",\"synthetic_nonconformant\"],\"terminal_statuses\":[\"blinding_failed\",\"controlled_failure\",\"not_applicable\",\"success\"]}",
+          "generation": 104,
           "kind": "output_schema",
-          "sha256": "71a144122c41d0173637f2bd7cb3ed58caeda27b4fb4d4bb789e5c2f934cefd4",
-          "version": "m1b-synthetic-output-v3"
+          "sha256": "1be06166d50a33934c40f20916e28db70ce161cb7689defba924a826cb79afd7",
+          "version": "m1b-synthetic-output-v4"
         },
         {
           "acceptance_state": "proposed",
@@ -54,59 +54,59 @@
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"corpus_class\":\"synthetic\",\"corpus_generation\":304,\"corpus_version\":\"m1b-synthetic-corpus-v3\",\"publication\":\"synthetic_only\",\"raw_private_publication\":false,\"synthetic_corpus_framing\":\"m1b-synthetic-corpus-sha256-v1\",\"synthetic_corpus_sha256\":\"ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250\"}",
-          "generation": 103,
+          "definition": "{\"corpus_class\":\"synthetic\",\"corpus_generation\":304,\"corpus_version\":\"m1b-synthetic-corpus-v3\",\"decision_grade_split\":\"holdout\",\"publication\":\"synthetic_only\",\"raw_private_publication\":false,\"synthetic_corpus_framing\":\"m1b-synthetic-corpus-sha256-v1\",\"synthetic_corpus_sha256\":\"ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250\"}",
+          "generation": 104,
           "kind": "corpus_policy",
-          "sha256": "f5f3640cac5d63ba3e61aa59907544ebd14c4b50bef463b4ed7cedc1c1975952",
-          "version": "m1b-corpus-policy-v2"
+          "sha256": "83943902f422a4ebc00e4e3abb150f7f27496ff71a63b76c33b96eaa84a30ee4",
+          "version": "m1b-corpus-policy-v3"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"auto_eligible_strata\":[\"mechanics\",\"ui\"],\"related_variants_same_split\":true,\"risk_classes\":[\"auto_eligible_candidate\",\"critical_risk\",\"mandatory_human\"],\"source_cluster_generation_binding\":\"immutable_one_generation\",\"source_generation_identity\":\"opaque_local_mapping\",\"source_generation_within_stratum_collapse\":\"conservative_one_unit\",\"splits\":[\"tuning\",\"holdout\"],\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"]}",
-          "generation": 103,
+          "definition": "{\"auto_eligible_strata\":[\"mechanics\",\"ui\"],\"decision_grade_split\":\"holdout\",\"diagnostic_split\":\"tuning_separate_never_satisfies_holdout_gate\",\"related_variants_same_split\":true,\"risk_classes\":[\"auto_eligible_candidate\",\"critical_risk\",\"mandatory_human\"],\"source_cluster_generation_binding\":\"immutable_one_generation\",\"source_generation_identity\":\"opaque_local_mapping\",\"source_generation_within_stratum_collapse\":\"conservative_one_unit\",\"splits\":[\"holdout\",\"tuning\"],\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"]}",
+          "generation": 104,
           "kind": "split_policy",
-          "sha256": "229e7c4bcc6a40ee90c09919df256c6be0eac98c21cdc406197f59862b8d92d1",
-          "version": "m1b-split-policy-v2"
+          "sha256": "c6472164661c3672cd58d2f208cb61da30871301ca3761e77b0853f4ebc66e6e",
+          "version": "m1b-split-policy-v3"
         },
         {
           "acceptance_state": "proposed",
           "definition": "{\"endpoint_policy\":{\"forms\":[\"http://127.0.0.1:<1..65535>/api\",\"http://[::1]:<1..65535>/api\"],\"normalization\":false},\"provider_controls\":{\"auto_pull\":false,\"fallback\":false,\"numeric_loopback_only\":true,\"persistence_status\":\"not_probed\",\"proxy_routing\":false,\"redirects\":false,\"residency_status\":\"not_probed\"},\"request_boundary\":{\"allowed_request_fields\":[\"format\",\"keep_alive\",\"model\",\"options\",\"prompt\",\"stream\",\"think\"],\"context_overflow_policy\":\"controlled_failure\",\"context_reuse\":false,\"continuation_reuse\":false,\"conversation_reuse\":false,\"independent_request_per_sample\":true,\"thinking_trace_reuse\":false,\"truncation_policy\":\"controlled_failure\"},\"retry_limit\":0}",
-          "generation": 103,
+          "generation": 104,
           "kind": "generation_policy",
           "sha256": "a9fc7d94a890491945e141fb1e5eefd591d29200220d410991cc9fa4c955b7ce",
           "version": "m1b-generation-policy-v2"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"binding\":{\"blocker\":\"CONTEXT_LIMIT_BINDING_UNPROVEN\",\"boundary_canary_probe\":\"required_before_first_private_request\",\"input_limit_binding\":\"not_probed\",\"left_truncation_probe\":\"not_probed\",\"overflow_response_binding\":\"not_probed\",\"post_response_verification\":\"not_probed\",\"prompt_eval_count_binding\":\"not_probed\",\"right_truncation_probe\":\"not_probed\",\"status\":\"not_probed\",\"tokenizer_binding\":\"not_probed\"},\"controlled_overflow_result\":\"terminal_failure_zero_primary_success\",\"live_observation_before_binding\":\"forbidden\",\"silent_truncation\":\"forbidden\"}",
-          "generation": 103,
+          "definition": "{\"binding\":{\"blocker\":\"CONTEXT_LIMIT_BINDING_UNPROVEN\",\"boundary_canary_probe\":\"required_before_first_private_request\",\"input_limit_binding\":\"not_probed\",\"left_truncation_probe\":\"not_probed\",\"overflow_response_binding\":\"not_probed\",\"post_response_verification\":\"not_probed\",\"prompt_eval_count_binding\":\"not_probed\",\"right_truncation_probe\":\"not_probed\",\"status\":\"not_probed\",\"tokenizer_binding\":\"not_probed\"},\"controlled_overflow_content_evidence\":\"findings_reviews_and_human_ground_truth_forbidden\",\"controlled_overflow_result\":\"terminal_failure_zero_primary_success\",\"live_observation_before_binding\":\"forbidden\",\"not_applicable_content_evidence\":\"findings_reviews_and_human_ground_truth_forbidden\",\"silent_truncation\":\"forbidden\"}",
+          "generation": 104,
           "kind": "context_limit_policy",
-          "sha256": "0fbd5b90ca484e97ff550acf2c85b9d3af957c455bbdb54bda04990cf2e4146c",
-          "version": "m1b-context-limit-policy-v1"
+          "sha256": "c5e60400a7783c0635d34019d0cb32a3506080297e6f7bae82ce21e4457cc0e5",
+          "version": "m1b-context-limit-policy-v2"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"blinding_failure\":\"denominator_failure\",\"external_mapping_leak\":\"frozen_compromised_then_fresh_mapping_and_reviewers\",\"finding_review_provenance\":\"same_mapping_and_blinding_rules_as_ground_truth\",\"mapping\":\"private\",\"model_success_blinding_status\":\"passed_or_incident\",\"observed_blinding_state_model_call_count\":1,\"primary_dimension_failure_status\":\"blinding_failed\",\"regeneration\":\"forbidden_after_any_blinding_incident_without_chronology\",\"replacement_reviewers\":\"never_unblinded_humans\",\"reviewer_exposure_scope\":\"global_across_findings_adjudications_and_ground_truth\",\"self_identification\":\"result_failure_in_every_model_output_lane\",\"self_identification_model_call_count\":1,\"unblinded_review\":\"secondary_only\"}",
-          "generation": 103,
+          "definition": "{\"blinding_failure\":\"denominator_failure\",\"external_mapping_leak\":\"frozen_compromised_then_fresh_mapping_and_reviewers\",\"finding_initial_outcome\":\"immutable_reviewer_specific_severity_hard_fail_mandatory_review\",\"finding_review_provenance\":\"same_mapping_and_blinding_rules_as_ground_truth\",\"finding_top_level_outcome\":\"derived_from_matching_or_adjudicated_initial_outcome\",\"mapping\":\"private\",\"model_success_blinding_status\":\"passed_or_incident\",\"observed_blinding_state_model_call_count\":1,\"primary_dimension_failure_status\":\"blinding_failed\",\"regeneration\":\"forbidden_after_any_blinding_incident_without_chronology\",\"replacement_reviewers\":\"never_unblinded_humans\",\"reviewer_exposure_scope\":\"global_across_findings_adjudications_and_ground_truth\",\"self_identification\":\"result_failure_in_every_model_output_lane\",\"self_identification_model_call_count\":1,\"unblinded_review\":\"secondary_only\"}",
+          "generation": 104,
           "kind": "randomization_blinding_policy",
-          "sha256": "226f49c053dc56dcaa0f92a78a54387f1c9954fef0f082abde877d7cc7a48354",
-          "version": "m1b-randomization-blinding-policy-v2"
+          "sha256": "ce8ea00e77c5650d7e6dc4f105f55c084a90dda6e8f366ecfffd18a336781f34",
+          "version": "m1b-randomization-blinding-policy-v3"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"critical_false_accept_definition\":\"editorially_approved_and_confirmed_underlying_critical_same_result_dimension\",\"dimensions\":[\"schema_atom_stability\",\"meaning_accuracy\",\"terminology_lore\",\"literary_russian\",\"context_voice_style\"],\"finding_adjudication\":\"exact_two_conflicting_initial_ids_distinct_third_human_drives_final_decision\",\"finding_dimension_mapping\":{\"atom_duplicate\":[\"schema_atom_stability\"],\"atom_extra\":[\"schema_atom_stability\"],\"atom_kind_mutation\":[\"schema_atom_stability\"],\"atom_missing\":[\"schema_atom_stability\"],\"atom_multiplicity_mutation\":[\"schema_atom_stability\"],\"atom_position_mutation\":[\"schema_atom_stability\"],\"atom_value_mutation\":[\"schema_atom_stability\"],\"context_voice_style_error\":[\"context_voice_style\"],\"critical_false_accept\":[\"context_voice_style\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"literary_error\":[\"literary_russian\"],\"lore_error\":[\"terminology_lore\"],\"meaning_inversion\":[\"meaning_accuracy\"],\"negation_error\":[\"meaning_accuracy\"],\"number_error\":[\"meaning_accuracy\"],\"schema_violation\":[\"schema_atom_stability\"],\"terminology_error\":[\"terminology_lore\"]},\"finding_review_evidence_tiers\":[\"compromised_primary\",\"non_human\",\"primary_blinded\",\"secondary_unblinded\"],\"human_status_requires_ground_truth\":true,\"initial_hgt_reviewers_per_dimension\":2,\"missing_ground_truth_status\":\"not_evaluated\",\"ordinal_categories\":[0,1,2,3,4],\"ordinal_pass_minimum\":3,\"reviewer_roles\":[\"human_reviewer\",\"model_reviewer\"],\"safely_caught_critical_defect_is_false_accept\":false,\"severities\":[\"none\",\"low\",\"medium\",\"high\",\"critical\"]}",
-          "generation": 103,
+          "definition": "{\"critical_false_accept_definition\":\"editorially_approved_and_confirmed_underlying_critical_same_result_dimension\",\"dimensions\":[\"schema_atom_stability\",\"meaning_accuracy\",\"terminology_lore\",\"literary_russian\",\"context_voice_style\"],\"finding_adjudication\":\"exact_two_conflicting_initial_ids_distinct_third_human_drives_final_outcome\",\"finding_dimension_mapping\":{\"atom_duplicate\":[\"schema_atom_stability\"],\"atom_extra\":[\"schema_atom_stability\"],\"atom_kind_mutation\":[\"schema_atom_stability\"],\"atom_missing\":[\"schema_atom_stability\"],\"atom_multiplicity_mutation\":[\"schema_atom_stability\"],\"atom_position_mutation\":[\"schema_atom_stability\"],\"atom_value_mutation\":[\"schema_atom_stability\"],\"context_voice_style_error\":[\"context_voice_style\"],\"critical_false_accept\":[\"context_voice_style\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"literary_error\":[\"literary_russian\"],\"lore_error\":[\"terminology_lore\"],\"meaning_inversion\":[\"meaning_accuracy\"],\"negation_error\":[\"meaning_accuracy\"],\"number_error\":[\"meaning_accuracy\"],\"schema_violation\":[\"schema_atom_stability\"],\"terminology_error\":[\"terminology_lore\"]},\"finding_outcome_disagreement\":\"any_decision_severity_hard_fail_or_mandatory_review_difference\",\"finding_outcome_fields\":[\"decision\",\"severity\",\"hard_fail\",\"mandatory_review\"],\"finding_review_evidence_tiers\":[\"compromised_primary\",\"non_human\",\"primary_blinded\",\"secondary_unblinded\"],\"human_status_requires_ground_truth\":true,\"initial_hgt_reviewers_per_dimension\":2,\"missing_ground_truth_status\":\"not_evaluated\",\"missing_reviewer_outcome\":\"reject\",\"ordinal_categories\":[0,1,2,3,4],\"ordinal_pass_minimum\":3,\"reviewer_roles\":[\"human_reviewer\",\"model_reviewer\"],\"safely_caught_critical_defect_is_false_accept\":false,\"severities\":[\"none\",\"low\",\"medium\",\"high\",\"critical\"]}",
+          "generation": 104,
           "kind": "quality_rubric",
-          "sha256": "576d6e04834947a7b061815b4d1c47dd0be728a5bff71b8a7e3562fdc5ff6c62",
-          "version": "m1b-quality-rubric-v3"
+          "sha256": "420586666127356317a59f2a68c392da16f8464d72cd4be7fe4ed742abea0ed1",
+          "version": "m1b-quality-rubric-v4"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"accounting_fields\":[\"cold_latency_observation_count\",\"fallback_attempt_count\",\"human_fallback_count\",\"initial_attempt_count\",\"memory_observation_count\",\"model_call_count\",\"model_fallback_count\",\"repair_attempt_count\",\"repair_failure_count\",\"repair_success_count\",\"retry_attempt_count\",\"terminal_failure_count\",\"warm_latency_observation_count\"],\"cold_warm_separate\":true,\"human_fallback_model_call_count\":0,\"model_output_success_model_call_count\":1,\"not_applicable_state\":\"not_observed_mapping0_zero_accounting_no_human\",\"provider_fallback_false_allows_declared_human_lane\":true,\"row_derived_accounting\":true,\"self_identification_terminal_status\":\"blinding_failed\",\"terminal_failure_in_denominator\":true}",
-          "generation": 103,
+          "definition": "{\"accounting_fields\":[\"cold_latency_observation_count\",\"fallback_attempt_count\",\"human_fallback_count\",\"initial_attempt_count\",\"memory_observation_count\",\"model_call_count\",\"model_fallback_count\",\"repair_attempt_count\",\"repair_failure_count\",\"repair_success_count\",\"retry_attempt_count\",\"terminal_failure_count\",\"warm_latency_observation_count\"],\"cold_warm_separate\":true,\"human_fallback_model_call_count\":0,\"model_output_success_model_call_count\":1,\"no_output_content_evidence\":\"findings_reviews_and_ground_truth_forbidden\",\"not_applicable_state\":\"not_observed_mapping0_zero_accounting_no_human\",\"provider_fallback_false_allows_declared_human_lane\":true,\"row_derived_accounting\":true,\"self_identification_terminal_status\":\"blinding_failed\",\"terminal_failure_in_denominator\":true}",
+          "generation": 104,
           "kind": "measurement_policy",
-          "sha256": "62c875221334b675a7d5976ebc68268d2e51b4a04a4dcfe59aa6f47352734e6e",
-          "version": "m1b-measurement-policy-v2"
+          "sha256": "ad2d4d15249eaf0373726442a723affd8de91f156d3821678b44e1003664d2c4",
+          "version": "m1b-measurement-policy-v3"
         },
         {
           "acceptance_state": "proposed",
@@ -118,37 +118,37 @@
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"closed_schema\":true,\"component_framing\":\"m1b-length-framed-sha256-v1\",\"fixture_schema\":\"m1b-synthetic-contract-cases-v3\",\"json_integer_max\":9223372036854775807,\"json_integer_min\":-9223372036854775808,\"materialization_preencode_reserve_bytes\":4194304,\"materialization_work_accounting\":\"accepted_initial_compact_document_plus_each_accepted_post_patch_compact_document\",\"materialized_final_encoding\":\"reuse_last_budgeted_encoding\",\"max_fixture_patch_count\":256,\"max_input_bytes\":4194304,\"max_input_bytes_boundaries\":[\"fixture_manifest_file\",\"materialized_fixture_document\",\"standalone_document\"],\"max_materialization_work_bytes\":16777216,\"offline\":true,\"output_fields\":[\"codes\",\"counts\",\"status\"],\"strict_json\":{\"duplicate_keys\":\"reject\",\"floats\":\"reject\",\"nonfinite\":\"reject\",\"unicode\":\"strict_utf8_scalars\"}}",
-          "generation": 103,
+          "definition": "{\"closed_schema\":true,\"component_framing\":\"m1b-length-framed-sha256-v1\",\"fixture_schema\":\"m1b-synthetic-contract-cases-v4\",\"json_integer_max\":9223372036854775807,\"json_integer_min\":-9223372036854775808,\"materialization_preencode_reserve_bytes\":4194304,\"materialization_work_accounting\":\"accepted_initial_compact_document_plus_each_accepted_post_patch_compact_document\",\"materialized_final_encoding\":\"reuse_last_budgeted_encoding\",\"max_fixture_patch_count\":256,\"max_input_bytes\":4194304,\"max_input_bytes_boundaries\":[\"fixture_manifest_file\",\"materialized_fixture_document\",\"standalone_document\"],\"max_materialization_work_bytes\":16777216,\"offline\":true,\"output_fields\":[\"codes\",\"counts\",\"status\"],\"strict_json\":{\"duplicate_keys\":\"reject\",\"floats\":\"reject\",\"nonfinite\":\"reject\",\"unicode\":\"strict_utf8_scalars\"}}",
+          "generation": 104,
           "kind": "validator_policy",
-          "sha256": "695b62dc51eb1b40855ab1ef626409c131e69547c555214eb508ac91495f0aaf",
-          "version": "m1b-validator-policy-v3"
+          "sha256": "8adea154b4690db6780df3b0ba47c63dbffa20db671aa389c941040501e83d1c",
+          "version": "m1b-validator-policy-v4"
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"agreement\":{\"adjudicator_effect\":\"final_dimension_or_applicability_only_not_kappa_rating\",\"applicability_disagreement\":\"any_unilateral_source_blocks_agreement_gate_after_linked_adjudication\",\"applicable_source_unit\":\"source_generation_with_at_least_one_ordinal_applicable_pair\",\"both_not_applicable\":\"separate_applicability_agreement_count\",\"candidate_kappa_pooling\":\"forbidden\",\"candidate_profile_result_key\":[\"candidate\",\"profile\",\"stratum\",\"dimension\"],\"categories\":[0,1,2,3,4],\"contingency_estimator\":\"uniform_source_then_uniform_applicable_paired_row\",\"contingency_matrix\":\"O_ij=sum_s(D_sij)\",\"eligible_row_universe\":\"all_validator_linked_distinct_frozen_initial_pairs_in_scope\",\"exact_arithmetic\":\"rational\",\"formula\":\"(n*sum(q_ij*O_ij)-sum(q_ij*r_i*c_j))/(16*n*n-sum(q_ij*r_i*c_j))\",\"independent_unit_count\":\"source_generations_with_at_least_one_ordinal_applicable_pair\",\"input_fields\":[\"applicability_adjudication\",\"candidate\",\"dimension\",\"first\",\"initial_record_ids\",\"profile\",\"result_id\",\"reviewer_pair\",\"second\",\"source_generation_id\",\"stratum\"],\"logical_row_key\":[\"result_id\",\"dimension\"],\"minimum_n\":46,\"mixed_bilateral_not_applicable\":\"exclude_na_rows_and_weight_actual_ordinal_pairs_to_source_mass_one\",\"point_and_every_delete_one_minimum\":[3,5],\"quadratic_weight_denominator\":16,\"quadratic_weight_formula\":\"q_ij=16-(i-j)^2\",\"ratings_input\":\"validator_linked_frozen_initial_ground_truth_records\",\"ratings_materializer\":\"inside_human_ground_truth_validator_no_report_supplied_scores\",\"raw_row_helper_scope\":\"public_synthetic_math_vectors_only_not_decision_evidence\",\"record_order\":\"ascending_raw_reviewer_uuid_then_linked_record\",\"robustness\":\"minimum_delete_one_whole_source_generation_kappa\",\"robustness_interpretation\":\"influence_check_not_sampling_confidence_interval\",\"source_generation_pair_mass\":\"each_actual_pair_contributes_1/applicable_pair_count_for_source\",\"source_matrix\":\"D_sij=count_sij/applicable_pair_count_for_source\",\"stable_pair_key\":[\"stratum\",\"dimension\"],\"statuses\":[\"AGREEMENT_APPLICABILITY_DISAGREEMENT\",\"AGREEMENT_INSUFFICIENT_UNITS\",\"AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT\",\"AGREEMENT_POINT_BELOW_FLOOR\",\"AGREEMENT_UNCERTAINTY_UNDEFINED\",\"AGREEMENT_ROBUSTNESS_BELOW_FLOOR\",\"AGREEMENT_PASS\"],\"threshold_denominator\":5,\"threshold_numerator\":3,\"undefined\":\"fail_closed\",\"unilateral_not_applicable\":\"linked_adjudication_then_source_excluded_and_agreement_gate_blocked\"},\"candidate_claims_reported_separately\":true,\"candidate_family_alpha\":[1,60],\"candidate_family_count\":3,\"cluster_aware\":true,\"critical_false_accept_ceiling\":[1,50],\"critical_false_accept_estimator\":\"event_if_any_confirmed_cfa_in_source_generation_class\",\"critical_false_accept_input_fields\":[\"candidate\",\"event\",\"profile\",\"risk_class\",\"source_generation_id\"],\"critical_false_accept_minimum_n\":203,\"critical_false_accept_statistical_unit\":[\"candidate\",\"profile\",\"risk_class\",\"source_generation_id\"],\"critical_false_accept_zero_event_upper_bound\":\"1-(1/60)^(1/n)\",\"decision_method\":\"bonferroni_candidates_conjunctive_strata\",\"dimension_confidence_floors\":{\"context_voice_style\":[4,5],\"literary_russian\":[4,5],\"meaning_accuracy\":[9,10],\"terminology_lore\":[17,20]},\"family_wise_alpha\":[1,20],\"marginal_95_interval\":\"descriptive_only_not_selection_evidence\",\"minimum_n_per_dimension_floor\":{\"context_voice_style\":22,\"literary_russian\":22,\"meaning_accuracy\":46,\"terminology_lore\":30},\"naive_pooled_overall_interval\":\"forbidden\",\"overall_summary\":\"descriptive_unique_sources_only\",\"owner_decision_required\":true,\"per_stratum_all_success_planning_rule\":\"floor^n<=1/120\",\"per_stratum_boundary_vectors\":{\"lower_successes_0\":[0,1],\"upper_successes_n\":[1,1]},\"per_stratum_interval\":\"two_sided_exact_clopper_pearson\",\"per_stratum_lower_bound\":\"0_if_successes=0_else_beta_quantile(1/120;successes,n-successes+1)\",\"per_stratum_statistical_unit\":[\"candidate\",\"profile\",\"dimension_or_gate\",\"stratum\",\"source_generation_id\"],\"per_stratum_upper_bound\":\"1_if_successes=n_else_beta_quantile(119/120;successes+1,n-successes)\",\"stable_reviewer_pairs\":true,\"statistical_dimension_or_gate_values\":[\"context_voice_style\",\"critical_false_accept\",\"editorial_approval\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"statistical_outcome\":{\"input_fields\":[\"applicable\",\"candidate\",\"dimension_or_gate\",\"profile\",\"source_generation_id\",\"stratum\",\"success\"],\"no_applicable_outcome\":\"STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME\",\"not_applicable\":\"excluded_from_denominator\",\"overall_gate\":\"forbidden\",\"overall_source_outcome\":\"all_applicable_rows_across_strata_success\",\"source_stratum_outcome\":\"all_applicable_rows_success\"},\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"],\"stratum_gate\":\"intersection_union_all_required_strata\",\"two_sided_candidate_tail_alpha\":[1,120]}",
-          "generation": 103,
+          "definition": "{\"agreement\":{\"adjudicator_effect\":\"final_dimension_or_applicability_only_not_kappa_rating\",\"applicability_disagreement\":\"any_unilateral_source_blocks_agreement_gate_after_linked_adjudication\",\"applicable_source_unit\":\"source_generation_with_at_least_one_ordinal_applicable_pair\",\"both_not_applicable\":\"separate_applicability_agreement_count\",\"candidate_kappa_pooling\":\"forbidden\",\"candidate_profile_result_key\":[\"candidate\",\"profile\",\"split\",\"stratum\",\"dimension\"],\"categories\":[0,1,2,3,4],\"contingency_estimator\":\"uniform_source_then_uniform_applicable_paired_row\",\"contingency_matrix\":\"O_ij=sum_s(D_sij)\",\"decision_grade_helper\":\"agreement_gate_holdout_only\",\"diagnostic_helper\":\"agreement_diagnostic_split_scoped\",\"eligible_row_universe\":\"all_validator_linked_distinct_frozen_initial_pairs_in_scope\",\"exact_arithmetic\":\"rational\",\"formula\":\"(n*sum(q_ij*O_ij)-sum(q_ij*r_i*c_j))/(16*n*n-sum(q_ij*r_i*c_j))\",\"independent_unit_count\":\"source_generations_with_at_least_one_ordinal_applicable_pair\",\"input_fields\":[\"applicability_adjudication\",\"candidate\",\"dimension\",\"first\",\"initial_record_ids\",\"profile\",\"result_id\",\"reviewer_pair\",\"second\",\"source_generation_id\",\"split\",\"stratum\"],\"logical_row_key\":[\"result_id\",\"dimension\"],\"minimum_n\":46,\"mixed_bilateral_not_applicable\":\"exclude_na_rows_and_weight_actual_ordinal_pairs_to_source_mass_one\",\"point_and_every_delete_one_minimum\":[3,5],\"quadratic_weight_denominator\":16,\"quadratic_weight_formula\":\"q_ij=16-(i-j)^2\",\"ratings_input\":\"validator_linked_frozen_initial_ground_truth_records\",\"ratings_materializer\":\"inside_human_ground_truth_validator_no_report_supplied_scores\",\"raw_row_helper_scope\":\"public_synthetic_math_vectors_only_not_decision_evidence\",\"record_order\":\"ascending_raw_reviewer_uuid_then_linked_record\",\"robustness\":\"minimum_delete_one_whole_source_generation_kappa\",\"robustness_interpretation\":\"influence_check_not_sampling_confidence_interval\",\"source_generation_pair_mass\":\"each_actual_pair_contributes_1/applicable_pair_count_for_source\",\"source_matrix\":\"D_sij=count_sij/applicable_pair_count_for_source\",\"split_scope\":\"single_closed_split_no_pooling\",\"stable_pair_key\":[\"stratum\",\"dimension\"],\"statuses\":[\"AGREEMENT_APPLICABILITY_DISAGREEMENT\",\"AGREEMENT_INSUFFICIENT_UNITS\",\"AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT\",\"AGREEMENT_POINT_BELOW_FLOOR\",\"AGREEMENT_UNCERTAINTY_UNDEFINED\",\"AGREEMENT_ROBUSTNESS_BELOW_FLOOR\",\"AGREEMENT_PASS\"],\"threshold_denominator\":5,\"threshold_numerator\":3,\"undefined\":\"fail_closed\",\"unilateral_not_applicable\":\"linked_adjudication_then_source_excluded_and_agreement_gate_blocked\"},\"candidate_claims_reported_separately\":true,\"candidate_family_alpha\":[1,60],\"candidate_family_count\":3,\"cluster_aware\":true,\"critical_false_accept_ceiling\":[1,50],\"critical_false_accept_decision_grade_split\":\"holdout\",\"critical_false_accept_estimator\":\"event_if_any_confirmed_cfa_in_source_generation_class\",\"critical_false_accept_input_fields\":[\"candidate\",\"event\",\"profile\",\"risk_class\",\"source_generation_id\",\"split\"],\"critical_false_accept_minimum_n\":203,\"critical_false_accept_statistical_unit\":[\"candidate\",\"profile\",\"split\",\"risk_class\",\"source_generation_id\"],\"critical_false_accept_zero_event_upper_bound\":\"1-(1/60)^(1/n)\",\"decision_method\":\"bonferroni_candidates_conjunctive_strata\",\"dimension_confidence_floors\":{\"context_voice_style\":[4,5],\"literary_russian\":[4,5],\"meaning_accuracy\":[9,10],\"terminology_lore\":[17,20]},\"family_wise_alpha\":[1,20],\"marginal_95_interval\":\"descriptive_only_not_selection_evidence\",\"minimum_n_per_dimension_floor\":{\"context_voice_style\":22,\"literary_russian\":22,\"meaning_accuracy\":46,\"terminology_lore\":30},\"naive_pooled_overall_interval\":\"forbidden\",\"overall_summary\":\"descriptive_unique_sources_only\",\"owner_decision_required\":true,\"per_stratum_all_success_planning_rule\":\"floor^n<=1/120\",\"per_stratum_boundary_vectors\":{\"lower_successes_0\":[0,1],\"upper_successes_n\":[1,1]},\"per_stratum_interval\":\"two_sided_exact_clopper_pearson\",\"per_stratum_lower_bound\":\"0_if_successes=0_else_beta_quantile(1/120;successes,n-successes+1)\",\"per_stratum_statistical_unit\":[\"candidate\",\"profile\",\"split\",\"dimension_or_gate\",\"stratum\",\"source_generation_id\"],\"per_stratum_upper_bound\":\"1_if_successes=n_else_beta_quantile(119/120;successes+1,n-successes)\",\"stable_reviewer_pairs\":true,\"statistical_dimension_or_gate_values\":[\"context_voice_style\",\"critical_false_accept\",\"editorial_approval\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"statistical_outcome\":{\"decision_grade_helper\":\"decision_grade_statistical_unit_summary_holdout_only\",\"diagnostic_scope\":\"single_split_explicitly_marked\",\"input_fields\":[\"applicable\",\"candidate\",\"dimension_or_gate\",\"profile\",\"source_generation_id\",\"split\",\"stratum\",\"success\"],\"no_applicable_outcome\":\"STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME\",\"not_applicable\":\"excluded_from_denominator\",\"overall_gate\":\"forbidden\",\"overall_source_outcome\":\"all_applicable_rows_across_strata_success\",\"source_stratum_outcome\":\"all_applicable_rows_success\"},\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"],\"stratum_gate\":\"intersection_union_all_required_strata\",\"two_sided_candidate_tail_alpha\":[1,120]}",
+          "generation": 104,
           "kind": "analysis_policy",
-          "sha256": "2d92e7bf30ee21a5ff66e3d314289c52315c43ef64efa161aa129d1abb1c4136",
-          "version": "m1b-analysis-policy-v3"
+          "sha256": "70d3b2c3f74c2755ae7dc3f983a2e803a106e3f9e66b4db756f36b8a3c36b227",
+          "version": "m1b-analysis-policy-v4"
         },
         {
           "acceptance_state": "proposed",
           "definition": "{\"acceptance_record_fields\":[\"acceptance_state\",\"implementation_generation\",\"manifest_schema\",\"manifest_sha256\",\"protocol_generation\"],\"admission\":{\"blocker\":\"EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN\",\"implementation_generation\":null,\"manifest_schema\":\"m1b-executable-implementation-manifest-v1\",\"manifest_sha256\":null,\"status\":\"unproven\",\"trust_root\":\"external_owner_accepted_manifest_required\"},\"canonical_manifest\":\"ascii_sorted_keys_compact_json_plus_lf\",\"digest_domain\":\"stellaris-m1b-executable-manifest-v1\",\"digest_formula\":\"sha256(domain_nul||u64be(canonical_manifest_length)||canonical_manifest)\",\"digest_framing\":[\"ascii_domain\",\"nul\",\"u64be_canonical_manifest_length\",\"canonical_manifest_bytes\"],\"exact_file_hash\":\"sha256_exact_bytes\",\"file_fields\":[\"path\",\"role\",\"sha256\"],\"file_object_policy\":\"regular_non_symlink_repository_file\",\"file_rows\":\"exactly_one_per_required_role\",\"manifest_digest_location\":\"external_owner_acceptance_record\",\"manifest_root_fields\":[\"files\",\"implementation_generation\",\"manifest_schema\"],\"manifest_schema\":\"m1b-executable-implementation-manifest-v1\",\"manifest_self_entry\":\"forbidden\",\"path_order\":\"unique_raw_ascii_ascending\",\"path_policy\":\"relative_posix_ascii_no_empty_dot_dotdot_backslash_or_nul\",\"report_self_assertion\":\"forbidden\",\"required_roles\":[\"analysis_engine\",\"contract_validator\",\"provider_request_harness\",\"synthetic_fixture_materializer\"],\"run_generation_changes_on_implementation_drift\":true,\"self_digest_field\":\"forbidden\",\"trust_root\":\"external_owner_accepted_manifest\"}",
-          "generation": 103,
+          "generation": 104,
           "kind": "implementation_identity_policy",
           "sha256": "4003458835ba91400d30c9afdc49ca2f51326a00f7cbe7776d2fdc7a8bf26216",
           "version": "m1b-implementation-identity-policy-v1"
         }
       ],
       "framing": "m1b-length-framed-sha256-v1",
-      "sha256": "10f41321d013c0fa73dea0d689be51f43c721c3f2cef21eb8b8b4fcceff1fdf0"
+      "sha256": "9922093ab990769bff85f6f51c5ba6009d8036359bbf080a865d2ff1053a9fd7"
     },
     "protocol": {
-      "generation": 103,
-      "output_schema_version": "m1b-synthetic-output-v3",
+      "generation": 104,
+      "output_schema_version": "m1b-synthetic-output-v4",
       "prompt_version": "m1b-synthetic-prompt-policy-v1",
-      "protocol_version": "m1b-benchmark-contract-v3"
+      "protocol_version": "m1b-benchmark-contract-v4"
     },
     "provider_policy": {
       "auto_pull": false,
@@ -337,7 +337,7 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 103,
+        "protocol_generation": 104,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
@@ -428,7 +428,7 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 103,
+        "protocol_generation": 104,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
@@ -519,7 +519,7 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 103,
+        "protocol_generation": 104,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
@@ -984,7 +984,7 @@
             "provider_policy",
             "endpoint"
           ],
-          "value": "\u00a0http://127.0.0.1:11434/api"
+          "value": " http://127.0.0.1:11434/api"
         }
       ]
     },
@@ -1482,7 +1482,7 @@
             17,
             "version"
           ],
-          "value": "m1b-validator-policy-v4"
+          "value": "m1b-validator-policy-v5"
         }
       ]
     },
@@ -1635,7 +1635,7 @@
             0,
             "generation"
           ],
-          "value": 104
+          "value": 105
         }
       ]
     },
@@ -1677,7 +1677,7 @@
             0,
             "version"
           ],
-          "value": "m1b-benchmark-contract-v4"
+          "value": "m1b-benchmark-contract-v5"
         }
       ]
     },
@@ -1696,7 +1696,7 @@
             "protocol",
             "protocol_version"
           ],
-          "value": "m1b-benchmark-contract-v4"
+          "value": "m1b-benchmark-contract-v5"
         }
       ]
     },
@@ -1734,7 +1734,7 @@
             "protocol",
             "output_schema_version"
           ],
-          "value": "m1b-synthetic-output-v4"
+          "value": "m1b-synthetic-output-v5"
         }
       ]
     },
@@ -1752,7 +1752,7 @@
           "target": [
             "schema_version"
           ],
-          "value": "m1b-synthetic-contract-v4"
+          "value": "m1b-synthetic-contract-v5"
         }
       ]
     },
@@ -1846,7 +1846,7 @@
             "protocol",
             "generation"
           ],
-          "value": 104
+          "value": 105
         }
       ]
     },
@@ -3086,7 +3086,9 @@
             "finding_id": "00000000-0000-4000-8000-000000000041",
             "result_id": "00000000-0000-4000-8000-000000000031",
             "reviews": [],
-            "severity": "high"
+            "severity": "high",
+            "hard_fail": false,
+            "mandatory_review": true
           }
         },
         {
@@ -3278,11 +3280,66 @@
                 "reviewer_role": "model_reviewer",
                 "evidence_tier": "non_human",
                 "mapping_generation": 0,
-                "reviewer_blinding": "not_applicable"
+                "reviewer_blinding": "not_applicable",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "high",
+                "hard_fail": false,
+                "mandatory_review": true
               }
             ],
-            "severity": "high"
+            "severity": "high",
+            "hard_fail": false,
+            "mandatory_review": true
           }
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -3315,10 +3372,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "meaning_inversion",
+                "dimension": "meaning_accuracy",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "critical",
+                "hard_fail": true,
+                "mandatory_review": true
               }
             ],
-            "severity": "critical"
+            "severity": "critical",
+            "hard_fail": true,
+            "mandatory_review": true
           }
         },
         {
@@ -3399,7 +3464,13 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "meaning_inversion",
+                "dimension": "meaning_accuracy",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "critical",
+                "hard_fail": true,
+                "mandatory_review": true
               },
               {
                 "decision": "confirmed",
@@ -3410,10 +3481,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "meaning_inversion",
+                "dimension": "meaning_accuracy",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "critical",
+                "hard_fail": true,
+                "mandatory_review": true
               }
             ],
-            "severity": "critical"
+            "severity": "critical",
+            "hard_fail": true,
+            "mandatory_review": true
           }
         },
         {
@@ -3494,10 +3573,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "high",
+                "hard_fail": false,
+                "mandatory_review": true
               }
             ],
-            "severity": "high"
+            "severity": "high",
+            "hard_fail": false,
+            "mandatory_review": true
           }
         },
         {
@@ -3520,10 +3607,18 @@
                 "reviewer_role": "model_reviewer",
                 "evidence_tier": "non_human",
                 "mapping_generation": 0,
-                "reviewer_blinding": "not_applicable"
+                "reviewer_blinding": "not_applicable",
+                "category": "context_voice_style_error",
+                "dimension": "context_voice_style",
+                "finding_id": "00000000-0000-4000-8000-000000000042",
+                "severity": "high",
+                "hard_fail": false,
+                "mandatory_review": true
               }
             ],
-            "severity": "high"
+            "severity": "high",
+            "hard_fail": false,
+            "mandatory_review": true
           }
         },
         {
@@ -3604,10 +3699,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "high",
+                "hard_fail": false,
+                "mandatory_review": true
               }
             ],
-            "severity": "high"
+            "severity": "high",
+            "hard_fail": false,
+            "mandatory_review": true
           }
         },
         {
@@ -3679,8 +3782,57 @@
             "finding_id": "00000000-0000-4000-8000-000000000041",
             "result_id": "00000000-0000-4000-8000-000000000031",
             "reviews": [],
-            "severity": "low"
+            "severity": "low",
+            "hard_fail": false,
+            "mandatory_review": false
           }
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -3946,10 +4098,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "high",
+                "hard_fail": false,
+                "mandatory_review": true
               }
             ],
-            "severity": "high"
+            "severity": "high",
+            "hard_fail": false,
+            "mandatory_review": true
           }
         },
         {
@@ -4095,7 +4255,13 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "meaning_inversion",
+                "dimension": "meaning_accuracy",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "critical",
+                "hard_fail": true,
+                "mandatory_review": true
               },
               {
                 "decision": "confirmed",
@@ -4106,10 +4272,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "meaning_inversion",
+                "dimension": "meaning_accuracy",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "critical",
+                "hard_fail": true,
+                "mandatory_review": true
               }
             ],
-            "severity": "critical"
+            "severity": "critical",
+            "hard_fail": true,
+            "mandatory_review": true
           }
         },
         {
@@ -4923,8 +5097,57 @@
             "finding_id": "00000000-0000-4000-8000-000000000041",
             "result_id": "00000000-0000-4000-8000-000000000031",
             "reviews": [],
-            "severity": "low"
+            "severity": "low",
+            "hard_fail": false,
+            "mandatory_review": false
           }
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -4948,8 +5171,57 @@
             "finding_id": "00000000-0000-4000-8000-000000000041",
             "result_id": "00000000-0000-4000-8000-000000000031",
             "reviews": [],
-            "severity": "low"
+            "severity": "low",
+            "hard_fail": false,
+            "mandatory_review": false
           }
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -4973,8 +5245,57 @@
             "finding_id": "00000000-0000-4000-8000-000000000041",
             "result_id": "00000000-0000-4000-8000-000000000031",
             "reviews": [],
-            "severity": "unknown"
+            "severity": "unknown",
+            "hard_fail": false,
+            "mandatory_review": false
           }
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -5007,11 +5328,66 @@
                 "reviewer_role": "unknown",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "high",
+                "hard_fail": false,
+                "mandatory_review": true
               }
             ],
-            "severity": "high"
+            "severity": "high",
+            "hard_fail": false,
+            "mandatory_review": true
           }
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -6520,7 +6896,13 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "low",
+                "hard_fail": false,
+                "mandatory_review": false
               },
               {
                 "decision": "dismissed",
@@ -6531,10 +6913,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "none",
+                "hard_fail": false,
+                "mandatory_review": false
               }
             ],
-            "severity": "low"
+            "severity": "low",
+            "hard_fail": false,
+            "mandatory_review": false
           }
         },
         {
@@ -6615,7 +7005,13 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "low",
+                "hard_fail": false,
+                "mandatory_review": false
               },
               {
                 "decision": "dismissed",
@@ -6626,10 +7022,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "literary_error",
+                "dimension": "literary_russian",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "none",
+                "hard_fail": false,
+                "mandatory_review": false
               }
             ],
-            "severity": "low"
+            "severity": "low",
+            "hard_fail": false,
+            "mandatory_review": false
           }
         },
         {
@@ -6649,7 +7053,12 @@
             "reviewer_role": "human_reviewer",
             "evidence_tier": "primary_blinded",
             "mapping_generation": 1,
-            "reviewer_blinding": "never_unblinded"
+            "reviewer_blinding": "never_unblinded",
+            "category": "literary_error",
+            "dimension": "literary_russian",
+            "severity": "low",
+            "hard_fail": false,
+            "mandatory_review": false
           }
         },
         {
@@ -6721,8 +7130,57 @@
             "finding_id": "00000000-0000-4000-8000-000000000041",
             "result_id": "00000000-0000-4000-8000-000000000031",
             "reviews": [],
-            "severity": "critical"
+            "severity": "critical",
+            "hard_fail": true,
+            "mandatory_review": true
           }
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "success"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "blinding_status"
+          ],
+          "value": "passed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "mapping_generation"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "model_call_count"
+          ],
+          "value": 1
         }
       ]
     },
@@ -6928,7 +7386,13 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "meaning_inversion",
+                "dimension": "meaning_accuracy",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "critical",
+                "hard_fail": true,
+                "mandatory_review": true
               },
               {
                 "decision": "confirmed",
@@ -6939,7 +7403,13 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "meaning_inversion",
+                "dimension": "meaning_accuracy",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "critical",
+                "hard_fail": true,
+                "mandatory_review": true
               },
               {
                 "decision": "confirmed",
@@ -6950,10 +7420,18 @@
                 "reviewer_role": "human_reviewer",
                 "evidence_tier": "primary_blinded",
                 "mapping_generation": 1,
-                "reviewer_blinding": "never_unblinded"
+                "reviewer_blinding": "never_unblinded",
+                "category": "meaning_inversion",
+                "dimension": "meaning_accuracy",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "severity": "critical",
+                "hard_fail": true,
+                "mandatory_review": true
               }
             ],
-            "severity": "critical"
+            "severity": "critical",
+            "hard_fail": true,
+            "mandatory_review": true
           }
         },
         {
@@ -8781,6 +9259,212 @@
             "attempt_index"
           ],
           "value": 7
+        }
+      ]
+    },
+    {
+      "id": "no-output-literary-finding-empty-reviews",
+      "expected": {
+        "status": "error",
+        "codes": [
+          "CONTENT_EVIDENCE_WITHOUT_OUTPUT"
+        ]
+      },
+      "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "not_observed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ],
+          "value": []
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "not_evaluated"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "failure_code"
+          ],
+          "value": "CONTEXT_OVERFLOW_CONTROLLED"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "controlled_failure"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "terminal_failure_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "append",
+          "target": [
+            "findings"
+          ],
+          "value": {
+            "category": "literary_error",
+            "dimension": "literary_russian",
+            "finding_id": "00000000-0000-4000-8000-000000000041",
+            "hard_fail": false,
+            "mandatory_review": false,
+            "result_id": "00000000-0000-4000-8000-000000000031",
+            "reviews": [],
+            "severity": "low"
+          }
+        }
+      ]
+    },
+    {
+      "id": "no-output-model-review-finding",
+      "expected": {
+        "status": "error",
+        "codes": [
+          "CONTENT_EVIDENCE_WITHOUT_OUTPUT"
+        ]
+      },
+      "patches": [
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "technical_conformance"
+          ],
+          "value": "not_observed"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "observed_atoms"
+          ],
+          "value": []
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "dimension_records",
+            0,
+            "status"
+          ],
+          "value": "not_evaluated"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "failure_code"
+          ],
+          "value": "CONTEXT_OVERFLOW_CONTROLLED"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "terminal_status"
+          ],
+          "value": "controlled_failure"
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "initial_attempt_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "set",
+          "target": [
+            "conformance_results",
+            0,
+            "accounting",
+            "terminal_failure_count"
+          ],
+          "value": 1
+        },
+        {
+          "operation": "append",
+          "target": [
+            "findings"
+          ],
+          "value": {
+            "category": "literary_error",
+            "dimension": "literary_russian",
+            "finding_id": "00000000-0000-4000-8000-000000000041",
+            "hard_fail": false,
+            "mandatory_review": false,
+            "result_id": "00000000-0000-4000-8000-000000000031",
+            "reviews": [
+              {
+                "category": "literary_error",
+                "decision": "confirmed",
+                "dimension": "literary_russian",
+                "evidence_tier": "non_human",
+                "finding_id": "00000000-0000-4000-8000-000000000041",
+                "hard_fail": false,
+                "mandatory_review": false,
+                "mapping_generation": 0,
+                "review_credit": "non_human",
+                "review_id": "00000000-0000-4000-8000-000000000051",
+                "review_stage": "initial",
+                "reviewer_blinding": "not_applicable",
+                "reviewer_id": "00000000-0000-4000-8000-000000000061",
+                "reviewer_role": "model_reviewer",
+                "severity": "low"
+              }
+            ],
+            "severity": "low"
+          }
         }
       ]
     }
