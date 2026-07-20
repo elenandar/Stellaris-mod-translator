@@ -17,23 +17,34 @@ import hashlib
 import json
 import re
 import sys
+from fractions import Fraction
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 
-DOCUMENT_SCHEMA = "m1b-synthetic-contract-v2"
-FIXTURE_SCHEMA = "m1b-synthetic-contract-cases-v2"
+DOCUMENT_SCHEMA = "m1b-synthetic-contract-v3"
+FIXTURE_SCHEMA = "m1b-synthetic-contract-cases-v3"
 MAX_INPUT_BYTES = 4 * 1024 * 1024
+MAX_FIXTURE_PATCH_COUNT = 256
+MAX_MATERIALIZATION_WORK_BYTES = 16 * 1024 * 1024
+MATERIALIZATION_PREENCODE_RESERVE_BYTES = MAX_INPUT_BYTES
 MAX_JSON_INTEGER = (1 << 63) - 1
 MIN_JSON_INTEGER = -(1 << 63)
 
-PROTOCOL_VERSION = "m1b-benchmark-contract-v1"
-OUTPUT_SCHEMA_VERSION = "m1b-synthetic-output-v2"
+PROTOCOL_VERSION = "m1b-benchmark-contract-v2"
+OUTPUT_SCHEMA_VERSION = "m1b-synthetic-output-v3"
 PROMPT_VERSION = "m1b-synthetic-prompt-policy-v1"
 PROFILE_VERSION = "m1b-primary-common-profile-v1"
-CORPUS_VERSION = "m1b-synthetic-corpus-v2"
-PROTOCOL_GENERATION = 101
+CORPUS_VERSION = "m1b-synthetic-corpus-v3"
+PROTOCOL_GENERATION = 102
 PROFILE_GENERATION = 202
-CORPUS_GENERATION = 303
+CORPUS_GENERATION = 304
+
+IMPLEMENTATION_MANIFEST_SCHEMA = "m1b-executable-implementation-manifest-v1"
+FAMILY_WISE_ALPHA = Fraction(1, 20)
+CANDIDATE_FAMILY_ALPHA = Fraction(1, 60)
+TWO_SIDED_CANDIDATE_TAIL_ALPHA = Fraction(1, 120)
+AGREEMENT_FLOOR = Fraction(3, 5)
+AGREEMENT_MINIMUM_N = 46
 
 COMPONENT_FRAMING = "m1b-length-framed-sha256-v1"
 _COMPONENT_DOMAIN = b"stellaris-m1b-component-v1\x00"
@@ -130,6 +141,22 @@ REVIEW_CREDITS = frozenset({"human", "non_human"})
 ATOM_KINDS = frozenset({"formatting", "icon", "placeholder", "scripted"})
 THINKING_MODES = frozenset(
     {"not_probed", "disabled", "enabled", "low", "medium", "high", "max"}
+)
+BLINDING_STATUSES = frozenset(
+    {
+        "external_mapping_leak",
+        "not_observed",
+        "passed",
+        "self_identifying_output",
+    }
+)
+HUMAN_EVIDENCE_TIERS = frozenset(
+    {"compromised_primary", "primary_blinded", "secondary_unblinded"}
+)
+FINDING_REVIEW_EVIDENCE_TIERS = HUMAN_EVIDENCE_TIERS | frozenset({"non_human"})
+CONTROLLED_FAILURE_CODES = frozenset({"CONTEXT_OVERFLOW_CONTROLLED"})
+STATISTICAL_DIMENSIONS_OR_GATES = QUALITY_DIMENSIONS | frozenset(
+    {"critical_false_accept", "editorial_approval"}
 )
 
 _CODE = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -245,17 +272,40 @@ _EXPECTED_REQUEST_BOUNDARY = {
     "thinking_trace_reuse": False,
     "truncation_policy": "controlled_failure",
 }
+_EXPECTED_CONTEXT_LIMIT_BINDING = {
+    "blocker": "CONTEXT_LIMIT_BINDING_UNPROVEN",
+    "boundary_canary_probe": "required_before_first_private_request",
+    "input_limit_binding": "not_probed",
+    "left_truncation_probe": "not_probed",
+    "overflow_response_binding": "not_probed",
+    "post_response_verification": "not_probed",
+    "prompt_eval_count_binding": "not_probed",
+    "right_truncation_probe": "not_probed",
+    "status": "not_probed",
+    "tokenizer_binding": "not_probed",
+}
+_EXPECTED_IMPLEMENTATION_IDENTITY = {
+    "blocker": "EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN",
+    "implementation_generation": None,
+    "manifest_schema": IMPLEMENTATION_MANIFEST_SCHEMA,
+    "manifest_sha256": None,
+    "status": "unproven",
+    "trust_root": "external_owner_accepted_manifest_required",
+}
 
 _ROOT_FIELDS = (
+    "adjudications",
     "aggregate_report",
     "benchmark_state",
     "candidate_profiles",
     "conformance_results",
+    "context_limit_binding",
     "corpus",
     "coverage",
     "definition_bundle",
     "findings",
     "human_ground_truth",
+    "implementation_identity",
     "protocol",
     "provider_policy",
     "request_boundary",
@@ -284,16 +334,27 @@ _ATOM_FIELDS = (
     "provenance",
     "synthetic_value",
 )
+_SAMPLE_FIELDS = (
+    "expected_atoms",
+    "risk_class",
+    "sample_id",
+    "source_generation_id",
+    "source_unit_cluster_id",
+    "stratum",
+)
 _RESULT_FIELDS = (
     "accounting",
     "attempt_index",
     "attempt_stage",
+    "blinding_status",
     "candidate_id",
     "corpus_generation",
     "dimension_records",
     "editorial_status",
     "experiment_lane",
+    "failure_code",
     "initial_result_id",
+    "mapping_generation",
     "observed_atoms",
     "profile_generation",
     "profile_version",
@@ -313,18 +374,37 @@ _FINDING_FIELDS = (
 )
 _REVIEW_FIELDS = (
     "decision",
+    "evidence_tier",
+    "mapping_generation",
     "review_credit",
     "review_id",
     "review_stage",
+    "reviewer_blinding",
+    "reviewer_id",
+    "reviewer_role",
+)
+_ADJUDICATION_FIELDS = (
+    "adjudication_id",
+    "decision",
+    "evidence_tier",
+    "finding_id",
+    "initial_review_ids",
+    "mapping_generation",
+    "reviewer_blinding",
     "reviewer_id",
     "reviewer_role",
 )
 _HUMAN_GROUND_TRUTH_FIELDS = (
+    "adjudicates",
     "applicability_reason",
     "dimension",
+    "evidence_tier",
     "ground_truth_id",
+    "mapping_generation",
+    "ordinal_score",
     "result_id",
     "review_stage",
+    "reviewer_blinding",
     "reviewer_id",
     "reviewer_role",
     "status",
@@ -367,7 +447,12 @@ _EDITORIAL_STATUSES = (
     "editorially_rejected",
     "not_evaluated",
 )
-_TERMINAL_STATUSES = ("controlled_failure", "not_applicable", "success")
+_TERMINAL_STATUSES = (
+    "blinding_failed",
+    "controlled_failure",
+    "not_applicable",
+    "success",
+)
 _LANE_STAGE_PAIRS = frozenset(
     {("fallback", "fallback"), ("primary", "initial"), ("repair", "repair")}
 )
@@ -382,6 +467,7 @@ _DIMENSION_STATUSES = frozenset(
     {
         "human_fail",
         "human_pass",
+        "blinding_failed",
         "not_applicable",
         "not_evaluated",
         "synthetic_conformant",
@@ -442,6 +528,7 @@ _EXPECTED_SYNTHETIC_CORPUS = {
             ],
             "risk_class": "mandatory_human",
             "sample_id": "00000000-0000-4000-8000-000000000011",
+            "source_generation_id": "00000000-0000-4000-8000-000000000015",
             "source_unit_cluster_id": "00000000-0000-4000-8000-000000000013",
             "stratum": "narrative",
         },
@@ -461,6 +548,7 @@ _EXPECTED_SYNTHETIC_CORPUS = {
             ],
             "risk_class": "auto_eligible_candidate",
             "sample_id": "00000000-0000-4000-8000-000000000012",
+            "source_generation_id": "00000000-0000-4000-8000-000000000016",
             "source_unit_cluster_id": "00000000-0000-4000-8000-000000000014",
             "stratum": "ui",
         },
@@ -514,6 +602,9 @@ _TRUSTED_COMPONENT_ROWS = (
                 ],
                 "benchmark_states": [list(state) for state in sorted(_BENCHMARK_STATES)],
                 "document_schema": DOCUMENT_SCHEMA,
+                "m1b0_complete_state": "always_rejected_PARTIAL_REPORT_CANNOT_BE_COMPLETE",
+                "partial_primary_human_evidence": "forbidden",
+                "partial_secondary_exception": "self_identifying_output_secondary_unblinded_only",
                 "protocol_generation": PROTOCOL_GENERATION,
                 "root_fields": list(_ROOT_FIELDS),
             }
@@ -526,15 +617,19 @@ _TRUSTED_COMPONENT_ROWS = (
         _canonical_public_json(
             {
                 "accounting_fields": list(_ACCOUNTING_FIELDS),
+                "adjudication_fields": list(_ADJUDICATION_FIELDS),
                 "atom_fields": list(_ATOM_FIELDS),
+                "blinding_statuses": sorted(BLINDING_STATUSES),
                 "count_keys": list(_COUNT_KEYS),
                 "dimension_statuses": sorted(_DIMENSION_STATUSES),
                 "dimensions": list(_QUALITY_DIMENSION_ORDER),
                 "editorial_statuses": list(_EDITORIAL_STATUSES),
                 "finding_fields": list(_FINDING_FIELDS),
+                "controlled_failure_codes": sorted(CONTROLLED_FAILURE_CODES),
                 "human_ground_truth_fields": list(_HUMAN_GROUND_TRUTH_FIELDS),
                 "review_fields": list(_REVIEW_FIELDS),
                 "result_fields": list(_RESULT_FIELDS),
+                "sample_fields": list(_SAMPLE_FIELDS),
                 "coverage_fields": list(_COVERAGE_FIELDS),
                 "schema_version": OUTPUT_SCHEMA_VERSION,
                 "technical_conformance": list(_TECHNICAL_CONFORMANCE_STATUSES),
@@ -545,7 +640,7 @@ _TRUSTED_COMPONENT_ROWS = (
     (
         "prompt_policy",
         PROMPT_VERSION,
-        PROTOCOL_GENERATION,
+        101,
         _canonical_public_json(
             {
                 "prompt_state": "not_created",
@@ -573,7 +668,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "corpus_policy",
-        "m1b-corpus-policy-v1",
+        "m1b-corpus-policy-v2",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -589,13 +684,16 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "split_policy",
-        "m1b-split-policy-v1",
+        "m1b-split-policy-v2",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "auto_eligible_strata": sorted(_AUTO_ELIGIBLE_STRATA),
                 "related_variants_same_split": True,
                 "risk_classes": sorted(RISK_CLASSES),
+                "source_cluster_generation_binding": "immutable_one_generation",
+                "source_generation_identity": "opaque_local_mapping",
+                "source_generation_within_stratum_collapse": "conservative_one_unit",
                 "splits": ["tuning", "holdout"],
                 "strata": sorted(STRATA),
             }
@@ -603,7 +701,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "generation_policy",
-        "m1b-generation-policy-v1",
+        "m1b-generation-policy-v2",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -621,46 +719,81 @@ _TRUSTED_COMPONENT_ROWS = (
         ),
     ),
     (
+        "context_limit_policy",
+        "m1b-context-limit-policy-v1",
+        PROTOCOL_GENERATION,
+        _canonical_public_json(
+            {
+                "binding": _EXPECTED_CONTEXT_LIMIT_BINDING,
+                "controlled_overflow_result": "terminal_failure_zero_primary_success",
+                "live_observation_before_binding": "forbidden",
+                "silent_truncation": "forbidden",
+            }
+        ),
+    ),
+    (
         "randomization_blinding_policy",
-        "m1b-randomization-blinding-policy-v1",
+        "m1b-randomization-blinding-policy-v2",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "blinding_failure": "denominator_failure",
+                "external_mapping_leak": "frozen_compromised_then_fresh_mapping_and_reviewers",
+                "finding_review_provenance": "same_mapping_and_blinding_rules_as_ground_truth",
                 "mapping": "private",
+                "model_success_blinding_status": "passed_or_incident",
+                "primary_dimension_failure_status": "blinding_failed",
+                "regeneration": "forbidden_after_any_blinding_incident_without_chronology",
                 "replacement_reviewers": "never_unblinded_humans",
-                "self_identification": "primary_failure",
+                "reviewer_exposure_scope": "global_across_findings_adjudications_and_ground_truth",
+                "self_identification": "result_failure_in_every_model_output_lane",
+                "self_identification_model_call_count": 1,
+                "observed_blinding_state_model_call_count": 1,
                 "unblinded_review": "secondary_only",
             }
         ),
     ),
     (
         "quality_rubric",
-        "m1b-quality-rubric-v1",
+        "m1b-quality-rubric-v2",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
+                "critical_false_accept_definition": "editorially_approved_and_confirmed_underlying_critical_same_result_dimension",
                 "dimensions": list(_QUALITY_DIMENSION_ORDER),
                 "finding_dimension_mapping": {
                     category: sorted(dimensions)
                     for category, dimensions in FINDING_DIMENSIONS.items()
                 },
                 "human_status_requires_ground_truth": True,
+                "finding_review_evidence_tiers": sorted(
+                    FINDING_REVIEW_EVIDENCE_TIERS
+                ),
                 "missing_ground_truth_status": "not_evaluated",
+                "initial_hgt_reviewers_per_dimension": 2,
+                "finding_adjudication": "exact_two_conflicting_initial_ids_distinct_third_human_drives_final_decision",
+                "ordinal_categories": [0, 1, 2, 3, 4],
+                "ordinal_pass_minimum": 3,
                 "reviewer_roles": sorted(REVIEWER_ROLES),
                 "severities": ["none", "low", "medium", "high", "critical"],
+                "safely_caught_critical_defect_is_false_accept": False,
             }
         ),
     ),
     (
         "measurement_policy",
-        "m1b-measurement-policy-v1",
+        "m1b-measurement-policy-v2",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "accounting_fields": list(_ACCOUNTING_FIELDS),
                 "cold_warm_separate": True,
+                "human_fallback_model_call_count": 0,
+                "model_output_success_model_call_count": 1,
+                "not_applicable_state": "not_observed_mapping0_zero_accounting_no_human",
+                "provider_fallback_false_allows_declared_human_lane": True,
                 "row_derived_accounting": True,
+                "self_identification_terminal_status": "blinding_failed",
                 "terminal_failure_in_denominator": True,
             }
         ),
@@ -668,7 +801,7 @@ _TRUSTED_COMPONENT_ROWS = (
     (
         "retention_leakage_policy",
         "m1b-retention-leakage-policy-v1",
-        PROTOCOL_GENERATION,
+        101,
         _canonical_public_json(
             {
                 "cleanup_required": True,
@@ -681,7 +814,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "validator_policy",
-        "m1b-validator-policy-v2",
+        "m1b-validator-policy-v3",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -691,6 +824,16 @@ _TRUSTED_COMPONENT_ROWS = (
                 "json_integer_max": MAX_JSON_INTEGER,
                 "json_integer_min": MIN_JSON_INTEGER,
                 "max_input_bytes": MAX_INPUT_BYTES,
+                "max_input_bytes_boundaries": [
+                    "fixture_manifest_file",
+                    "materialized_fixture_document",
+                    "standalone_document",
+                ],
+                "max_fixture_patch_count": MAX_FIXTURE_PATCH_COUNT,
+                "max_materialization_work_bytes": MAX_MATERIALIZATION_WORK_BYTES,
+                "materialization_preencode_reserve_bytes": MATERIALIZATION_PREENCODE_RESERVE_BYTES,
+                "materialization_work_accounting": "accepted_initial_compact_document_plus_each_accepted_post_patch_compact_document",
+                "materialized_final_encoding": "reuse_last_budgeted_encoding",
                 "offline": True,
                 "output_fields": ["codes", "counts", "status"],
                 "strict_json": {
@@ -704,23 +847,540 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "analysis_policy",
-        "m1b-analysis-policy-v1",
+        "m1b-analysis-policy-v2",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
+                "agreement": {
+                    "both_not_applicable": "separate_applicability_agreement_count",
+                    "candidate_kappa_pooling": "forbidden",
+                    "candidate_profile_result_key": [
+                        "candidate",
+                        "profile",
+                        "stratum",
+                        "dimension",
+                    ],
+                    "input_fields": [
+                        "applicability_adjudication",
+                        "candidate",
+                        "dimension",
+                        "first",
+                        "initial_record_ids",
+                        "profile",
+                        "reviewer_pair",
+                        "second",
+                        "source_generation_id",
+                        "stratum",
+                    ],
+                    "categories": [0, 1, 2, 3, 4],
+                    "exact_arithmetic": "rational",
+                    "formula": "(n*sum(q_ij*O_ij)-sum(q_ij*r_i*c_j))/(16*n*n-sum(q_ij*r_i*c_j))",
+                    "minimum_n": AGREEMENT_MINIMUM_N,
+                    "point_and_every_delete_one_minimum": [
+                        AGREEMENT_FLOOR.numerator,
+                        AGREEMENT_FLOOR.denominator,
+                    ],
+                    "quadratic_weight_denominator": 16,
+                    "quadratic_weight_formula": "q_ij=16-(i-j)^2",
+                    "ratings_input": "validator_linked_frozen_initial_ground_truth_records",
+                    "ratings_materializer": "inside_human_ground_truth_validator_no_report_supplied_scores",
+                    "raw_row_helper_scope": "public_synthetic_math_vectors_only_not_decision_evidence",
+                    "record_order": "ascending_raw_reviewer_uuid_then_linked_record",
+                    "source_generation_rating": "minimum_worst_applicable_row_score_per_reviewer",
+                    "adjudicator_effect": "final_dimension_or_applicability_only_not_kappa_rating",
+                    "robustness": "minimum_delete_one_source_generation_kappa",
+                    "stable_pair_key": ["stratum", "dimension"],
+                    "statuses": [
+                        "AGREEMENT_INSUFFICIENT_UNITS",
+                        "AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT",
+                        "AGREEMENT_POINT_BELOW_FLOOR",
+                        "AGREEMENT_UNCERTAINTY_UNDEFINED",
+                        "AGREEMENT_ROBUSTNESS_BELOW_FLOOR",
+                        "AGREEMENT_PASS",
+                    ],
+                    "threshold_numerator": AGREEMENT_FLOOR.numerator,
+                    "threshold_denominator": AGREEMENT_FLOOR.denominator,
+                    "unilateral_not_applicable": "linked_adjudication_then_excluded_from_ordinal_kappa",
+                    "undefined": "fail_closed",
+                },
+                "candidate_claims_reported_separately": True,
+                "candidate_family_alpha": [
+                    CANDIDATE_FAMILY_ALPHA.numerator,
+                    CANDIDATE_FAMILY_ALPHA.denominator,
+                ],
+                "candidate_family_count": len(EXPECTED_CANDIDATES),
                 "cluster_aware": True,
-                "critical_false_accept_minimum_n": 149,
-                "minimum_n_per_required_stratum": 36,
-                "minimum_overall_n": 288,
+                "critical_false_accept_ceiling": [1, 50],
+                "critical_false_accept_estimator": "event_if_any_confirmed_cfa_in_source_generation_class",
+                "critical_false_accept_input_fields": [
+                    "candidate",
+                    "event",
+                    "profile",
+                    "risk_class",
+                    "source_generation_id",
+                ],
+                "critical_false_accept_statistical_unit": [
+                    "candidate",
+                    "profile",
+                    "risk_class",
+                    "source_generation_id",
+                ],
+                "critical_false_accept_zero_event_upper_bound": "1-(1/60)^(1/n)",
+                "critical_false_accept_minimum_n": 203,
+                "decision_method": "bonferroni_candidates_conjunctive_strata",
+                "dimension_confidence_floors": {
+                    "context_voice_style": [4, 5],
+                    "literary_russian": [4, 5],
+                    "meaning_accuracy": [9, 10],
+                    "terminology_lore": [17, 20],
+                },
+                "family_wise_alpha": [
+                    FAMILY_WISE_ALPHA.numerator,
+                    FAMILY_WISE_ALPHA.denominator,
+                ],
+                "minimum_n_per_dimension_floor": {
+                    "context_voice_style": 22,
+                    "literary_russian": 22,
+                    "meaning_accuracy": 46,
+                    "terminology_lore": 30,
+                },
+                "marginal_95_interval": "descriptive_only_not_selection_evidence",
+                "naive_pooled_overall_interval": "forbidden",
+                "overall_summary": "descriptive_unique_sources_only",
                 "owner_decision_required": True,
+                "per_stratum_all_success_planning_rule": "floor^n<=1/120",
+                "per_stratum_interval": "two_sided_exact_clopper_pearson",
+                "per_stratum_lower_bound": "0_if_successes=0_else_beta_quantile(1/120;successes,n-successes+1)",
+                "per_stratum_upper_bound": "1_if_successes=n_else_beta_quantile(119/120;successes+1,n-successes)",
+                "per_stratum_boundary_vectors": {
+                    "lower_successes_0": [0, 1],
+                    "upper_successes_n": [1, 1],
+                },
+                "per_stratum_statistical_unit": [
+                    "candidate",
+                    "profile",
+                    "dimension_or_gate",
+                    "stratum",
+                    "source_generation_id",
+                ],
                 "stable_reviewer_pairs": True,
+                "statistical_dimension_or_gate_values": sorted(
+                    STATISTICAL_DIMENSIONS_OR_GATES
+                ),
+                "statistical_outcome": {
+                    "input_fields": [
+                        "applicable",
+                        "candidate",
+                        "dimension_or_gate",
+                        "profile",
+                        "source_generation_id",
+                        "stratum",
+                        "success",
+                    ],
+                    "no_applicable_outcome": "STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME",
+                    "not_applicable": "excluded_from_denominator",
+                    "overall_gate": "forbidden",
+                    "overall_source_outcome": "all_applicable_rows_across_strata_success",
+                    "source_stratum_outcome": "all_applicable_rows_success",
+                },
+                "stratum_gate": "intersection_union_all_required_strata",
                 "strata": sorted(STRATA),
+                "two_sided_candidate_tail_alpha": [
+                    TWO_SIDED_CANDIDATE_TAIL_ALPHA.numerator,
+                    TWO_SIDED_CANDIDATE_TAIL_ALPHA.denominator,
+                ],
+            }
+        ),
+    ),
+    (
+        "implementation_identity_policy",
+        "m1b-implementation-identity-policy-v1",
+        PROTOCOL_GENERATION,
+        _canonical_public_json(
+            {
+                "admission": _EXPECTED_IMPLEMENTATION_IDENTITY,
+                "acceptance_record_fields": [
+                    "acceptance_state",
+                    "implementation_generation",
+                    "manifest_schema",
+                    "manifest_sha256",
+                    "protocol_generation",
+                ],
+                "canonical_manifest": "ascii_sorted_keys_compact_json_plus_lf",
+                "digest_formula": "sha256(domain_nul||u64be(canonical_manifest_length)||canonical_manifest)",
+                "digest_domain": "stellaris-m1b-executable-manifest-v1",
+                "digest_framing": [
+                    "ascii_domain",
+                    "nul",
+                    "u64be_canonical_manifest_length",
+                    "canonical_manifest_bytes",
+                ],
+                "exact_file_hash": "sha256_exact_bytes",
+                "file_fields": ["path", "role", "sha256"],
+                "file_object_policy": "regular_non_symlink_repository_file",
+                "file_rows": "exactly_one_per_required_role",
+                "manifest_root_fields": [
+                    "files",
+                    "implementation_generation",
+                    "manifest_schema",
+                ],
+                "manifest_schema": IMPLEMENTATION_MANIFEST_SCHEMA,
+                "manifest_digest_location": "external_owner_acceptance_record",
+                "manifest_self_entry": "forbidden",
+                "path_order": "unique_raw_ascii_ascending",
+                "path_policy": "relative_posix_ascii_no_empty_dot_dotdot_backslash_or_nul",
+                "report_self_assertion": "forbidden",
+                "required_roles": [
+                    "analysis_engine",
+                    "contract_validator",
+                    "provider_request_harness",
+                    "synthetic_fixture_materializer",
+                ],
+                "run_generation_changes_on_implementation_drift": True,
+                "self_digest_field": "forbidden",
+                "trust_root": "external_owner_accepted_manifest",
             }
         ),
     ),
 )
 
 REQUIRED_COMPONENT_KINDS = tuple(row[0] for row in _TRUSTED_COMPONENT_ROWS)
+
+
+def minimum_power_bound_n(base: Fraction, tail_alpha: Fraction) -> int:
+    """Return the first positive n for which base**n <= tail_alpha exactly."""
+
+    if not isinstance(base, Fraction) or not isinstance(tail_alpha, Fraction):
+        raise ContractError("INVALID_TYPE")
+    if not (0 < base < 1 and 0 < tail_alpha < 1):
+        raise ContractError("INVALID_ANALYSIS_PARAMETER")
+    n = 1
+    while base ** n > tail_alpha:
+        n += 1
+    return n
+
+
+def quadratic_weighted_kappa(
+    first: Sequence[int], second: Sequence[int]
+) -> Optional[Fraction]:
+    """Return exact 0..4 quadratic-weighted kappa, or None when undefined."""
+
+    if type(first) not in (list, tuple) or type(second) not in (list, tuple):
+        raise ContractError("INVALID_TYPE")
+    if len(first) != len(second) or not first:
+        raise ContractError("AGREEMENT_VECTOR_INVALID")
+    if any(type(score) is not int or score < 0 or score > 4 for score in first):
+        raise ContractError("AGREEMENT_CATEGORY_INVALID")
+    if any(type(score) is not int or score < 0 or score > 4 for score in second):
+        raise ContractError("AGREEMENT_CATEGORY_INVALID")
+    matrix = [[0 for _ in range(5)] for _ in range(5)]
+    for left, right in zip(first, second):
+        matrix[left][right] += 1
+    n = len(first)
+    rows = [sum(row) for row in matrix]
+    columns = [sum(matrix[i][j] for i in range(5)) for j in range(5)]
+    observed = sum(
+        (16 - (i - j) ** 2) * matrix[i][j]
+        for i in range(5)
+        for j in range(5)
+    )
+    expected = sum(
+        (16 - (i - j) ** 2) * rows[i] * columns[j]
+        for i in range(5)
+        for j in range(5)
+    )
+    numerator = n * observed - expected
+    denominator = 16 * n * n - expected
+    if denominator == 0:
+        return None
+    return Fraction(numerator, denominator)
+
+
+def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Collapse frozen initial row ratings to one worst rating per source."""
+
+    if type(rows) not in (list, tuple):
+        raise ContractError("INVALID_TYPE")
+    source_order: List[str] = []
+    source_rows: Dict[str, List[Tuple[Optional[int], Optional[int]]]] = {}
+    scope: Optional[Tuple[str, str, str, str]] = None
+    stable_pair: Optional[Tuple[str, str]] = None
+    seen_initial_records: Set[str] = set()
+    seen_adjudications: Set[str] = set()
+    expected_fields = {
+        "applicability_adjudication",
+        "candidate",
+        "dimension",
+        "first",
+        "initial_record_ids",
+        "profile",
+        "reviewer_pair",
+        "second",
+        "source_generation_id",
+        "stratum",
+    }
+    for row in rows:
+        if type(row) is not dict:
+            raise ContractError("INVALID_TYPE")
+        if set(row) != expected_fields:
+            raise ContractError("UNKNOWN_FIELD")
+        row_scope = tuple(
+            _require_string(row[field])
+            for field in ("candidate", "profile", "stratum", "dimension")
+        )
+        if any(not value for value in row_scope):
+            raise ContractError("INVALID_ANALYSIS_PARAMETER")
+        if row_scope[2] not in STRATA:
+            raise ContractError("UNKNOWN_STRATUM")
+        if row_scope[3] not in QUALITY_DIMENSIONS - {"schema_atom_stability"}:
+            raise ContractError("UNKNOWN_DIMENSION")
+        if scope is None:
+            scope = row_scope
+        elif row_scope != scope:
+            raise ContractError("AGREEMENT_SCOPE_MIXED")
+        source_id = _require_uuid(row["source_generation_id"])
+        if source_id not in source_rows:
+            source_order.append(source_id)
+            source_rows[source_id] = []
+        raw_pair = _require_list(row["reviewer_pair"])
+        if len(raw_pair) != 2:
+            raise ContractError("STABLE_REVIEWER_PAIR_INVALID")
+        pair = tuple(_require_uuid(value) for value in raw_pair)
+        if len(set(pair)) != 2:
+            raise ContractError("STABLE_REVIEWER_PAIR_INVALID")
+        if stable_pair is None:
+            stable_pair = pair
+        elif pair != stable_pair:
+            raise ContractError("STABLE_REVIEWER_PAIR_DRIFT")
+        raw_record_ids = _require_list(row["initial_record_ids"])
+        if len(raw_record_ids) != 2:
+            raise ContractError("AGREEMENT_INITIAL_RECORD_INVALID")
+        record_ids = tuple(_require_uuid(value) for value in raw_record_ids)
+        if len(set(record_ids)) != 2 or seen_initial_records & set(record_ids):
+            raise ContractError("AGREEMENT_INITIAL_RECORD_INVALID")
+        seen_initial_records.update(record_ids)
+        left = row["first"]
+        right = row["second"]
+        if left is not None and (type(left) is not int or left < 0 or left > 4):
+            raise ContractError("AGREEMENT_CATEGORY_INVALID")
+        if right is not None and (type(right) is not int or right < 0 or right > 4):
+            raise ContractError("AGREEMENT_CATEGORY_INVALID")
+        unilateral = (left is None) != (right is None)
+        adjudication = row["applicability_adjudication"]
+        if unilateral:
+            if adjudication is None:
+                raise ContractError("AGREEMENT_APPLICABILITY_ADJUDICATION_REQUIRED")
+            adjudication = _require_object(
+                adjudication,
+                (
+                    "adjudication_id",
+                    "adjudicator_reviewer_id",
+                    "initial_record_ids",
+                ),
+            )
+            adjudication_id = _require_uuid(adjudication["adjudication_id"])
+            if adjudication_id in seen_adjudications:
+                raise ContractError("AGREEMENT_APPLICABILITY_ADJUDICATION_REQUIRED")
+            seen_adjudications.add(adjudication_id)
+            adjudicator_id = _require_uuid(adjudication["adjudicator_reviewer_id"])
+            linked_ids = tuple(
+                _require_uuid(value)
+                for value in _require_list(adjudication["initial_record_ids"])
+            )
+            if linked_ids != record_ids or adjudicator_id in pair:
+                raise ContractError("AGREEMENT_APPLICABILITY_ADJUDICATION_REQUIRED")
+        elif adjudication is not None:
+            raise ContractError("AGREEMENT_APPLICABILITY_STATE_INVALID")
+        source_rows[source_id].append((left, right))
+
+    source_ids: List[str] = []
+    first: List[int] = []
+    second: List[int] = []
+    bilateral_na_sources = 0
+    unilateral_na_sources = 0
+    for source_id in source_order:
+        ratings = source_rows[source_id]
+        if any((left is None) != (right is None) for left, right in ratings):
+            unilateral_na_sources += 1
+            continue
+        applicable = [
+            (left, right)
+            for left, right in ratings
+            if left is not None and right is not None
+        ]
+        if not applicable:
+            bilateral_na_sources += 1
+            continue
+        source_ids.append(source_id)
+        first.append(min(left for left, _right in applicable))
+        second.append(min(right for _left, right in applicable))
+    return {
+        "bilateral_not_applicable_source_count": bilateral_na_sources,
+        "first": first,
+        "second": second,
+        "source_generation_ids": source_ids,
+        "unilateral_not_applicable_source_count": unilateral_na_sources,
+    }
+
+
+def agreement_gate(rows: Sequence[Mapping[str, Any]]) -> str:
+    """Apply the exact proposed point and delete-one-source robustness gate."""
+
+    vectors = agreement_unit_vectors(rows)
+    first = vectors["first"]
+    second = vectors["second"]
+    if len(first) < AGREEMENT_MINIMUM_N:
+        return "AGREEMENT_INSUFFICIENT_UNITS"
+    point = quadratic_weighted_kappa(first, second)
+    if point is None:
+        return "AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT"
+    if point < AGREEMENT_FLOOR:
+        return "AGREEMENT_POINT_BELOW_FLOOR"
+    robustness: List[Fraction] = []
+    for index in range(len(first)):
+        leave_one = quadratic_weighted_kappa(
+            list(first[:index]) + list(first[index + 1 :]),
+            list(second[:index]) + list(second[index + 1 :]),
+        )
+        if leave_one is None:
+            return "AGREEMENT_UNCERTAINTY_UNDEFINED"
+        robustness.append(leave_one)
+    if min(robustness) < AGREEMENT_FLOOR:
+        return "AGREEMENT_ROBUSTNESS_BELOW_FLOOR"
+    return "AGREEMENT_PASS"
+
+
+def statistical_unit_summary(
+    rows: Sequence[Mapping[str, Any]]
+) -> Dict[str, Any]:
+    """Collapse one candidate/profile/dimension scope without pooled trials."""
+
+    if type(rows) not in (list, tuple):
+        raise ContractError("INVALID_TYPE")
+    per_stratum: Dict[str, Dict[str, List[bool]]] = {
+        stratum: {} for stratum in STRATA
+    }
+    overall: Dict[str, List[bool]] = {}
+    scope: Optional[Tuple[str, str, str]] = None
+    for row in rows:
+        if type(row) is not dict:
+            raise ContractError("INVALID_TYPE")
+        if set(row) != {
+            "applicable",
+            "candidate",
+            "dimension_or_gate",
+            "profile",
+            "source_generation_id",
+            "stratum",
+            "success",
+        }:
+            raise ContractError("UNKNOWN_FIELD")
+        row_scope = tuple(
+            _require_string(row[field])
+            for field in ("candidate", "profile", "dimension_or_gate")
+        )
+        if any(not value for value in row_scope):
+            raise ContractError("INVALID_ANALYSIS_PARAMETER")
+        if row_scope[2] not in STATISTICAL_DIMENSIONS_OR_GATES:
+            raise ContractError("UNKNOWN_DIMENSION_OR_GATE")
+        if scope is None:
+            scope = row_scope
+        elif row_scope != scope:
+            raise ContractError("STATISTICAL_UNIT_SCOPE_MIXED")
+        source_generation_id = _require_uuid(row["source_generation_id"])
+        stratum = _require_string(row["stratum"])
+        if stratum not in STRATA:
+            raise ContractError("UNKNOWN_STRATUM")
+        applicable = _require_bool(row["applicable"])
+        if applicable:
+            success = _require_bool(row["success"])
+            per_stratum[stratum].setdefault(source_generation_id, []).append(success)
+            overall.setdefault(source_generation_id, []).append(success)
+        else:
+            if row["success"] is not None:
+                raise ContractError("STATISTICAL_OUTCOME_INVALID")
+            per_stratum[stratum].setdefault(source_generation_id, [])
+            overall.setdefault(source_generation_id, [])
+    applicable_source_count = sum(bool(outcomes) for outcomes in overall.values())
+    if not applicable_source_count:
+        raise ContractError("STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME")
+    return {
+        "overall_confidence_gate": "forbidden",
+        "overall_distinct_source_count": len(overall),
+        "overall_applicable_source_count": applicable_source_count,
+        "overall_conservative_success_count": sum(
+            bool(outcomes) and all(outcomes) for outcomes in overall.values()
+        ),
+        "per_stratum_counts": {
+            stratum: len(per_stratum[stratum]) for stratum in sorted(STRATA)
+        },
+        "per_stratum_denominators": {
+            stratum: sum(bool(outcomes) for outcomes in per_stratum[stratum].values())
+            for stratum in sorted(STRATA)
+        },
+        "per_stratum_not_applicable": {
+            stratum: sum(not outcomes for outcomes in per_stratum[stratum].values())
+            for stratum in sorted(STRATA)
+        },
+        "per_stratum_successes": {
+            stratum: sum(
+                bool(outcomes) and all(outcomes)
+                for outcomes in per_stratum[stratum].values()
+            )
+            for stratum in sorted(STRATA)
+        },
+        "scope": None
+        if scope is None
+        else {
+            "candidate": scope[0],
+            "profile": scope[1],
+            "dimension_or_gate": scope[2],
+        },
+        "stratum_contribution_count": sum(map(len, per_stratum.values())),
+    }
+
+
+def critical_false_accept_summary(
+    rows: Sequence[Mapping[str, Any]]
+) -> Dict[str, int]:
+    """Collapse CFA rows to one any-event Bernoulli trial per source/class."""
+
+    if type(rows) not in (list, tuple):
+        raise ContractError("INVALID_TYPE")
+    scope: Optional[Tuple[str, str, str]] = None
+    events: Dict[str, bool] = {}
+    expected_fields = {
+        "candidate",
+        "event",
+        "profile",
+        "risk_class",
+        "source_generation_id",
+    }
+    for row in rows:
+        if type(row) is not dict:
+            raise ContractError("INVALID_TYPE")
+        if set(row) != expected_fields:
+            raise ContractError("UNKNOWN_FIELD")
+        row_scope = tuple(
+            _require_string(row[field])
+            for field in ("candidate", "profile", "risk_class")
+        )
+        if any(not value for value in row_scope):
+            raise ContractError("INVALID_ANALYSIS_PARAMETER")
+        if row_scope[2] not in RISK_CLASSES:
+            raise ContractError("UNKNOWN_RISK_CLASS")
+        if scope is None:
+            scope = row_scope
+        elif row_scope != scope:
+            raise ContractError("CFA_SCOPE_MIXED")
+        source_id = _require_uuid(row["source_generation_id"])
+        events[source_id] = events.get(source_id, False) or _require_bool(row["event"])
+    if not events:
+        raise ContractError("CFA_UNIT_EMPTY")
+    return {
+        "event_count": sum(events.values()),
+        "source_generation_count": len(events),
+    }
 
 
 class ContractError(RuntimeError):
@@ -1018,6 +1678,7 @@ def _require_uuid(value: Any) -> str:
 class _IdentityRegistry:
     def __init__(self) -> None:
         self.roles: Dict[str, str] = {}
+        self.reviewer_blinding: Dict[str, str] = {}
 
     def define(
         self,
@@ -1057,6 +1718,13 @@ class _IdentityRegistry:
             "reviewer:{0}".format(reviewer_role),
             allow_same_role_repeat=True,
         )
+
+    def bind_reviewer_blinding(self, reviewer_id: str, state: str) -> None:
+        if state not in ("never_unblinded", "unblinded"):
+            raise ContractError("REVIEWER_BLINDING_INVALID")
+        previous = self.reviewer_blinding.setdefault(reviewer_id, state)
+        if previous != state:
+            raise ContractError("BLINDING_REVIEWER_REUSE")
 
 
 def _require_numeric_loopback_endpoint(value: Any) -> None:
@@ -1256,6 +1924,24 @@ def _validate_request_boundary(value: Any) -> None:
         raise ContractError("REQUEST_FAILURE_POLICY_INVALID")
 
 
+def _validate_context_limit_binding(value: Any) -> Dict[str, Any]:
+    binding = _require_object(value, tuple(_EXPECTED_CONTEXT_LIMIT_BINDING))
+    if binding["status"] != "not_probed":
+        raise ContractError("CONTEXT_LIMIT_BINDING_SELF_ASSERTED")
+    if binding != _EXPECTED_CONTEXT_LIMIT_BINDING:
+        raise ContractError("CONTEXT_LIMIT_BINDING_INVALID")
+    return binding
+
+
+def _validate_implementation_identity(value: Any) -> Dict[str, Any]:
+    identity = _require_object(value, tuple(_EXPECTED_IMPLEMENTATION_IDENTITY))
+    if identity["status"] != "unproven":
+        raise ContractError("IMPLEMENTATION_IDENTITY_SELF_ASSERTED")
+    if identity != _EXPECTED_IMPLEMENTATION_IDENTITY:
+        raise ContractError("IMPLEMENTATION_IDENTITY_INVALID")
+    return identity
+
+
 def _validate_runtime(value: Any) -> Dict[str, Any]:
     runtime = _require_object(value, tuple(_EXPECTED_RUNTIME))
     _require_string(runtime["lifecycle"])
@@ -1437,18 +2123,17 @@ def _validate_corpus(
     for raw_sample in _require_list(corpus["samples"]):
         sample = _require_object(
             raw_sample,
-            (
-                "expected_atoms",
-                "risk_class",
-                "sample_id",
-                "source_unit_cluster_id",
-                "stratum",
-            ),
+            _SAMPLE_FIELDS,
         )
         sample_id = registry.define(sample["sample_id"], "sample")
         cluster_id = registry.define(
             sample["source_unit_cluster_id"],
             "source_unit_cluster",
+            allow_same_role_repeat=True,
+        )
+        source_generation_id = registry.define(
+            sample["source_generation_id"],
+            "source_generation",
             allow_same_role_repeat=True,
         )
         stratum = _require_string(sample["stratum"])
@@ -1468,6 +2153,7 @@ def _validate_corpus(
             ),
             "cluster_id": cluster_id,
             "risk_class": risk_class,
+            "source_generation_id": source_generation_id,
             "split": None,
             "stratum": stratum,
         }
@@ -1496,12 +2182,31 @@ def _validate_corpus(
     if not members_by_split["tuning"] or not members_by_split["holdout"]:
         raise ContractError("SPLIT_MEMBERSHIP_INVALID")
     cluster_splits: Dict[str, str] = {}
+    cluster_strata: Dict[str, str] = {}
+    cluster_source_generations: Dict[str, str] = {}
+    source_generation_splits: Dict[str, str] = {}
     for split, members in members_by_split.items():
         for member in members:
             samples[member]["split"] = split
             cluster = samples[member]["cluster_id"]
             previous = cluster_splits.setdefault(cluster, split)
             if previous != split:
+                raise ContractError("CORPUS_SPLIT_OVERLAP")
+            previous_stratum = cluster_strata.setdefault(
+                cluster, samples[member]["stratum"]
+            )
+            if previous_stratum != samples[member]["stratum"]:
+                raise ContractError("SOURCE_CLUSTER_STRATUM_MISMATCH")
+            source_generation = samples[member]["source_generation_id"]
+            previous_source_generation = cluster_source_generations.setdefault(
+                cluster, source_generation
+            )
+            if previous_source_generation != source_generation:
+                raise ContractError("SOURCE_CLUSTER_GENERATION_MISMATCH")
+            previous_source_split = source_generation_splits.setdefault(
+                source_generation, split
+            )
+            if previous_source_split != split:
                 raise ContractError("CORPUS_SPLIT_OVERLAP")
     return samples, len(members_by_split["tuning"]), len(members_by_split["holdout"])
 
@@ -1637,7 +2342,7 @@ def _validate_lane_accounting(
         if terminal_status == "not_applicable":
             raise ContractError("REPAIR_ACCOUNTING_INVALID")
         expected_success = 1 if terminal_status == "success" else 0
-        expected_failure = 1 if terminal_status == "controlled_failure" else 0
+        expected_failure = 1 if terminal_status in ("blinding_failed", "controlled_failure") else 0
         if (
             accounting["repair_attempt_count"] != 1
             or accounting["repair_success_count"] != expected_success
@@ -1657,7 +2362,9 @@ def _validate_lane_accounting(
     ):
         raise ContractError("FALLBACK_ACCOUNTING_INVALID")
     if accounting["human_fallback_count"] and accounting["model_call_count"]:
-        raise ContractError("FALLBACK_ACCOUNTING_INVALID")
+        raise ContractError("HUMAN_FALLBACK_MODEL_CALL_INVALID")
+    if accounting["model_fallback_count"] and accounting["model_call_count"] != 1:
+        raise ContractError("MODEL_FALLBACK_MODEL_CALL_REQUIRED")
 
 
 def _validate_results(
@@ -1721,6 +2428,20 @@ def _validate_results(
             raise ContractError("TERMINAL_STATUS_INVALID")
         dimensions = _validate_dimension_records(result["dimension_records"])
         accounting = _validate_result_accounting(result["accounting"])
+        blinding_status = _require_string(result["blinding_status"])
+        if blinding_status not in BLINDING_STATUSES:
+            raise ContractError("BLINDING_STATE_INVALID")
+        mapping_generation = _require_int(result["mapping_generation"], minimum=0)
+        failure_code = result["failure_code"]
+        if failure_code is not None and (
+            type(failure_code) is not str or _CODE.fullmatch(failure_code) is None
+        ):
+            raise ContractError("FAILURE_CODE_INVALID")
+        if terminal_status == "controlled_failure":
+            if failure_code not in CONTROLLED_FAILURE_CODES:
+                raise ContractError("FAILURE_CODE_INVALID")
+        elif terminal_status != "blinding_failed" and failure_code is not None:
+            raise ContractError("FAILURE_CODE_INVALID")
         if technical == "not_observed":
             if _require_list(result["observed_atoms"]):
                 raise ContractError("TECHNICAL_CONFORMANCE_MISMATCH")
@@ -1748,20 +2469,74 @@ def _validate_results(
                 raise ContractError("TECHNICAL_CONFORMANCE_MISMATCH")
             if terminal_status == "controlled_failure":
                 raise ContractError("TERMINAL_STATUS_MISMATCH")
-        expected_terminal_failures = 1 if terminal_status == "controlled_failure" else 0
+        if technical == "not_observed" and blinding_status != "not_observed":
+            raise ContractError("BLINDING_STATE_INVALID")
+        if blinding_status == "not_observed":
+            if mapping_generation != 0 or (
+                terminal_status == "success" and accounting["model_call_count"]
+                and not accounting["human_fallback_count"]
+            ):
+                raise ContractError("BLINDING_STATE_INVALID")
+            if terminal_status == "blinding_failed":
+                raise ContractError("BLINDING_STATE_INVALID")
+        elif blinding_status == "self_identifying_output":
+            if (
+                accounting["human_fallback_count"]
+                or accounting["model_call_count"] != 1
+                or mapping_generation < 1
+                or terminal_status != "blinding_failed"
+                or failure_code != "BLINDING_FAILED"
+                or editorial != "not_evaluated"
+                or any(
+                    dimensions[dimension] != "blinding_failed"
+                    for dimension in QUALITY_DIMENSIONS - {"schema_atom_stability"}
+                )
+            ):
+                raise ContractError("BLINDING_PRIMARY_OUTCOME_MISMATCH")
+        else:
+            if (
+                accounting["model_call_count"] != 1
+                or mapping_generation < 1
+                or failure_code is not None
+            ):
+                raise ContractError("BLINDING_STATE_INVALID")
+            if terminal_status == "blinding_failed":
+                raise ContractError("BLINDING_STATE_INVALID")
+        if terminal_status == "not_applicable" and (
+            blinding_status != "not_observed"
+            or mapping_generation != 0
+            or editorial != "not_evaluated"
+            or any(
+                dimensions[dimension] != "not_evaluated"
+                for dimension in QUALITY_DIMENSIONS - {"schema_atom_stability"}
+            )
+        ):
+            raise ContractError("TERMINAL_STATUS_MISMATCH")
+        expected_terminal_failures = (
+            1 if terminal_status in ("blinding_failed", "controlled_failure") else 0
+        )
         if accounting["terminal_failure_count"] != expected_terminal_failures:
             raise ContractError("TERMINAL_ACCOUNTING_INVALID")
-        if terminal_status == "success" and accounting["model_call_count"] != 1:
-            raise ContractError("TERMINAL_ACCOUNTING_INVALID")
+        if terminal_status == "success":
+            expected_model_calls = 0 if accounting["human_fallback_count"] else 1
+            if accounting["model_call_count"] != expected_model_calls:
+                if accounting["human_fallback_count"]:
+                    raise ContractError("HUMAN_FALLBACK_MODEL_CALL_INVALID")
+                if accounting["model_fallback_count"]:
+                    raise ContractError("MODEL_FALLBACK_MODEL_CALL_REQUIRED")
+                raise ContractError("TERMINAL_ACCOUNTING_INVALID")
         _validate_lane_accounting(lane, terminal_status, accounting)
         results[result_id] = {
             "accounting": accounting,
             "assignment": assignment,
             "candidate_id": candidate_id,
+            "blinding_status": blinding_status,
             "dimensions": dimensions,
             "editorial_status": editorial,
             "initial_result_id": result["initial_result_id"],
             "lane": lane,
+            "mapping_generation": mapping_generation,
+            "profile_version": result["profile_version"],
             "sample_id": sample_id,
             "stage": stage,
             "technical_conformance": technical,
@@ -1781,23 +2556,38 @@ def _validate_results(
             or initial["sample_id"] != result["sample_id"]
         ):
             raise ContractError("ASSIGNMENT_INITIAL_REFERENCE_INVALID")
+    for incident_id, incident in results.items():
+        if incident["blinding_status"] not in (
+            "external_mapping_leak",
+            "self_identifying_output",
+        ):
+            continue
+        if any(
+            result_id != incident_id
+            and result["lane"] != "primary"
+            and result["candidate_id"] == incident["candidate_id"]
+            and result["sample_id"] == incident["sample_id"]
+            for result_id, result in results.items()
+        ):
+            raise ContractError("BLINDING_REGENERATION_FORBIDDEN")
     return results
 
 
 def _validate_findings(
     value: Any,
+    adjudications_value: Any,
     registry: _IdentityRegistry,
     results: Mapping[str, Mapping[str, Any]],
 ) -> Tuple[List[Dict[str, Any]], int, int]:
-    findings: List[Dict[str, Any]] = []
-    critical_count = 0
+    findings_by_id: Dict[str, Dict[str, Any]] = {}
+    reviews_by_id: Dict[str, Dict[str, Any]] = {}
     review_count = 0
     for raw_finding in _require_list(value):
         finding = _require_object(
             raw_finding,
             _FINDING_FIELDS,
         )
-        registry.define(finding["finding_id"], "finding")
+        finding_id = registry.define(finding["finding_id"], "finding")
         result_id = registry.reference(finding["result_id"], "result")
         category = _require_string(finding["category"])
         if category not in FINDING_CATEGORIES:
@@ -1812,53 +2602,210 @@ def _validate_findings(
             raise ContractError("UNKNOWN_SEVERITY")
         if category in CRITICAL_CATEGORIES and severity != "critical":
             raise ContractError("CRITICAL_SEVERITY_REQUIRED")
+        if (
+            category == "critical_false_accept"
+            and results[result_id]["editorial_status"] != "editorially_approved"
+        ):
+            raise ContractError("CRITICAL_FALSE_ACCEPT_STATE_INVALID")
         human_reviewers: List[str] = []
+        human_review_ids: List[str] = []
+        compromised_reviewers: Set[str] = set()
         model_review_count = 0
         for raw_review in _require_list(finding["reviews"]):
             review = _require_object(
                 raw_review,
                 _REVIEW_FIELDS,
             )
-            registry.define(review["review_id"], "review")
+            review_id = registry.define(review["review_id"], "review")
             role = _require_string(review["reviewer_role"])
             reviewer_id = registry.reviewer(review["reviewer_id"], role)
             credit = _require_string(review["review_credit"])
             if credit not in REVIEW_CREDITS:
                 raise ContractError("UNKNOWN_REVIEW_CREDIT")
+            stage = _require_string(review["review_stage"])
+            evidence_tier = _require_string(review["evidence_tier"])
+            if evidence_tier not in FINDING_REVIEW_EVIDENCE_TIERS:
+                raise ContractError("HUMAN_EVIDENCE_TIER_INVALID")
+            mapping_generation = _require_int(
+                review["mapping_generation"], minimum=0
+            )
+            reviewer_blinding = _require_string(review["reviewer_blinding"])
+            primary_credit = False
             if role == "model_reviewer":
                 model_review_count += 1
-                if credit == "human":
+                if (
+                    credit == "human"
+                    or evidence_tier != "non_human"
+                    or mapping_generation != 0
+                    or reviewer_blinding != "not_applicable"
+                    or stage != "initial"
+                ):
                     raise ContractError("MODEL_REVIEW_NOT_HUMAN")
-            elif credit != "human":
-                raise ContractError("REVIEW_CREDIT_MISMATCH")
-            stage = _require_string(review["review_stage"])
-            if stage not in ("adjudication", "initial"):
-                raise ContractError("UNKNOWN_REVIEW_STAGE")
+            else:
+                if credit != "human":
+                    raise ContractError("REVIEW_CREDIT_MISMATCH")
+                if mapping_generation < 1:
+                    raise ContractError("BLINDING_FINDING_REVIEW_INVALID")
+                if evidence_tier == "primary_blinded":
+                    if (
+                        stage != "initial"
+                        or reviewer_blinding != "never_unblinded"
+                        or mapping_generation != results[result_id]["mapping_generation"]
+                        or results[result_id]["blinding_status"]
+                        not in ("external_mapping_leak", "passed")
+                    ):
+                        raise ContractError("BLINDING_FINDING_REVIEW_INVALID")
+                    primary_credit = True
+                    human_reviewers.append(reviewer_id)
+                    human_review_ids.append(review_id)
+                elif evidence_tier == "compromised_primary":
+                    if (
+                        stage != "initial"
+                        or reviewer_blinding != "unblinded"
+                        or results[result_id]["blinding_status"]
+                        != "external_mapping_leak"
+                        or mapping_generation >= results[result_id]["mapping_generation"]
+                    ):
+                        raise ContractError("BLINDING_FINDING_REVIEW_INVALID")
+                    compromised_reviewers.add(reviewer_id)
+                elif evidence_tier == "secondary_unblinded":
+                    if (
+                        stage != "secondary"
+                        or reviewer_blinding != "unblinded"
+                        or results[result_id]["blinding_status"]
+                        != "self_identifying_output"
+                        or mapping_generation != results[result_id]["mapping_generation"]
+                    ):
+                        raise ContractError("BLINDING_SECONDARY_SCOPE_INVALID")
+                else:
+                    raise ContractError("HUMAN_EVIDENCE_TIER_INVALID")
+                registry.bind_reviewer_blinding(reviewer_id, reviewer_blinding)
             decision = _require_string(review["decision"])
             if decision not in ("confirmed", "dismissed"):
                 raise ContractError("UNKNOWN_REVIEW_DECISION")
-            if role == "human_reviewer" and stage == "initial" and decision == "confirmed":
-                human_reviewers.append(reviewer_id)
+            reviews_by_id[review_id] = {
+                "decision": decision,
+                "finding_id": finding_id,
+                "primary_credit": primary_credit,
+                "reviewer_id": reviewer_id,
+                "reviewer_role": role,
+            }
             review_count += 1
+        if results[result_id]["blinding_status"] == "external_mapping_leak" and (
+            human_reviewers or compromised_reviewers
+        ):
+            if not human_reviewers or not compromised_reviewers:
+                raise ContractError("BLINDING_FINDING_REVIEW_INVALID")
+            if set(human_reviewers) & compromised_reviewers:
+                raise ContractError("BLINDING_REVIEWER_REUSE")
         mandatory = severity in ("high", "critical") or category in CRITICAL_CATEGORIES
         if mandatory and not human_reviewers:
             if model_review_count:
                 raise ContractError("MODEL_REVIEW_NOT_HUMAN")
             raise ContractError("MANDATORY_HUMAN_EVIDENCE_MISSING")
         if severity == "critical" or category in CRITICAL_CATEGORIES:
-            critical_count += 1
             if len(human_reviewers) != len(set(human_reviewers)):
                 raise ContractError("DUPLICATE_CRITICAL_REVIEWER")
-            if len(set(human_reviewers)) < 2:
+            if len(human_reviewers) < 2:
                 raise ContractError("CRITICAL_REVIEW_COUNT_INSUFFICIENT")
-        findings.append(
-            {
-                "category": category,
-                "dimension": dimension,
-                "result_id": result_id,
-                "severity": severity,
-            }
+            if len(human_reviewers) != 2:
+                raise ContractError("CRITICAL_REVIEW_COUNT_INVALID")
+        initial_decisions = {
+            reviews_by_id[review_id]["decision"]
+            for review_id in reviews_by_id
+            if reviews_by_id[review_id]["finding_id"] == finding_id
+            and reviews_by_id[review_id]["primary_credit"]
+        }
+        disagreement = len(initial_decisions) > 1
+        if disagreement and len(human_review_ids) != 2:
+            raise ContractError("ADJUDICATION_LINK_INVALID")
+        findings_by_id[finding_id] = {
+            "category": category,
+            "confirmed": not initial_decisions or initial_decisions == {"confirmed"},
+            "dimension": dimension,
+            "disagreement": disagreement,
+            "human_review_ids": frozenset(human_review_ids),
+            "human_reviewer_ids": frozenset(human_reviewers),
+            "result_id": result_id,
+            "severity": severity,
+        }
+
+    adjudicated: Set[str] = set()
+    for raw_adjudication in _require_list(adjudications_value):
+        adjudication = _require_object(raw_adjudication, _ADJUDICATION_FIELDS)
+        registry.define(adjudication["adjudication_id"], "adjudication")
+        finding_id = registry.reference(adjudication["finding_id"], "finding")
+        finding = findings_by_id.get(finding_id)
+        if finding is None or not finding["disagreement"] or finding_id in adjudicated:
+            raise ContractError("ADJUDICATION_LINK_INVALID")
+        raw_review_ids = _require_list(adjudication["initial_review_ids"])
+        if len(raw_review_ids) != 2:
+            raise ContractError("ADJUDICATION_LINK_INVALID")
+        review_ids = [registry.reference(value, "review") for value in raw_review_ids]
+        if len(set(review_ids)) != 2:
+            raise ContractError("ADJUDICATION_LINK_INVALID")
+        linked = [reviews_by_id.get(review_id) for review_id in review_ids]
+        if any(review is None for review in linked) or any(
+            review["finding_id"] != finding_id
+            or not review["primary_credit"]
+            for review in linked
+        ):
+            raise ContractError("ADJUDICATION_LINK_INVALID")
+        if {review["decision"] for review in linked} != {"confirmed", "dismissed"}:
+            raise ContractError("ADJUDICATION_LINK_INVALID")
+        if set(review_ids) != finding["human_review_ids"]:
+            raise ContractError("ADJUDICATION_LINK_INVALID")
+        role = _require_string(adjudication["reviewer_role"])
+        reviewer_id = registry.reviewer(adjudication["reviewer_id"], role)
+        if role != "human_reviewer":
+            raise ContractError("MODEL_REVIEW_NOT_HUMAN")
+        result = results[finding["result_id"]]
+        if (
+            adjudication["evidence_tier"] != "primary_blinded"
+            or _require_int(adjudication["mapping_generation"], minimum=1)
+            != result["mapping_generation"]
+            or adjudication["reviewer_blinding"] != "never_unblinded"
+            or result["blinding_status"] not in ("external_mapping_leak", "passed")
+        ):
+            raise ContractError("BLINDING_FINDING_REVIEW_INVALID")
+        registry.bind_reviewer_blinding(reviewer_id, "never_unblinded")
+        if reviewer_id in finding["human_reviewer_ids"]:
+            raise ContractError("ADJUDICATOR_NOT_DISTINCT")
+        decision = _require_string(adjudication["decision"])
+        if decision not in ("confirmed", "dismissed"):
+            raise ContractError("UNKNOWN_REVIEW_DECISION")
+        finding["confirmed"] = decision == "confirmed"
+        adjudicated.add(finding_id)
+        review_count += 1
+    if any(
+        finding["disagreement"] and finding_id not in adjudicated
+        for finding_id, finding in findings_by_id.items()
+    ):
+        raise ContractError("ADJUDICATION_REQUIRED")
+
+    findings = list(findings_by_id.values())
+    for finding in findings:
+        if finding["category"] != "critical_false_accept" or not finding["confirmed"]:
+            continue
+        underlying = any(
+            candidate is not finding
+            and candidate["confirmed"]
+            and candidate["result_id"] == finding["result_id"]
+            and candidate["dimension"] == finding["dimension"]
+            and candidate["severity"] == "critical"
+            and candidate["category"] != "critical_false_accept"
+            for candidate in findings
         )
+        if not underlying:
+            raise ContractError("CRITICAL_FALSE_ACCEPT_UNDERLYING_DEFECT_MISSING")
+    critical_count = sum(
+        finding["confirmed"]
+        and (
+            finding["severity"] == "critical"
+            or finding["category"] in CRITICAL_CATEGORIES
+        )
+        for finding in findings
+    )
     return findings, critical_count, review_count
 
 
@@ -1867,15 +2814,20 @@ def _validate_human_ground_truth(
     registry: _IdentityRegistry,
     results: Mapping[str, Mapping[str, Any]],
     samples: Mapping[str, Mapping[str, Any]],
+    agreement_rows_out: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[Tuple[str, str], Set[str]]:
-    records: Dict[Tuple[str, str], Set[str]] = {}
-    statuses: Dict[Tuple[str, str], Set[str]] = {}
+    if agreement_rows_out is not None and type(agreement_rows_out) is not list:
+        raise ContractError("INVALID_TYPE")
+    rows_by_key: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    rows_by_id: Dict[str, Dict[str, Any]] = {}
     for raw_record in _require_list(value):
         record = _require_object(
             raw_record,
             _HUMAN_GROUND_TRUTH_FIELDS,
         )
-        registry.define(record["ground_truth_id"], "human_ground_truth")
+        ground_truth_id = registry.define(
+            record["ground_truth_id"], "human_ground_truth"
+        )
         result_id = registry.reference(record["result_id"], "result")
         dimension = _require_string(record["dimension"])
         if dimension not in QUALITY_DIMENSIONS - {"schema_atom_stability"}:
@@ -1884,51 +2836,212 @@ def _validate_human_ground_truth(
         reviewer_id = registry.reviewer(record["reviewer_id"], role)
         if role != "human_reviewer":
             raise ContractError("MODEL_REVIEW_NOT_HUMAN")
-        if record["review_stage"] != "initial":
+        stage = _require_string(record["review_stage"])
+        if stage not in ("adjudication", "initial", "secondary"):
             raise ContractError("HUMAN_GROUND_TRUTH_STAGE_INVALID")
+        evidence_tier = _require_string(record["evidence_tier"])
+        if evidence_tier not in HUMAN_EVIDENCE_TIERS:
+            raise ContractError("HUMAN_EVIDENCE_TIER_INVALID")
+        reviewer_blinding = _require_string(record["reviewer_blinding"])
+        registry.bind_reviewer_blinding(reviewer_id, reviewer_blinding)
+        mapping_generation = _require_int(record["mapping_generation"], minimum=0)
+        if mapping_generation < 1:
+            raise ContractError("BLINDING_REPLACEMENT_MAPPING_INVALID")
+        adjudicates = _require_list(record["adjudicates"])
         status = _require_string(record["status"])
         if status not in ("human_fail", "human_pass", "not_applicable"):
             raise ContractError("HUMAN_GROUND_TRUTH_STATUS_INVALID")
         if status == "not_applicable":
-            if record["applicability_reason"] != "frozen_not_applicable":
+            if (
+                record["applicability_reason"] != "frozen_not_applicable"
+                or record["ordinal_score"] is not None
+            ):
                 raise ContractError("HUMAN_GROUND_TRUTH_STATUS_INVALID")
-        elif record["applicability_reason"] is not None:
-            raise ContractError("HUMAN_GROUND_TRUTH_STATUS_INVALID")
+        else:
+            if record["applicability_reason"] is not None:
+                raise ContractError("HUMAN_GROUND_TRUTH_STATUS_INVALID")
+            score = _require_int(record["ordinal_score"], minimum=0)
+            if score > 4 or status != ("human_pass" if score >= 3 else "human_fail"):
+                raise ContractError("HUMAN_GROUND_TRUTH_STATUS_INVALID")
+        if evidence_tier == "secondary_unblinded":
+            if stage != "secondary" or reviewer_blinding != "unblinded" or adjudicates:
+                raise ContractError("BLINDING_SECONDARY_SCOPE_INVALID")
+            if results[result_id]["blinding_status"] != "self_identifying_output":
+                raise ContractError("BLINDING_SECONDARY_SCOPE_INVALID")
+        elif evidence_tier == "compromised_primary":
+            if stage != "initial" or reviewer_blinding != "unblinded" or adjudicates:
+                raise ContractError("BLINDING_REPLACEMENT_MAPPING_INVALID")
+        else:
+            if reviewer_blinding != "never_unblinded" or stage == "secondary":
+                raise ContractError("BLINDING_REPLACEMENT_MAPPING_INVALID")
+            if stage == "initial" and adjudicates:
+                raise ContractError("ADJUDICATION_LINK_INVALID")
+            if stage == "adjudication" and len(adjudicates) != 2:
+                raise ContractError("ADJUDICATION_LINK_INVALID")
         key = (result_id, dimension)
-        reviewers = records.setdefault(key, set())
-        if reviewer_id in reviewers:
-            raise ContractError("DUPLICATE_HUMAN_GROUND_TRUTH")
-        reviewers.add(reviewer_id)
-        statuses.setdefault(key, set()).add(status)
+        parsed = {
+            "adjudicates": tuple(_require_uuid(item) for item in adjudicates),
+            "applicability_reason": record["applicability_reason"],
+            "evidence_tier": evidence_tier,
+            "ground_truth_id": ground_truth_id,
+            "mapping_generation": mapping_generation,
+            "ordinal_score": record["ordinal_score"],
+            "review_stage": stage,
+            "reviewer_id": reviewer_id,
+            "reviewer_blinding": reviewer_blinding,
+            "status": status,
+        }
+        rows_by_key.setdefault(key, []).append(parsed)
+        rows_by_id[ground_truth_id] = parsed
+
+    unblinded_reviewers = {
+        row["reviewer_id"]
+        for rows in rows_by_key.values()
+        for row in rows
+        if row["reviewer_blinding"] == "unblinded"
+    }
+    never_unblinded_reviewers = {
+        row["reviewer_id"]
+        for rows in rows_by_key.values()
+        for row in rows
+        if row["reviewer_blinding"] == "never_unblinded"
+    }
+    if unblinded_reviewers & never_unblinded_reviewers:
+        raise ContractError("BLINDING_REVIEWER_REUSE")
+
+    primary_records: Dict[Tuple[str, str], Set[str]] = {}
+    materialized_agreement_rows: List[Dict[str, Any]] = []
+    stable_pairs: Dict[Tuple[str, str], frozenset] = {}
     for result_id, result in results.items():
         sample = samples[result["sample_id"]]
-        has_output = result["terminal_status"] != "controlled_failure"
-        if not has_output and any(key[0] == result_id for key in records):
+        has_output = result["terminal_status"] in ("blinding_failed", "success")
+        result_rows = [
+            row
+            for key, rows in rows_by_key.items()
+            if key[0] == result_id
+            for row in rows
+        ]
+        if not has_output and result_rows:
             raise ContractError("HUMAN_GROUND_TRUTH_WITHOUT_OUTPUT")
-        if sample["split"] == "holdout" and has_output:
-            for dimension in QUALITY_DIMENSIONS - {"schema_atom_stability"}:
-                if not records.get((result_id, dimension)):
-                    raise ContractError("HOLDOUT_GROUND_TRUTH_MISSING")
-        if has_output and sample["risk_class"] == "critical_risk":
-            for dimension in QUALITY_DIMENSIONS - {"schema_atom_stability"}:
-                if len(records.get((result_id, dimension), set())) < 2:
-                    raise ContractError("CRITICAL_REVIEW_COUNT_INSUFFICIENT")
+        if result["blinding_status"] == "self_identifying_output":
+            if any(row["evidence_tier"] != "secondary_unblinded" for row in result_rows):
+                raise ContractError("BLINDING_PRIMARY_GROUND_TRUTH_FORBIDDEN")
+            continue
+        if result["blinding_status"] == "not_observed" and result_rows:
+            raise ContractError("BLINDING_STATE_INVALID")
         for dimension in QUALITY_DIMENSIONS - {"schema_atom_stability"}:
             key = (result_id, dimension)
-            if key not in statuses:
+            rows = rows_by_key.get(key, [])
+            initials = [
+                row
+                for row in rows
+                if row["evidence_tier"] == "primary_blinded"
+                and row["review_stage"] == "initial"
+            ]
+            compromised = [
+                row for row in rows if row["evidence_tier"] == "compromised_primary"
+            ]
+            adjudicators = [
+                row
+                for row in rows
+                if row["evidence_tier"] == "primary_blinded"
+                and row["review_stage"] == "adjudication"
+            ]
+            if result["blinding_status"] == "external_mapping_leak" and (
+                rows or sample["split"] == "holdout"
+            ):
+                if not compromised or not initials:
+                    raise ContractError("BLINDING_REPLACEMENT_MAPPING_INVALID")
+                if any(
+                    row["mapping_generation"] >= result["mapping_generation"]
+                    for row in compromised
+                ) or any(
+                    row["mapping_generation"] != result["mapping_generation"]
+                    for row in initials + adjudicators
+                ):
+                    raise ContractError("BLINDING_REPLACEMENT_MAPPING_INVALID")
+                compromised_reviewers = {row["reviewer_id"] for row in compromised}
+                if compromised_reviewers & {
+                    row["reviewer_id"] for row in initials + adjudicators
+                }:
+                    raise ContractError("BLINDING_REVIEWER_REUSE")
+            elif compromised:
+                raise ContractError("BLINDING_REPLACEMENT_MAPPING_INVALID")
+            if any(
+                row["mapping_generation"] != result["mapping_generation"]
+                for row in initials + adjudicators
+            ):
+                raise ContractError("BLINDING_REPLACEMENT_MAPPING_INVALID")
+            if not initials:
                 if result["dimensions"][dimension] != "not_evaluated":
                     raise ContractError("MANDATORY_HUMAN_EVIDENCE_MISSING")
+                if sample["split"] == "holdout" and has_output:
+                    raise ContractError("HOLDOUT_GROUND_TRUTH_MISSING")
                 continue
-            dimension_status = result["dimensions"][dimension]
-            observed = statuses[key]
-            expected_status = (
-                "human_fail"
-                if "human_fail" in observed or len(observed) > 1
-                else next(iter(observed))
-            )
-            if dimension_status != expected_status:
+            if len(initials) != 2 or len({row["reviewer_id"] for row in initials}) != 2:
+                raise ContractError("REVIEWER_PAIR_INCOMPLETE")
+            pair = frozenset(row["reviewer_id"] for row in initials)
+            binding_key = (sample["stratum"], dimension)
+            previous_pair = stable_pairs.setdefault(binding_key, pair)
+            if previous_pair != pair:
+                raise ContractError("STABLE_REVIEWER_PAIR_DRIFT")
+            primary_records[key] = set(pair)
+            initial_outcomes = {
+                (
+                    row["status"],
+                    row["ordinal_score"],
+                    row["applicability_reason"],
+                )
+                for row in initials
+            }
+            if len(initial_outcomes) == 1:
+                if adjudicators:
+                    raise ContractError("ADJUDICATION_LINK_INVALID")
+                final_row = initials[0]
+            else:
+                if len(adjudicators) != 1:
+                    raise ContractError("ADJUDICATION_REQUIRED")
+                final_row = adjudicators[0]
+                linked_ids = set(final_row["adjudicates"])
+                if linked_ids != {row["ground_truth_id"] for row in initials}:
+                    raise ContractError("ADJUDICATION_LINK_INVALID")
+                if final_row["reviewer_id"] in pair:
+                    raise ContractError("ADJUDICATOR_NOT_DISTINCT")
+            if result["dimensions"][dimension] != final_row["status"]:
                 raise ContractError("HUMAN_GROUND_TRUTH_STATUS_MISMATCH")
-    return records
+            ordered_initials = sorted(initials, key=lambda row: row["reviewer_id"])
+            materialized_agreement_rows.append(
+                {
+                    "applicability_adjudication": None
+                    if not (
+                        (ordered_initials[0]["ordinal_score"] is None)
+                        != (ordered_initials[1]["ordinal_score"] is None)
+                    )
+                    else {
+                        "adjudication_id": final_row["ground_truth_id"],
+                        "adjudicator_reviewer_id": final_row["reviewer_id"],
+                        "initial_record_ids": [
+                            row["ground_truth_id"] for row in ordered_initials
+                        ],
+                    },
+                    "candidate": result["candidate_id"],
+                    "dimension": dimension,
+                    "first": ordered_initials[0]["ordinal_score"],
+                    "initial_record_ids": [
+                        row["ground_truth_id"] for row in ordered_initials
+                    ],
+                    "profile": result["profile_version"],
+                    "reviewer_pair": [
+                        row["reviewer_id"] for row in ordered_initials
+                    ],
+                    "second": ordered_initials[1]["ordinal_score"],
+                    "source_generation_id": sample["source_generation_id"],
+                    "stratum": sample["stratum"],
+                }
+            )
+    if agreement_rows_out is not None:
+        agreement_rows_out.extend(materialized_agreement_rows)
+    return primary_records
 
 
 def _validate_benchmark_state(value: Any) -> Dict[str, Any]:
@@ -1941,6 +3054,8 @@ def _validate_benchmark_state(value: Any) -> Dict[str, Any]:
     report_kind = _require_string(state["report_kind"])
     if (complete, report_kind) not in _BENCHMARK_STATES:
         raise ContractError("BENCHMARK_STATE_INVALID")
+    if complete:
+        raise ContractError("PARTIAL_REPORT_CANNOT_BE_COMPLETE")
     return state
 
 
@@ -1954,7 +3069,12 @@ def _validate_acceptance(
     risky_results = {
         finding["result_id"]
         for finding in findings
-        if finding["severity"] in ("high", "critical")
+        if finding["confirmed"] and finding["severity"] in ("high", "critical")
+    }
+    false_accept_results = {
+        finding["result_id"]
+        for finding in findings
+        if finding["confirmed"] and finding["category"] == "critical_false_accept"
     }
     human_dimensions = QUALITY_DIMENSIONS - {"schema_atom_stability"}
     for result_id, result in results.items():
@@ -1962,6 +3082,8 @@ def _validate_acceptance(
             continue
         if result["technical_conformance"] != "synthetic_conformant":
             raise ContractError("TECHNICAL_CONFORMANCE_REQUIRED_FOR_APPROVAL")
+        if result_id in false_accept_results:
+            raise ContractError("CRITICAL_FALSE_ACCEPT_DETECTED")
         if result_id in risky_results:
             raise ContractError("HIGH_RISK_EDITORIAL_APPROVAL")
         if any(
@@ -2002,11 +3124,29 @@ def _validate_acceptance(
 def _validate_execution_policy(
     results: Mapping[str, Mapping[str, Any]],
     provider_policy: Mapping[str, Any],
+    context_limit_binding: Mapping[str, Any],
+    implementation_identity: Mapping[str, Any],
 ) -> None:
     if not provider_policy["fallback"] and any(
-        result["lane"] == "fallback" for result in results.values()
+        result["accounting"]["model_fallback_count"] for result in results.values()
     ):
         raise ContractError("FALLBACK_ACCOUNTING_INVALID")
+    live_observation = any(
+        result["accounting"][field]
+        for result in results.values()
+        for field in (
+            "cold_latency_observation_count",
+            "memory_observation_count",
+            "model_call_count",
+            "warm_latency_observation_count",
+        )
+    )
+    if live_observation and context_limit_binding["status"] != "proven":
+        raise ContractError("CONTEXT_LIMIT_BINDING_UNPROVEN")
+    if live_observation and implementation_identity["status"] != "proven":
+        raise ContractError("EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN")
+    if live_observation and provider_policy["residency_status"] != "proven":
+        raise ContractError("LIVE_OBSERVATION_WITHOUT_RESIDENCY")
 
 
 def _validate_coverage(
@@ -2078,13 +3218,16 @@ def _validate_aggregate_report(
     results: Mapping[str, Mapping[str, Any]],
     finding_count: int,
     critical_count: int,
+    critical_false_accept_count: int,
     review_count: int,
     ground_truth_count: int,
     provider_policy: Mapping[str, Any],
 ) -> None:
     fixed_fields = (
+        "blinding_failure_count",
         "candidate_count",
         "conformance_result_count",
+        "critical_false_accept_count",
         "critical_finding_count",
         "editorially_approved_count",
         "editorially_rejected_count",
@@ -2115,29 +3258,19 @@ def _validate_aggregate_report(
         raise ContractError("FALLBACK_ACCOUNTING_INVALID")
     if sums["retry_attempt_count"]:
         raise ContractError("RETRY_ACCOUNTING_INVALID")
-    if not provider_policy["fallback"] and any(
-        sums[field]
-        for field in ("fallback_attempt_count", "human_fallback_count", "model_fallback_count")
-    ):
+    if not provider_policy["fallback"] and sums["model_fallback_count"]:
         raise ContractError("FALLBACK_ACCOUNTING_INVALID")
-    if provider_policy["residency_status"] == "not_probed" and any(
-        sums[field]
-        for field in (
-            "cold_latency_observation_count",
-            "initial_attempt_count",
-            "memory_observation_count",
-            "model_call_count",
-            "repair_attempt_count",
-            "retry_attempt_count",
-            "warm_latency_observation_count",
-        )
-    ):
-        raise ContractError("LIVE_OBSERVATION_WITHOUT_RESIDENCY")
     if any(sums[field] > len(results) for field in _ACCOUNTING_FIELDS):
         raise ContractError("ACCOUNTING_COUNT_EXCEEDS_COVERAGE")
     expected: Dict[str, int] = {
+        "blinding_failure_count": sum(
+            result["blinding_status"]
+            in ("external_mapping_leak", "self_identifying_output")
+            for result in results.values()
+        ),
         "candidate_count": len(candidates),
         "conformance_result_count": len(results),
+        "critical_false_accept_count": critical_false_accept_count,
         "critical_finding_count": critical_count,
         "editorially_approved_count": sum(
             result["editorial_status"] == "editorially_approved" for result in results.values()
@@ -2174,10 +3307,16 @@ def validate_document(document: Any) -> Dict[str, int]:
     )
     if root["schema_version"] != DOCUMENT_SCHEMA:
         raise ContractError("SCHEMA_VERSION_UNSUPPORTED")
-    definition_states = _validate_definition_bundle(root["definition_bundle"])
+    _validate_definition_bundle(root["definition_bundle"])
     _validate_protocol(root["protocol"])
     provider_policy = _validate_provider_policy(root["provider_policy"])
     _validate_request_boundary(root["request_boundary"])
+    context_limit_binding = _validate_context_limit_binding(
+        root["context_limit_binding"]
+    )
+    implementation_identity = _validate_implementation_identity(
+        root["implementation_identity"]
+    )
     registry = _IdentityRegistry()
     candidates = _validate_candidates(root["candidate_profiles"], registry)
     samples, tuning_count, holdout_count = _validate_corpus(root["corpus"], registry)
@@ -2186,19 +3325,50 @@ def validate_document(document: Any) -> Dict[str, int]:
     )
     _validate_synthetic_corpus_freeze(root["corpus"])
     findings, critical_count, review_count = _validate_findings(
-        root["findings"], registry, results
+        root["findings"], root["adjudications"], registry, results
     )
+    agreement_rows: List[Dict[str, Any]] = []
     ground_truth = _validate_human_ground_truth(
-        root["human_ground_truth"], registry, results, samples
+        root["human_ground_truth"],
+        registry,
+        results,
+        samples,
+        agreement_rows,
     )
+    agreement_scopes: Dict[Tuple[str, str, str, str], List[Dict[str, Any]]] = {}
+    for row in agreement_rows:
+        scope = tuple(
+            row[field]
+            for field in ("candidate", "profile", "stratum", "dimension")
+        )
+        agreement_scopes.setdefault(scope, []).append(row)
+    for rows in agreement_scopes.values():
+        agreement_unit_vectors(rows)
     benchmark_state = _validate_benchmark_state(root["benchmark_state"])
+    if root["adjudications"] or any(
+        type(record) is not dict
+        or record.get("evidence_tier") != "secondary_unblinded"
+        for record in root["human_ground_truth"]
+    ):
+        raise ContractError("PARTIAL_REPORT_EVIDENCE_FORBIDDEN")
     _validate_coverage(
         root["coverage"], results, candidates, samples, benchmark_state
     )
+    critical_false_accept_units = {
+        (
+            results[finding["result_id"]]["candidate_id"],
+            results[finding["result_id"]]["profile_version"],
+            samples[results[finding["result_id"]]["sample_id"]][
+                "source_generation_id"
+            ],
+            samples[results[finding["result_id"]]["sample_id"]]["risk_class"],
+        )
+        for finding in findings
+        if finding["confirmed"] and finding["category"] == "critical_false_accept"
+    }
     _validate_acceptance(
         results, findings, ground_truth, samples, benchmark_state
     )
-    _validate_execution_policy(results, provider_policy)
     _validate_aggregate_report(
         root["aggregate_report"],
         candidates=candidates,
@@ -2208,14 +3378,17 @@ def validate_document(document: Any) -> Dict[str, int]:
         results=results,
         finding_count=len(findings),
         critical_count=critical_count,
+        critical_false_accept_count=len(critical_false_accept_units),
         review_count=review_count,
         ground_truth_count=len(root["human_ground_truth"]),
         provider_policy=provider_policy,
     )
-    if benchmark_state["complete"] and any(
-        state != "owner_accepted" for state in definition_states
-    ):
-        raise ContractError("OWNER_DECISION_REQUIRED")
+    _validate_execution_policy(
+        results,
+        provider_policy,
+        context_limit_binding,
+        implementation_identity,
+    )
     return {
         "candidates": len(candidates),
         "findings": len(findings),
@@ -2230,6 +3403,10 @@ def validate_document(document: Any) -> Dict[str, int]:
 
 def validate_json_bytes(data: bytes) -> Dict[str, Any]:
     try:
+        if type(data) is not bytes:
+            raise ContractError("INVALID_TYPE")
+        if len(data) > MAX_INPUT_BYTES:
+            raise ContractError("INPUT_SIZE_LIMIT")
         document = parse_json_bytes(data)
         return _result("ok", counts=validate_document(document))
     except ContractError as error:
@@ -2273,9 +3450,43 @@ def _patch_target(root: Any, target: Sequence[Any]) -> Tuple[Any, Any]:
     return current, leaf
 
 
-def _apply_patches(base: Any, patches: Any) -> Any:
+def _encode_materialized_document(document: Any) -> bytes:
+    try:
+        encoded = json.dumps(
+            document,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+    except (RecursionError, TypeError, ValueError):
+        raise ContractError("FIXTURE_INVALID")
+    if len(encoded) > MAX_INPUT_BYTES:
+        raise ContractError("INPUT_SIZE_LIMIT")
+    return encoded
+
+
+def _consume_materialization_work(
+    document: Any, consumed: int
+) -> Tuple[bytes, int]:
+    if (
+        consumed
+        > MAX_MATERIALIZATION_WORK_BYTES
+        - MATERIALIZATION_PREENCODE_RESERVE_BYTES
+    ):
+        raise ContractError("MATERIALIZATION_WORK_LIMIT")
+    encoded = _encode_materialized_document(document)
+    if len(encoded) > MAX_MATERIALIZATION_WORK_BYTES - consumed:
+        raise ContractError("MATERIALIZATION_WORK_LIMIT")
+    return encoded, consumed + len(encoded)
+
+
+def _apply_patches(base: Any, patches: Any) -> bytes:
+    patch_rows = _require_list(patches)
+    if len(patch_rows) > MAX_FIXTURE_PATCH_COUNT:
+        raise ContractError("MATERIALIZATION_WORK_LIMIT")
     document = copy.deepcopy(base)
-    for raw_patch in _require_list(patches):
+    encoded, consumed = _consume_materialization_work(document, 0)
+    for raw_patch in patch_rows:
         if type(raw_patch) is not dict:
             raise ContractError("FIXTURE_INVALID")
         operation = raw_patch.get("operation")
@@ -2307,6 +3518,7 @@ def _apply_patches(base: Any, patches: Any) -> Any:
             if type(target) is not list:
                 raise ContractError("FIXTURE_INVALID")
             target.append(copy.deepcopy(source))
+            encoded, consumed = _consume_materialization_work(document, consumed)
             continue
         if operation == "append":
             current = document
@@ -2320,6 +3532,7 @@ def _apply_patches(base: Any, patches: Any) -> Any:
             if type(current) is not list:
                 raise ContractError("FIXTURE_INVALID")
             current.append(copy.deepcopy(patch["value"]))
+            encoded, consumed = _consume_materialization_work(document, consumed)
             continue
         parent, leaf = _patch_target(document, patch["target"])
         try:
@@ -2338,7 +3551,8 @@ def _apply_patches(base: Any, patches: Any) -> Any:
                 raise ContractError("FIXTURE_INVALID")
         except (KeyError, IndexError):
             raise ContractError("FIXTURE_INVALID")
-    return document
+        encoded, consumed = _consume_materialization_work(document, consumed)
+    return encoded
 
 
 def _validate_fixture_manifest(value: Any) -> Dict[str, Any]:
@@ -2376,16 +3590,13 @@ def materialize_fixture_case(manifest: Any, case_id: str) -> bytes:
             continue
         if "document_utf8" in case:
             try:
-                return case["document_utf8"].encode("utf-8", errors="strict")
+                encoded = case["document_utf8"].encode("utf-8", errors="strict")
             except UnicodeEncodeError:
                 raise ContractError("FIXTURE_INVALID")
-        document = _apply_patches(manifest["base_document"], case["patches"])
-        return json.dumps(
-            document,
-            ensure_ascii=True,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("ascii")
+            if len(encoded) > MAX_INPUT_BYTES:
+                raise ContractError("INPUT_SIZE_LIMIT")
+            return encoded
+        return _apply_patches(manifest["base_document"], case["patches"])
     raise ContractError("FIXTURE_CASE_NOT_FOUND")
 
 

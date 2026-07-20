@@ -53,10 +53,10 @@ owner decision до holdout.
 | `M1B-T09` | Model-review ошибочно засчитан как human review | High | closed reviewer-role enum, human identity mapping local, две разные human identities для critical classes, model experiment separate | synthetic contract: `MODEL_REVIEW_NOT_HUMAN`; future live role violations также invalidируют affected category/verdict |
 | `M1B-T10` | Raw exception, traceback, filename или path раскрывает corpus | Critical | все exceptions перехватываются до CLI boundary; controlled codes/counts only; raw exception logging disabled | неизвестная ошибка становится generic controlled failure; leakage blocks publication |
 | `M1B-T11` | Benchmark пишет в source, Workshop, game, launcher или active output | Critical | only explicit ignored benchmark root, protected-root disjointness, read-only source descriptors, no discovery, write allowlist and attempt counters | любой ambiguous path/write attempt: `PROTECTED_PATH_WRITE_ATTEMPT`; немедленный abort |
-| `M1B-T12` | Corpus/profile/protocol bytes drift, но results объединены | High | trusted closed freeze registry поверх canonical framing; отдельный domain-separated digest exact public synthetic corpus в `corpus_policy`; accepted/proposed state, exact runtime binding, batch pre/post checks, no cross-generation merge; private corpus digest остаётся local-only immutability check | coherent synthetic expected/observed drift даёт `CORPUS_DEFINITION_MISMATCH`; definition mismatch codes либо private generation drift также инвалидируют affected batch |
-| `M1B-T13` | Reviewer узнаёт candidate и bias-ит оценку, включая self-identification в output | High | randomized presentation, blinded labels, private mapping, model metadata/latency/thinking hidden; output не редактируется | external leak инвалидирует records и требует fresh never-unblinded reviewers/new mapping; self-identifying output получает `BLINDING_FAILED`, остаётся denominator failure; unblinded review secondary only |
-| `M1B-T14` | Среднее, correlated rows либо малая выборка создают ложную уверенность | High | independent source-unit clusters, max one Bernoulli contribution/cluster/gate, closed strata/allocation, exact applicable `n`, preselected confidence bounds | insufficient `n`/bound, row-level pseudoreplication или pooled-only report не получает verdict; `OWNER_DECISION_REQUIRED` до принятия numbers |
-| `M1B-T15` | Timeout, repair, fallback либо duplicate assignment исчезает из denominator | High | unique candidate/sample/profile/generation/lane/stage/index tuple, exact declared coverage, retry `0`, max one model call/row, immutable initial attempt, lane-specific exact repair/fallback/terminal equations; fallback rows запрещены при `fallback=false` | duplicate/missing/extra assignment, phantom cross-lane counter или accounting mismatch invalidates report; terminal failure остаётся denominator |
+| `M1B-T12` | Declarative corpus/profile/protocol drift либо executable byte drift скрыт одним bundle hash | High | trusted closed definition registry и synthetic-corpus digest отдельно от non-circular external executable manifest; no cross-generation merge | definition/corpus mismatch invalidates document; до external manifest действует `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN` |
+| `M1B-T13` | Reviewer узнаёт candidate и bias-ит ground truth/finding/adjudication, включая self-identification в output | High | global reviewer exposure, positive mapping generations, provenance fields на всех human surfaces, randomized presentation и private mapping; model-call success не может оставаться `not_observed` | external leak сохраняет compromised records и допускает только fresh never-unblinded reviewers/new mapping без generation; self-identification требует ровно один model call, даёт `BLINDING_FAILED`, denominator failure и запрет sibling generation; human fallback не может self-identify; unblinded evidence secondary only |
+| `M1B-T14` | Source/cluster rows, repeated strata, findings либо candidate selection раздувают `n`/`x` и создают ложную уверенность | High | unit `(candidate,profile,dimension_or_gate,stratum,source_generation)`; conservative row collapse; CFA source-generation/class any-event; Bonferroni `1/20 -> 1/60`, tail `1/120`; conjunctive strata; pooled interval forbidden | duplicate rows не увеличивают denominator/event count; insufficient per-stratum `n`, failed bound, mixed scope или marginal-only evidence не получает verdict |
+| `M1B-T15` | Timeout, repair, fallback либо duplicate assignment исчезает из denominator | High | unique candidate/sample/profile/generation/lane/stage/index tuple, exact declared coverage, retry `0`, max one model call/row, immutable initial attempt, lane-specific exact repair/fallback/terminal equations; `fallback=false` запрещает hidden/model/provider fallback, но не заранее объявленную human-fallback lane с zero model calls | duplicate/missing/extra assignment, phantom cross-lane counter или accounting mismatch invalidates report; terminal failure остаётся denominator |
 | `M1B-T16` | Cold/warm latency смешаны либо lifecycle не доказан | Medium | separate lanes, frozen warm-up/repetition policy, residency/lifecycle evidence и separate distributions | unknown lifecycle: `LIFECYCLE_STATE_UNPROVEN`; observation excluded as invalid, count retained |
 | `M1B-T17` | Thinking/schema/output-limit capability или token accounting отличается, и post-hoc option даёт одному model преимущество | High | common frozen profile; exact output-limit binding; любое model-specific отличие pre-registered with separate hash/results before tuning | unproven output-limit binding: `OUTPUT_LIMIT_BINDING_UNPROVEN`; другая unregistered profile exception: `PROFILE_POLICY_VIOLATION`; no primary ranking |
 | `M1B-T18` | Temporary raw artifacts переживают retention или cleanup | Critical | sealed ignored scratch, predeclared retention deadline, cleanup verification и aggregate deletion record | cleanup/deletion failure остаётся privacy blocker; public evidence не выпускается |
@@ -65,8 +65,11 @@ owner decision до holdout.
 | `M1B-T21` | Synthetic conformance либо D1 pass ошибочно изображает editorial acceptance | Critical | отдельные `technical_conformance`, D2–D5 `human_ground_truth` и `editorial_status`; no-output controlled failure требует D1–D5 `not_evaluated` и запрещает ground truth; M1B-0 запрещает `editorially_approved`; high/critical и mandatory-human gates | human quality без output, missing human evidence, role collision/mutation либо auto-accept даёт contract failure; `technical_safe` не означает `editorially_approved` |
 | `M1B-T22` | Ollama сохраняет private request/output в logs, history, diagnostics, telemetry или temp storage | Critical | synthetic-only persistence preflight, exact version/config surfaces, retention/cleanup proof до private bytes | unknown sink либо incomplete proof: `PROVIDER_PERSISTENCE_UNPROVEN`; private request запрещён |
 | `M1B-T23` | Conversation/context/thinking state переносит content между samples, candidates или splits | Critical | новый stateless request на каждый stage, closed field allowlist, запрет context/history reuse, thinking hidden/discarded by policy | unknown field/state либо continuation reuse останавливает run; affected splits invalid |
-| `M1B-T24` | Huge JSON number, float/non-finite либо malformed JSON вызывает pre-validation DoS или неоднозначную coercion | High | bounded input, bounded lexical `parse_int` до integer allocation, float/non-finite reject hooks, strict UTF-8/duplicate-key/closed schema | oversize integer: `JSON_INTEGER_OUT_OF_RANGE`; float: `JSON_FLOAT_FORBIDDEN`; token не echo-ится, no partial parse/traceback |
-| `M1B-T25` | Complete benchmark заявлен при partial, missing либо asymmetric coverage | High | explicit partial/complete state, exact assignment cross-product, candidate/profile/stratum row-derived totals | candidate без result, incomplete cross-product, extra row или mixed generation invalidates report; verdict absent |
+| `M1B-T24` | Huge JSON number, fixture expansion/repeated-work, float/non-finite либо malformed JSON вызывает pre-validation DoS или неоднозначную coercion | High | `4 MiB` bound на standalone bytes, fixture manifest и каждый materialized document; максимум `256` patches; cumulative accepted compact-serialization work максимум `16 MiB`, полный `4 MiB` reserve до следующего encoder call и reuse final encoding; bounded lexical `parse_int` до integer allocation; float/non-finite reject hooks; strict UTF-8/duplicate-key/closed schema | oversize input/expansion: `INPUT_SIZE_LIMIT`; patch/work budget: `MATERIALIZATION_WORK_LIMIT` до unreserved encoding; oversize integer: `JSON_INTEGER_OUT_OF_RANGE`; float: `JSON_FLOAT_FORBIDDEN`; token не echo-ится, no partial parse/traceback |
+| `M1B-T25` | Complete benchmark заявлен через partial M1B-0 schema | High | v3 допускает только partial synthetic report; future live report требует новую owner-accepted schema/generation | любой `complete_benchmark` получает `PARTIAL_REPORT_CANNOT_BE_COMPLETE`; verdict absent |
+| `M1B-T26` | Tokenizer/effective context limit либо silent left/right truncation не совпадают с profile | Critical | external tokenizer/input-limit binding, boundary canary, prompt-eval/overflow/error/post-response checks до private bytes | self-asserted proof invalid; пока checks `not_probed`, `CONTEXT_LIMIT_BINDING_UNPROVEN` блокирует live observation; controlled overflow не получает human labels |
+| `M1B-T27` | Validator сам объявляет hash своей реализации и создаёт circular trust | Critical | external owner-accepted manifest без self digest/entry, exact regular-file paths/roles/hashes и domain framing | report self-assertion invalid; `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN` до external verifier/record |
+| `M1B-T28` | Stable-pair kappa смешивает reviewers, final adjudicator ratings, duplicate sources или undefined variance | High | two frozen initial IDs, stable distinct pair per stratum/dimension, worst-row source collapse, bilateral/unilateral NA policy, exact rational formula и every-delete-one gate | mixed scope/pair, missing adjudication, `n<46`, undefined point/uncertainty либо kappa `<3/5` fail closed |
 
 ## Control invariants
 
@@ -81,20 +84,24 @@ owner decision до holdout.
    conversation/context/continuation/thinking state;
 5. corpus split disjoint, related clusters не разделены и holdout не раскрывался
    до freeze;
-6. schema/prompt/profile/rubric exact bytes совпадают с trusted freeze registry,
-   а его state owner-accepted;
+6. schema/prompt/profile/rubric/analysis definitions совпадают с owner-accepted
+   registry, а exact executable bytes — с отдельным external manifest;
 7. assignments уникальны, declared coverage exact, initial attempts, repairs,
    fallbacks, timeouts и terminal failures полностью учтены;
-8. каждый holdout output имеет D2–D5 human ground truth; critical classes имеют
-   две независимые initial human reviews и adjudication;
+8. каждый holdout output имеет две stable-pair initial human records по каждой
+   D2–D5; critical classes сохраняют две независимые finding reviews, а при
+   disagreement — отдельную adjudication;
 9. high/critical finding, repair/fallback и `BLINDING_FAILED` не прошли
    auto-accept и остались в denominator;
-10. applicable cluster-level `n`, strata allocation, stable reviewer pairs и
-    confidence methods совпали с pre-holdout owner decision;
+10. source-generation per-stratum denominator/numerator, CFA class events,
+    Bonferroni family, stable reviewer pairs и robust exact kappa совпали с
+    pre-holdout owner decision;
 11. raw data не вышла за local private boundary;
 12. source/active write-attempt count равен нулю;
 13. preflight/postflight generations совпали;
-14. public report прошёл leakage gate после последнего byte change.
+14. tokenizer/effective context limit и silent-truncation boundary доказаны
+    external canary evidence;
+15. public report прошёл leakage gate после последнего byte change.
 
 Отсутствие evidence для любого invariant — blocker, а не нулевое наблюдение.
 
@@ -109,6 +116,11 @@ Provider metadata также не доказывает отсутствие pers
 canary preflight не охватил logging, history, crash/diagnostic, telemetry,
 temporary storage, retention и cleanup surfaces, действует независимый blocker
 `PROVIDER_PERSISTENCE_UNPROVEN`.
+
+M1B-0 не доказывает tokenizer/context binding и exact executable identity.
+`CONTEXT_LIMIT_BINDING_UNPROVEN` и
+`EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN` остаются независимыми live
+pre-request blockers; успешный synthetic validator их не снимает.
 
 Leakage scanner не является математическим доказательством отсутствия каждого
 короткого substring. Поэтому publishable allowlist, local corpus fingerprints и

@@ -128,5 +128,18 @@ under review. The offline [synthetic fixture contract](../../fixtures/m1b/README
 is checked by [`m1b_contract.py`](m1b_contract.py) without Ollama, network, corpus,
 game, Workshop, launcher, or active-path access.
 
+Current public proposal identity is protocol v2/generation 102, document,
+fixture and output schema v3, synthetic corpus v3/generation 304, and 17
+components. The table has 169 cases: 3 controlled successes and 166 exact
+controlled failures. Bundle SHA-256 is
+`8992351db59d99deec8809a7228458577cca09c11f0d3c2fe15567315c4108d9`;
+the public synthetic corpus SHA-256 is
+`ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`.
+These identities bind public declarative definitions and synthetic corpus
+bytes. They do not prove provider context/tokenizer binding or exact executable
+implementation identity; `CONTEXT_LIMIT_BINDING_UNPROVEN` and
+`EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN` remain independent live
+pre-request blockers.
+
 Passing this synthetic conformance gate does not evaluate model quality:
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, and `M2: FORBIDDEN` remain in force.
