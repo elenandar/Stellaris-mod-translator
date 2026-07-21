@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import pickle
 import re
 import subprocess
 import sys
@@ -23,10 +24,10 @@ README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
 EXPECTED_FIXTURE_CASES = 173
 EXPECTED_POSITIVE_CASES = 3
 EXPECTED_FIXTURE_SHA256 = (
-    "9bd43b21c7d7bf6e9ff70004df0eed37810593b2e75cc532200ac2a71c0f022f"
+    "22c43f48f139b906b922da5ab5ceeb6f1378cf7ad36a4f019dae61fc0c361828"
 )
 EXPECTED_BUNDLE_HASH = (
-    "940b22477fab4358c18343e94f326d12d1bc00cff806e572e95e17afcf43efa7"
+    "7f1e417a843a0f3d0658e1e2abeb794c5c21a1dcb6f6482cd5f561c986ae00a9"
 )
 
 
@@ -248,7 +249,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
                 for component in bundle["components"]
             },
             {
-                "benchmark_contract": ("m1b-benchmark-contract-v5", 106),
+                "benchmark_contract": ("m1b-benchmark-contract-v6", 107),
                 "output_schema": ("m1b-synthetic-output-v4", 105),
                 "prompt_policy": ("m1b-synthetic-prompt-policy-v1", 101),
                 "candidate_profile.glm_4_7_flash": (
@@ -264,7 +265,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
                     202,
                 ),
                 "corpus_policy": ("m1b-corpus-policy-v3", 105),
-                "split_policy": ("m1b-split-policy-v4", 106),
+                "split_policy": ("m1b-split-policy-v5", 107),
                 "generation_policy": ("m1b-generation-policy-v2", 105),
                 "context_limit_policy": ("m1b-context-limit-policy-v2", 105),
                 "randomization_blinding_policy": (
@@ -277,11 +278,11 @@ class SyntheticContractCaseTests(unittest.TestCase):
                     "m1b-retention-leakage-policy-v1",
                     101,
                 ),
-                "validator_policy": ("m1b-validator-policy-v5", 106),
-                "analysis_policy": ("m1b-analysis-policy-v5", 106),
+                "validator_policy": ("m1b-validator-policy-v6", 107),
+                "analysis_policy": ("m1b-analysis-policy-v6", 107),
                 "implementation_identity_policy": (
-                    "m1b-implementation-identity-policy-v1",
-                    105,
+                    "m1b-implementation-identity-policy-v2",
+                    107,
                 ),
             },
         )
@@ -290,14 +291,14 @@ class SyntheticContractCaseTests(unittest.TestCase):
             for component in bundle["components"]
             if component["kind"] == "analysis_policy"
         )
-        self.assertEqual(analysis_component["version"], "m1b-analysis-policy-v5")
+        self.assertEqual(analysis_component["version"], "m1b-analysis-policy-v6")
         self.assertEqual(
             analysis_component["generation"], contract.PROTOCOL_GENERATION
         )
-        self.assertEqual(self.base["protocol"]["generation"], 106)
+        self.assertEqual(self.base["protocol"]["generation"], 107)
         self.assertEqual(
             self.base["protocol"]["protocol_version"],
-            "m1b-benchmark-contract-v5",
+            "m1b-benchmark-contract-v6",
         )
 
     def test_component_hash_has_a_fixed_public_vector(self) -> None:
@@ -309,7 +310,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(
             actual,
-            "d5b58199ada27f8b1a74c3d2d3537efbca976d682c01ec1c99f720f03cedbf38",
+            "e180ba237311a7d7de3aa4c7c97881f09507651910a8469df7bcef0cd04cd7f0",
         )
         self.assertEqual(actual, component["sha256"])
 
@@ -341,8 +342,15 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "not_applicable_not_observed_empty_atoms_all_dimensions_not_evaluated_zero_accounting",
         )
         self.assertEqual(
-            benchmark["trusted_analysis"],
-            "complete_validator_materialized_frozen_scope_required_for_decision_grade",
+            benchmark["analysis_trust_layers"],
+            {
+                "full_decision_admission": "future_complete_report_owner_accepted_executable_tcb_required",
+                "m1b0_synthetic_scope_provenance": "exact_frozen_analysis_subset_diagnostic_only",
+            },
+        )
+        self.assertEqual(
+            benchmark["full_decision_admission"],
+            "unavailable_in_document_schema_v4",
         )
         output = definitions["output_schema"]
         self.assertEqual(output["result_fields"], list(contract._RESULT_FIELDS))
@@ -384,8 +392,9 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(split["splits"], sorted(contract.SPLITS))
         self.assertEqual(
             split["decision_row_binding"],
-            "exact_complete_validator_materialized_result_source_split_scope",
+            "full_decision_admission_owned_exact_scope",
         )
+        self.assertFalse(split["synthetic_scope_decision_grade_eligible"])
         self.assertEqual(
             split["caller_split_or_uuid_membership_only"], "never_trusted"
         )
@@ -433,12 +442,12 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "every_adjudication_exactly_linked_and_every_record_consumed",
         )
         self.assertEqual(
-            validator["trusted_analysis_materialization"],
-            "after_frozen_corpus_validated_results_findings_and_hgt",
+            validator["synthetic_scope_materialization"],
+            "after_frozen_corpus_validated_results_findings_and_hgt_diagnostic_only",
         )
         self.assertEqual(
-            validator["trusted_analysis_issuance"],
-            "closed_validator_revalidates_exact_document_source_state",
+            validator["synthetic_scope_issuance"],
+            "analysis_source_subset_revalidated_under_unmodified_same_process_tcb",
         )
         self.assertEqual(validator["json_integer_min"], contract.MIN_JSON_INTEGER)
         self.assertEqual(validator["json_integer_max"], contract.MAX_JSON_INTEGER)
@@ -499,13 +508,16 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertIn("split", analysis["agreement"]["input_fields"])
         self.assertEqual(
             analysis["agreement"]["decision_grade_helper"],
-            "agreement_gate_holdout_only",
+            "agreement_gate_full_admission_holdout_only",
         )
         self.assertEqual(
-            analysis["agreement"]["decision_grade_provenance"],
-            "sealed_exact_complete_materialized_scope",
+            analysis["agreement"]["decision_grade_admission"],
+            "full_live_admission_owned_scope",
         )
         self.assertFalse(analysis["agreement"]["raw_decision_grade_eligible"])
+        self.assertFalse(
+            analysis["agreement"]["synthetic_scope_decision_grade_eligible"]
+        )
         self.assertEqual(
             analysis["agreement"]["ratings_materializer"],
             "inside_human_ground_truth_validator_no_report_supplied_scores",
@@ -535,15 +547,15 @@ class SyntheticContractCaseTests(unittest.TestCase):
             sorted(contract.STATISTICAL_DIMENSIONS_OR_GATES),
         )
         self.assertEqual(
-            analysis["statistical_outcome"]["decision_grade_provenance"],
-            "sealed_exact_complete_materialized_scope",
+            analysis["statistical_outcome"]["decision_grade_admission"],
+            "full_live_admission_owned_scope",
         )
         self.assertFalse(
             analysis["statistical_outcome"]["diagnostic_decision_grade_eligible"]
         )
         self.assertEqual(
-            analysis["critical_false_accept_decision_grade_provenance"],
-            "sealed_exact_complete_materialized_scope",
+            analysis["critical_false_accept_decision_grade_admission"],
+            "full_live_admission_owned_scope",
         )
         self.assertEqual(
             analysis["critical_false_accept_no_output"],
@@ -584,6 +596,14 @@ class SyntheticContractCaseTests(unittest.TestCase):
             implementation["file_fields"], ["path", "role", "sha256"]
         )
         self.assertEqual(implementation["self_digest_field"], "forbidden")
+        self.assertIn(
+            "used_python_runtime_import_and_invocation_state",
+            implementation["same_process_tcb"],
+        )
+        self.assertEqual(
+            implementation["separate_process_authority_boundary"],
+            "required_for_hostile_same_process_code_out_of_scope_m1b0",
+        )
         retention = definitions["retention_leakage_policy"]
         self.assertEqual(
             retention["persistence_blocker"], "PROVIDER_PERSISTENCE_UNPROVEN"
@@ -846,14 +866,14 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         return registry, samples, results
 
-    def _trusted_provenance(
+    def _synthetic_provenance(
         self, document, *, agreement_rows=(), findings=()
     ):
         if agreement_rows or findings:
-            raise AssertionError("trusted provenance must be issued from document rows")
+            raise AssertionError("scope provenance must be issued from document rows")
         registry, samples, results = self._validated_state(document)
         contract._validate_synthetic_corpus_freeze(document["corpus"])
-        provenance = contract._materialize_trusted_analysis_provenance(document)
+        provenance = contract._materialize_synthetic_scope_provenance(document)
         return registry, samples, results, provenance
 
     @staticmethod
@@ -1124,7 +1144,7 @@ class MethodologyAndStateTests(unittest.TestCase):
         with self.assertRaises(contract.ContractError) as raised:
             contract.agreement_gate(holdout)
         self.assertEqual(
-            raised.exception.code, "DECISION_GRADE_PROVENANCE_REQUIRED"
+            raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
         )
         with self.assertRaises(contract.ContractError) as raised:
             contract.agreement_unit_vectors(tuning + holdout)
@@ -1150,7 +1170,9 @@ class MethodologyAndStateTests(unittest.TestCase):
         self.assertEqual(self._agreement_math_status(passing_holdout), "AGREEMENT_PASS")
         with self.assertRaises(contract.ContractError) as raised:
             contract.agreement_gate(passing_holdout + tuning_failure)
-        self.assertEqual(raised.exception.code, "STATISTICAL_SPLIT_MIXED")
+        self.assertEqual(
+            raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
+        )
 
     def test_tuning_cannot_increase_holdout_statistical_or_cfa_denominators(self) -> None:
         def statistical_row(identifier, split):
@@ -1184,7 +1206,7 @@ class MethodologyAndStateTests(unittest.TestCase):
         with self.assertRaises(contract.ContractError) as raised:
             contract.decision_grade_statistical_unit_summary([holdout_stat])
         self.assertEqual(
-            raised.exception.code, "DECISION_GRADE_PROVENANCE_REQUIRED"
+            raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
         )
         with self.assertRaises(contract.ContractError) as raised:
             contract.statistical_unit_summary([tuning_stat, holdout_stat])
@@ -1230,7 +1252,7 @@ class MethodologyAndStateTests(unittest.TestCase):
         with self.assertRaises(contract.ContractError) as raised:
             contract.decision_grade_critical_false_accept_summary(holdout_cfa)
         self.assertEqual(
-            raised.exception.code, "DECISION_GRADE_PROVENANCE_REQUIRED"
+            raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
         )
         with self.assertRaises(contract.ContractError) as raised:
             contract.critical_false_accept_summary(tuning_cfa + holdout_cfa)
@@ -1256,7 +1278,9 @@ class MethodologyAndStateTests(unittest.TestCase):
         self.assertFalse(holdout_203["decision_grade_eligible"])
         self.assertFalse(holdout_203["meets_decision_minimum"])
 
-    def test_trusted_analysis_provenance_binds_complete_frozen_scope(self) -> None:
+    def test_synthetic_scope_provenance_binds_frozen_rows_without_admission(
+        self,
+    ) -> None:
         document = copy.deepcopy(self.base)
         tuning_result = document["conformance_results"][0]
         self._mark_primary_output(tuning_result)
@@ -1285,7 +1309,7 @@ class MethodologyAndStateTests(unittest.TestCase):
                 )
             )
         document["human_ground_truth"] = records
-        _, _, _, provenance = self._trusted_provenance(document)
+        _, _, _, provenance = self._synthetic_provenance(document)
         with self.assertRaises(AttributeError):
             object.__setattr__(provenance, "_registered_sources", frozenset())
 
@@ -1295,14 +1319,27 @@ class MethodologyAndStateTests(unittest.TestCase):
             "holdout",
             "schema_atom_stability",
         )
-        holdout_stat = contract._trusted_analysis_rows(
+        holdout_stat = contract._synthetic_scope_rows(
             provenance, row_kind="statistical", scope=holdout_stat_scope
         )
-        trusted_summary = contract.decision_grade_statistical_unit_summary(
+        synthetic_summary = contract.synthetic_scope_statistical_unit_summary(
             holdout_stat, provenance=provenance
         )
-        self.assertTrue(trusted_summary["decision_grade_eligible"])
-        self.assertEqual(trusted_summary["per_stratum_denominators"]["ui"], 1)
+        self.assertFalse(synthetic_summary["decision_grade_eligible"])
+        self.assertEqual(
+            synthetic_summary["analysis_scope"], "synthetic_conformance_only"
+        )
+        self.assertEqual(
+            synthetic_summary["per_stratum_denominators"]["ui"], 1
+        )
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.decision_grade_statistical_unit_summary(
+                admission=provenance,
+                scope=holdout_stat_scope,
+            )
+        self.assertEqual(
+            raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
+        )
 
         holdout_cfa_scope = (
             holdout_result["candidate_id"],
@@ -1310,14 +1347,17 @@ class MethodologyAndStateTests(unittest.TestCase):
             "holdout",
             "auto_eligible_candidate",
         )
-        holdout_cfa = contract._trusted_analysis_rows(
+        holdout_cfa = contract._synthetic_scope_rows(
             provenance, row_kind="cfa", scope=holdout_cfa_scope
         )
-        trusted_cfa = contract.decision_grade_critical_false_accept_summary(
+        synthetic_cfa = contract.synthetic_scope_critical_false_accept_summary(
             holdout_cfa, provenance=provenance
         )
-        self.assertTrue(trusted_cfa["decision_grade_eligible"])
-        self.assertFalse(trusted_cfa["meets_decision_minimum"])
+        self.assertFalse(synthetic_cfa["decision_grade_eligible"])
+        self.assertFalse(synthetic_cfa["meets_decision_minimum"])
+        self.assertEqual(
+            synthetic_cfa["analysis_scope"], "synthetic_conformance_only"
+        )
 
         tuning_scope = (
             tuning_result["candidate_id"],
@@ -1325,22 +1365,24 @@ class MethodologyAndStateTests(unittest.TestCase):
             "tuning",
             "schema_atom_stability",
         )
-        tuning_stat = contract._trusted_analysis_rows(
+        tuning_stat = contract._synthetic_scope_rows(
             provenance, row_kind="statistical", scope=tuning_scope
         )
-        with self.assertRaises(contract.ContractError) as raised:
-            contract.decision_grade_statistical_unit_summary(
-                tuning_stat, provenance=provenance
-            )
-        self.assertEqual(raised.exception.code, "DECISION_GRADE_SPLIT_INVALID")
+        tuning_summary = contract.synthetic_scope_statistical_unit_summary(
+            tuning_stat, provenance=provenance
+        )
+        self.assertFalse(tuning_summary["decision_grade_eligible"])
+        self.assertEqual(tuning_summary["scope"]["split"], "tuning")
 
         relabeled = copy.deepcopy(tuning_stat)
         relabeled[0]["split"] = "holdout"
         with self.assertRaises(contract.ContractError) as raised:
-            contract.decision_grade_statistical_unit_summary(
+            contract.synthetic_scope_statistical_unit_summary(
                 relabeled, provenance=provenance
             )
-        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
+        self.assertEqual(
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_MISMATCH"
+        )
 
         tuning_cfa_scope = (
             tuning_result["candidate_id"],
@@ -1348,23 +1390,40 @@ class MethodologyAndStateTests(unittest.TestCase):
             "tuning",
             "mandatory_human",
         )
-        relabeled_cfa = contract._trusted_analysis_rows(
+        relabeled_cfa = contract._synthetic_scope_rows(
             provenance, row_kind="cfa", scope=tuning_cfa_scope
         )
         relabeled_cfa[0]["split"] = "holdout"
         with self.assertRaises(contract.ContractError) as raised:
-            contract.decision_grade_critical_false_accept_summary(
+            contract.synthetic_scope_critical_false_accept_summary(
                 relabeled_cfa, provenance=provenance
             )
-        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
+        self.assertEqual(
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_MISMATCH"
+        )
 
         tampered = copy.deepcopy(holdout_stat)
         tampered[0]["success"] = False
         with self.assertRaises(contract.ContractError) as raised:
-            contract.decision_grade_statistical_unit_summary(
+            contract.synthetic_scope_statistical_unit_summary(
                 tampered, provenance=provenance
             )
-        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
+        self.assertEqual(
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_MISMATCH"
+        )
+        for changed_rows, expected_code in (
+            ([], "STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME"),
+            (
+                holdout_stat + [copy.deepcopy(holdout_stat[0])],
+                "SYNTHETIC_SCOPE_PROVENANCE_MISMATCH",
+            ),
+        ):
+            with self.subTest(changed_row_count=len(changed_rows)):
+                with self.assertRaises(contract.ContractError) as raised:
+                    contract.synthetic_scope_statistical_unit_summary(
+                        changed_rows, provenance=provenance
+                    )
+                self.assertEqual(raised.exception.code, expected_code)
 
         arbitrary_stat = [
             {
@@ -1381,10 +1440,12 @@ class MethodologyAndStateTests(unittest.TestCase):
             ]
         )
         with self.assertRaises(contract.ContractError) as raised:
-            contract.decision_grade_statistical_unit_summary(
+            contract.synthetic_scope_statistical_unit_summary(
                 arbitrary_stat, provenance=provenance
             )
-        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_UNREGISTERED")
+        self.assertEqual(
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_UNREGISTERED"
+        )
 
         arbitrary_cfa = [
             {
@@ -1399,10 +1460,12 @@ class MethodologyAndStateTests(unittest.TestCase):
         self.assertFalse(raw_cfa["decision_grade_eligible"])
         self.assertFalse(raw_cfa["meets_decision_minimum"])
         with self.assertRaises(contract.ContractError) as raised:
-            contract.decision_grade_critical_false_accept_summary(
+            contract.synthetic_scope_critical_false_accept_summary(
                 arbitrary_cfa, provenance=provenance
             )
-        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_UNREGISTERED")
+        self.assertEqual(
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_UNREGISTERED"
+        )
 
         arbitrary_agreement = self._agreement_rows(
             [0, 1, 2, 3, 4] * 9 + [0],
@@ -1412,31 +1475,219 @@ class MethodologyAndStateTests(unittest.TestCase):
             self._agreement_math_status(arbitrary_agreement), "AGREEMENT_PASS"
         )
         with self.assertRaises(contract.ContractError) as raised:
-            contract.agreement_gate(arbitrary_agreement, provenance=provenance)
-        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_UNREGISTERED")
-
-        constructed = contract._TrustedAnalysisProvenance()
+            contract.synthetic_scope_agreement_diagnostic(
+                arbitrary_agreement, provenance=provenance
+            )
+        self.assertEqual(
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_UNREGISTERED"
+        )
         with self.assertRaises(contract.ContractError) as raised:
-            contract.decision_grade_statistical_unit_summary(
+            contract.agreement_gate(arbitrary_agreement, admission=provenance)
+        self.assertEqual(
+            raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
+        )
+
+        constructed = contract._SyntheticScopeProvenance()
+        with self.assertRaises(contract.ContractError) as raised:
+            contract.synthetic_scope_statistical_unit_summary(
                 holdout_stat, provenance=constructed
             )
         self.assertEqual(
-            raised.exception.code, "DECISION_GRADE_PROVENANCE_REQUIRED"
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_REQUIRED"
         )
+        for clone in (
+            copy.copy(provenance),
+            copy.deepcopy(provenance),
+            pickle.loads(pickle.dumps(provenance)),
+        ):
+            with self.assertRaises(contract.ContractError) as raised:
+                contract.synthetic_scope_statistical_unit_summary(
+                    holdout_stat, provenance=clone
+                )
+            self.assertEqual(
+                raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_REQUIRED"
+            )
 
         invented_source = copy.deepcopy(document)
         invented_source["corpus"]["samples"][1]["source_generation_id"] = (
             "00000000-0000-4000-8000-000000009999"
         )
         with self.assertRaises(contract.ContractError) as raised:
-            contract._materialize_trusted_analysis_provenance(invented_source)
+            contract._materialize_synthetic_scope_provenance(invented_source)
         self.assertEqual(raised.exception.code, "CORPUS_DEFINITION_MISMATCH")
 
-    def test_no_attempt_is_a_conservative_trusted_gate_failure(self) -> None:
+    def test_full_decision_admission_revalidates_every_document_gate(self) -> None:
+        invalid_cases = {
+            "non-loopback-endpoint": "ENDPOINT_NOT_NUMERIC_LOOPBACK",
+            "context-reuse-enabled": "STATELESS_REQUEST_POLICY_INVALID",
+            "context-binding-self-asserted": "CONTEXT_LIMIT_BINDING_SELF_ASSERTED",
+            "implementation-identity-self-asserted": "IMPLEMENTATION_IDENTITY_SELF_ASSERTED",
+            "partial-report-claimed-complete": "PARTIAL_REPORT_CANNOT_BE_COMPLETE",
+            "coverage-count-mismatch": "COVERAGE_COUNT_MISMATCH",
+            "aggregate-count-mismatch": "AGGREGATE_COUNT_MISMATCH",
+            "critical-approved-after-fallback": "HIGH_RISK_EDITORIAL_APPROVAL",
+            "live-observation-not-probed": "CONTEXT_LIMIT_BINDING_UNPROVEN",
+        }
+        for case_id, expected_code in invalid_cases.items():
+            with self.subTest(case=case_id):
+                document = contract.parse_json_bytes(
+                    contract.materialize_fixture_case(self.manifest, case_id)
+                )
+                with self.assertRaises(contract.ContractError) as raised:
+                    contract._materialize_full_decision_admission(document)
+                self.assertEqual(raised.exception.code, expected_code)
+
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._materialize_full_decision_admission(
+                copy.deepcopy(self.base)
+            )
+        self.assertEqual(raised.exception.code, "OWNER_DECISION_REQUIRED")
+
+        coverage_invalid = copy.deepcopy(self.base)
+        holdout_result = coverage_invalid["conformance_results"][1]
+        holdout_result["sample_id"] = (
+            "00000000-0000-4000-8000-000000000012"
+        )
+        coverage_invalid["coverage"]["required_primary_assignment_count"] += 1
+        with self.assertRaises(contract.ContractError) as raised:
+            contract._materialize_full_decision_admission(coverage_invalid)
+        self.assertEqual(raised.exception.code, "COVERAGE_COUNT_MISMATCH")
+
+        provenance = contract._materialize_synthetic_scope_provenance(
+            coverage_invalid
+        )
+        statistical_scope = (
+            holdout_result["candidate_id"],
+            contract.PROFILE_VERSION,
+            "holdout",
+            "schema_atom_stability",
+        )
+        rows = contract._synthetic_scope_rows(
+            provenance, row_kind="statistical", scope=statistical_scope
+        )
+        diagnostic = contract.synthetic_scope_statistical_unit_summary(
+            rows, provenance=provenance
+        )
+        self.assertFalse(diagnostic["decision_grade_eligible"])
+        self.assertEqual(diagnostic["per_stratum_denominators"]["ui"], 1)
+        self.assertEqual(diagnostic["per_stratum_successes"]["ui"], 0)
+
+        decision_calls = (
+            lambda token: contract.agreement_gate(
+                admission=token,
+                scope=(
+                    holdout_result["candidate_id"],
+                    contract.PROFILE_VERSION,
+                    "holdout",
+                    "ui",
+                    "meaning_accuracy",
+                ),
+            ),
+            lambda token: contract.decision_grade_statistical_unit_summary(
+                admission=token, scope=statistical_scope
+            ),
+            lambda token: contract.decision_grade_critical_false_accept_summary(
+                admission=token,
+                scope=(
+                    holdout_result["candidate_id"],
+                    contract.PROFILE_VERSION,
+                    "holdout",
+                    "auto_eligible_candidate",
+                ),
+            ),
+        )
+        for call in decision_calls:
+            with self.assertRaises(contract.ContractError) as raised:
+                call(provenance)
+            self.assertEqual(
+                raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
+            )
+
+        class ForgedAdmission(contract._FullDecisionAdmission):
+            pass
+
+        direct = contract._FullDecisionAdmission()
+        for token in (
+            direct,
+            ForgedAdmission(),
+            copy.copy(direct),
+            copy.deepcopy(direct),
+            pickle.loads(pickle.dumps(direct)),
+        ):
+            with self.assertRaises(contract.ContractError) as raised:
+                contract.decision_grade_statistical_unit_summary(
+                    admission=token, scope=statistical_scope
+                )
+            self.assertEqual(
+                raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
+            )
+
+    def test_reflected_synthetic_registry_remains_diagnostic_only(self) -> None:
+        token = contract._SyntheticScopeProvenance()
+        scope = (
+            "00000000-0000-4000-8000-000000000001",
+            contract.PROFILE_VERSION,
+            "holdout",
+            "auto_eligible_candidate",
+        )
+        rows = [
+            {
+                "candidate": scope[0],
+                "event": False,
+                "profile": scope[1],
+                "risk_class": scope[3],
+                "source_generation_id": (
+                    f"00000000-0000-4000-8000-{index + 1000:012x}"
+                ),
+                "split": scope[2],
+            }
+            for index in range(203)
+        ]
+        freevars = contract._require_synthetic_scope_provenance.__code__.co_freevars
+        closure = contract._require_synthetic_scope_provenance.__closure__
+        self.assertIsNotNone(closure)
+        issued = closure[freevars.index("issued")].cell_contents
+        issued[token] = (
+            frozenset(row["source_generation_id"] for row in rows),
+            (),
+            (),
+            ((scope, tuple(sorted(contract._canonical_public_json(row) for row in rows))),),
+        )
+        try:
+            materialized = contract._synthetic_scope_rows(
+                token, row_kind="cfa", scope=scope
+            )
+            diagnostic = contract.synthetic_scope_critical_false_accept_summary(
+                materialized, provenance=token
+            )
+            self.assertEqual(diagnostic["source_generation_count"], 203)
+            self.assertFalse(diagnostic["decision_grade_eligible"])
+            self.assertFalse(diagnostic["meets_decision_minimum"])
+            with self.assertRaises(contract.ContractError) as raised:
+                contract.decision_grade_critical_false_accept_summary(
+                    admission=token, scope=scope
+                )
+            self.assertEqual(
+                raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
+            )
+        finally:
+            issued.pop(token, None)
+
+    def test_no_attempt_is_a_conservative_synthetic_scope_failure(self) -> None:
         document = copy.deepcopy(self.base)
         result = document["conformance_results"][1]
         result["sample_id"] = "00000000-0000-4000-8000-000000000012"
-        provenance = contract._materialize_trusted_analysis_provenance(document)
+        self.assertEqual(result["terminal_status"], "not_applicable")
+        self.assertEqual(result["technical_conformance"], "not_observed")
+        self.assertEqual(result["observed_atoms"], [])
+        self.assertEqual(
+            {row["status"] for row in result["dimension_records"]},
+            {"not_evaluated"},
+        )
+        self.assertEqual(
+            document["aggregate_report"]["technical_conformant_count"], 0
+        )
+        provenance = contract._materialize_synthetic_scope_provenance(document)
 
         for dimension_or_gate in (
             *contract._QUALITY_DIMENSION_ORDER,
@@ -1450,20 +1701,21 @@ class MethodologyAndStateTests(unittest.TestCase):
                     "holdout",
                     dimension_or_gate,
                 )
-                rows = contract._trusted_analysis_rows(
+                rows = contract._synthetic_scope_rows(
                     provenance, row_kind="statistical", scope=scope
                 )
                 self.assertEqual(len(rows), 1)
                 self.assertTrue(rows[0]["applicable"])
                 self.assertFalse(rows[0]["success"])
-                summary = contract.decision_grade_statistical_unit_summary(
+                summary = contract.synthetic_scope_statistical_unit_summary(
                     rows, provenance=provenance
                 )
+                self.assertFalse(summary["decision_grade_eligible"])
                 self.assertEqual(summary["per_stratum_denominators"]["ui"], 1)
                 self.assertEqual(summary["per_stratum_successes"]["ui"], 0)
 
         with self.assertRaises(contract.ContractError) as raised:
-            contract._trusted_analysis_rows(
+            contract._synthetic_scope_rows(
                 provenance,
                 row_kind="cfa",
                 scope=(
@@ -1473,7 +1725,9 @@ class MethodologyAndStateTests(unittest.TestCase):
                     "auto_eligible_candidate",
                 ),
             )
-        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
+        self.assertEqual(
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_MISMATCH"
+        )
 
     def test_exact_quadratic_kappa_and_robustness_vectors(self) -> None:
         first = [0, 1, 2, 3, 4]
@@ -2445,17 +2699,24 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         trusted_document = copy.deepcopy(document)
         trusted_document["human_ground_truth"] = records
-        provenance = contract._materialize_trusted_analysis_provenance(
+        provenance = contract._materialize_synthetic_scope_provenance(
             trusted_document
         )
-        with self.assertRaises(contract.ContractError) as raised:
-            contract.agreement_gate(materialized, provenance=provenance)
-        self.assertEqual(raised.exception.code, "DECISION_GRADE_SPLIT_INVALID")
+        scoped = contract.synthetic_scope_agreement_diagnostic(
+            materialized, provenance=provenance
+        )
+        self.assertFalse(scoped["decision_grade_eligible"])
+        self.assertEqual(scoped["diagnostic_status"], "AGREEMENT_INSUFFICIENT_UNITS")
+        self.assertEqual(scoped["analysis_scope"], "synthetic_conformance_only")
         relabeled = copy.deepcopy(materialized)
         relabeled[0]["split"] = "holdout"
         with self.assertRaises(contract.ContractError) as raised:
-            contract.agreement_gate(relabeled, provenance=provenance)
-        self.assertEqual(raised.exception.code, "ANALYSIS_PROVENANCE_MISMATCH")
+            contract.synthetic_scope_agreement_diagnostic(
+                relabeled, provenance=provenance
+            )
+        self.assertEqual(
+            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_MISMATCH"
+        )
 
         same_reviewer = copy.deepcopy(records)
         same_reviewer[2]["reviewer_id"] = same_reviewer[0]["reviewer_id"]
@@ -2606,7 +2867,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             "ADJUDICATION_LINK_INVALID",
         )
 
-    def test_hgt_trusted_holdout_materialization_uses_frozen_split(self) -> None:
+    def test_hgt_synthetic_holdout_materialization_uses_frozen_split(self) -> None:
         document = copy.deepcopy(self.base)
         result = document["conformance_results"][0]
         result["sample_id"] = "00000000-0000-4000-8000-000000000012"
@@ -2646,16 +2907,20 @@ class MethodologyAndStateTests(unittest.TestCase):
         )
         trusted_document = copy.deepcopy(document)
         trusted_document["human_ground_truth"] = records
-        provenance = contract._materialize_trusted_analysis_provenance(
+        provenance = contract._materialize_synthetic_scope_provenance(
             trusted_document
         )
         meaning_rows = [
             row for row in materialized if row["dimension"] == "meaning_accuracy"
         ]
-        self.assertEqual(
-            contract.agreement_gate(meaning_rows, provenance=provenance),
-            "AGREEMENT_INSUFFICIENT_UNITS",
+        diagnostic = contract.synthetic_scope_agreement_diagnostic(
+            meaning_rows, provenance=provenance
         )
+        self.assertFalse(diagnostic["decision_grade_eligible"])
+        self.assertEqual(
+            diagnostic["diagnostic_status"], "AGREEMENT_INSUFFICIENT_UNITS"
+        )
+        self.assertEqual(diagnostic["split"], "holdout")
 
     def test_not_applicable_pair_is_separate_and_one_sided_na_needs_adjudication(self) -> None:
         document = copy.deepcopy(self.base)

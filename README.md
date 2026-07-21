@@ -10,14 +10,18 @@ Production-реализация ещё не начата. Персональны
 
 После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Сейчас M1B protocol находится under review: `M1B: NOT_EVALUATED`, feasibility verdict отсутствует и benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
 
-Текущая synthetic proposal identity — protocol v5/generation 106 и analysis
-policy v5/generation 106. Она закрывает caller-created provenance для agreement,
-statistical и CFA decision gates, сохраняет reviewer-specific finding outcomes,
-exact HGT adjudication links и запрещает content review либо ложный D1 pass
-отсутствующего output. Raw rows остаются diagnostic-only, no-attempt даёт zero
-technical success и conservative quality failure. Synthetic corpus bytes не
-менялись: corpus v3/generation 304 остаётся тем же. Это contract hardening, а не
-запуск M1B-1 и не quality verdict.
+Текущая synthetic proposal identity — protocol v6/generation 107 и analysis
+policy v6/generation 107. Она разделяет exact frozen synthetic-scope provenance
+и полный live decision admission: первый capability разрешает только
+diagnostic math с `decision_grade_eligible=false`, второй M1B-0 не выдаёт.
+Provider/request/context/implementation/benchmark/coverage/acceptance/aggregate/
+execution gates остаются обязательными для будущего полного admission.
+Same-process Python runtime, imports, globals/closures и analysis code входят в
+TCB; capability предотвращает случайное смешение raw rows, но не является
+security boundary против reflection или monkeypatching внутри TCB. Existing
+reviewer/HGT/no-output invariants сохранены. Synthetic corpus bytes не менялись:
+corpus v3/generation 304 остаётся тем же. Это contract hardening, а не запуск
+M1B-1 и не quality verdict.
 
 ## Контракт MVP
 

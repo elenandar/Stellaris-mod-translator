@@ -29,26 +29,27 @@ D2–D5 and editorial state remain `not_evaluated`.
 The fixture uses:
 
 - fixture schema `m1b-synthetic-contract-cases-v4`;
-- protocol `m1b-benchmark-contract-v5`, generation `106`;
+- protocol `m1b-benchmark-contract-v6`, generation `107`;
 - output schema `m1b-synthetic-output-v4`;
 - corpus `m1b-synthetic-corpus-v3`, generation `304`;
 - quality rubric `m1b-quality-rubric-v6`, generation `106`;
-- analysis policy `m1b-analysis-policy-v5`, generation `106`;
+- analysis policy `m1b-analysis-policy-v6`, generation `107`;
 - `17` byte-exact public proposal components;
 - bundle SHA-256
-  `940b22477fab4358c18343e94f326d12d1bc00cff806e572e95e17afcf43efa7`;
+  `7f1e417a843a0f3d0658e1e2abeb794c5c21a1dcb6f6482cd5f561c986ae00a9`;
 - public synthetic corpus SHA-256
   `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`;
 - fixed first-component vector
-  `d5b58199ada27f8b1a74c3d2d3537efbca976d682c01ec1c99f720f03cedbf38`;
+  `e180ba237311a7d7de3aa4c7c97881f09507651910a8469df7bcef0cd04cd7f0`;
 - fixture file SHA-256
-  `9bd43b21c7d7bf6e9ff70004df0eed37810593b2e75cc532200ac2a71c0f022f`.
+  `22c43f48f139b906b922da5ab5ceeb6f1378cf7ad36a4f019dae61fc0c361828`.
 
 All definitions remain `proposed`; none is `owner_accepted`. The bundle binds
 declarative definitions and the public synthetic corpus, not the exact current
-validator/harness/analysis implementation. Live admission therefore remains
-blocked by `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN`. Context/tokenizer
-admission independently remains `CONTEXT_LIMIT_BINDING_UNPROVEN`.
+validator/harness/analysis/runtime TCB. Synthetic scope provenance is therefore
+diagnostic-only; full decision admission remains unavailable and blocked by
+`OWNER_DECISION_REQUIRED`, `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN` and
+`CONTEXT_LIMIT_BINDING_UNPROVEN`.
 
 ## What the offline gate checks
 
@@ -80,15 +81,16 @@ Without Ollama or a live model, the table and unit tests cover:
   explicit split provenance with no tuning/holdout pooling;
 - source-generation conservative collapse, descriptive-only overall totals,
   three-candidate family correction, and closed split-scoped CFA source/class
-  aggregation; all three holdout-only decision entrypoints accept only exact
-  scopes revalidated/materialized by the closed provenance issuer;
+  aggregation; exact synthetic scopes remain diagnostic/ineligible, while all
+  three production decision entrypoints reject caller rows and require a
+  separate full admission unavailable in M1B-0;
 - immutable reviewer-specific finding outcomes for decision/severity/hard-fail/
   mandatory-review, exact third-human adjudication, top-level downgrade
   rejection, distinct identities for two initial human reviews, and no
   model-review human credit;
 - no-output and no-attempt rows reject findings and human/model content reviews;
   no-attempt rows have zero technical success, and every no-output row becomes a
-  conservative failure in trusted quality/gate scopes instead of disappearing
+  conservative failure in synthetic quality/gate scopes instead of disappearing
   from denominators;
   self-identifying output permits only descriptive secondary-unblinded evidence;
 - partial-report evidence restrictions, context self-assertion rejection, and
@@ -100,12 +102,14 @@ validators, but a full M1B-0 document containing such a live observation stops
 at `CONTEXT_LIMIT_BINDING_UNPROVEN`; the fixture does not pretend that a model
 was called. Generic agreement, statistical, and CFA rows are public synthetic
 math vectors only and never expose decision eligibility or a satisfied raw CFA
-minimum. The closed issuer revalidates exact document identity, canonical
-corpus, results, findings, and HGT before materializing complete per-scope rows
-and recognizing the issued opaque provenance object. Decision-grade agreement
-rows retain linked frozen initial records and the source sample split. Tuning
-math is available only as explicitly marked diagnostics and cannot satisfy a
-holdout gate.
+minimum. The synthetic-scope issuer revalidates the exact analysis-source subset
+(proposal bundle/protocol, canonical corpus, candidates, results, findings and
+HGT) before materializing complete per-scope rows. Its nominal token prevents
+accidental caller-row use under an unmodified same-process TCB, but is not a
+security boundary against reflection/monkeypatching inside that TCB. Agreement
+rows retain linked frozen initial records and the source sample split. Tuning and
+holdout scope math remain explicitly marked diagnostics and cannot satisfy a
+production gate without separate full admission.
 
 For official/private data, exact values, positions, row IDs, content-derived
 hashes, and reviewer/source mappings must remain local. Only controlled codes

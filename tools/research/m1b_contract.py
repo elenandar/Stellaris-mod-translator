@@ -30,12 +30,12 @@ MATERIALIZATION_PREENCODE_RESERVE_BYTES = MAX_INPUT_BYTES
 MAX_JSON_INTEGER = (1 << 63) - 1
 MIN_JSON_INTEGER = -(1 << 63)
 
-PROTOCOL_VERSION = "m1b-benchmark-contract-v5"
+PROTOCOL_VERSION = "m1b-benchmark-contract-v6"
 OUTPUT_SCHEMA_VERSION = "m1b-synthetic-output-v4"
 PROMPT_VERSION = "m1b-synthetic-prompt-policy-v1"
 PROFILE_VERSION = "m1b-primary-common-profile-v1"
 CORPUS_VERSION = "m1b-synthetic-corpus-v3"
-PROTOCOL_GENERATION = 106
+PROTOCOL_GENERATION = 107
 FROZEN_COMPONENT_GENERATION = 105
 PROFILE_GENERATION = 202
 CORPUS_GENERATION = 304
@@ -623,7 +623,12 @@ _TRUSTED_COMPONENT_ROWS = (
                 "partial_secondary_exception": "self_identifying_output_secondary_unblinded_only",
                 "protocol_generation": PROTOCOL_GENERATION,
                 "root_fields": list(_ROOT_FIELDS),
-                "trusted_analysis": "complete_validator_materialized_frozen_scope_required_for_decision_grade",
+                "analysis_trust_layers": {
+                    "full_decision_admission": "future_complete_report_owner_accepted_executable_tcb_required",
+                    "m1b0_synthetic_scope_provenance": "exact_frozen_analysis_subset_diagnostic_only",
+                },
+                "full_decision_admission": "unavailable_in_document_schema_v4",
+                "same_process_capability_boundary": "misuse_guard_not_hostile_code_security_boundary",
             }
         ),
     ),
@@ -702,15 +707,16 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "split_policy",
-        "m1b-split-policy-v4",
+        "m1b-split-policy-v5",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "auto_eligible_strata": sorted(_AUTO_ELIGIBLE_STRATA),
                 "caller_split_or_uuid_membership_only": "never_trusted",
                 "decision_grade_split": "holdout",
-                "decision_row_binding": "exact_complete_validator_materialized_result_source_split_scope",
+                "decision_row_binding": "full_decision_admission_owned_exact_scope",
                 "diagnostic_split": "tuning_separate_never_satisfies_holdout_gate",
+                "full_decision_admission_required": True,
                 "related_variants_same_split": True,
                 "risk_classes": sorted(RISK_CLASSES),
                 "source_cluster_generation_binding": "immutable_one_generation",
@@ -718,6 +724,8 @@ _TRUSTED_COMPONENT_ROWS = (
                 "source_generation_within_stratum_collapse": "conservative_one_unit",
                 "splits": sorted(SPLITS),
                 "strata": sorted(STRATA),
+                "synthetic_scope_binding": "validator_materialized_exact_frozen_multiset_diagnostic_only",
+                "synthetic_scope_decision_grade_eligible": False,
             }
         ),
     ),
@@ -782,7 +790,7 @@ _TRUSTED_COMPONENT_ROWS = (
     (
         "quality_rubric",
         "m1b-quality-rubric-v6",
-        PROTOCOL_GENERATION,
+        106,
         _canonical_public_json(
             {
                 "critical_false_accept_definition": "editorially_approved_and_confirmed_underlying_critical_same_result_dimension",
@@ -821,7 +829,7 @@ _TRUSTED_COMPONENT_ROWS = (
     (
         "measurement_policy",
         "m1b-measurement-policy-v4",
-        PROTOCOL_GENERATION,
+        106,
         _canonical_public_json(
             {
                 "accounting_fields": list(_ACCOUNTING_FIELDS),
@@ -854,7 +862,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "validator_policy",
-        "m1b-validator-policy-v5",
+        "m1b-validator-policy-v6",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -884,14 +892,16 @@ _TRUSTED_COMPONENT_ROWS = (
                     "nonfinite": "reject",
                     "unicode": "strict_utf8_scalars",
                 },
-                "trusted_analysis_issuance": "closed_validator_revalidates_exact_document_source_state",
-                "trusted_analysis_materialization": "after_frozen_corpus_validated_results_findings_and_hgt",
+                "full_decision_admission": "complete_document_owner_and_executable_tcb_admission_required_unavailable_in_m1b0",
+                "same_process_capability": "nominal_misuse_guard_under_unmodified_tcb_not_reflection_or_monkeypatch_security",
+                "synthetic_scope_issuance": "analysis_source_subset_revalidated_under_unmodified_same_process_tcb",
+                "synthetic_scope_materialization": "after_frozen_corpus_validated_results_findings_and_hgt_diagnostic_only",
             }
         ),
     ),
     (
         "analysis_policy",
-        "m1b-analysis-policy-v5",
+        "m1b-analysis-policy-v6",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -919,8 +929,8 @@ _TRUSTED_COMPONENT_ROWS = (
                         "split",
                         "stratum",
                     ],
-                    "decision_grade_helper": "agreement_gate_holdout_only",
-                    "decision_grade_provenance": "sealed_exact_complete_materialized_scope",
+                    "decision_grade_admission": "full_live_admission_owned_scope",
+                    "decision_grade_helper": "agreement_gate_full_admission_holdout_only",
                     "diagnostic_helper": "agreement_diagnostic_split_scoped",
                     "categories": [0, 1, 2, 3, 4],
                     "exact_arithmetic": "rational",
@@ -952,6 +962,8 @@ _TRUSTED_COMPONENT_ROWS = (
                     "robustness": "minimum_delete_one_whole_source_generation_kappa",
                     "robustness_interpretation": "influence_check_not_sampling_confidence_interval",
                     "stable_pair_key": ["stratum", "dimension"],
+                    "synthetic_scope_decision_grade_eligible": False,
+                    "synthetic_scope_helper": "synthetic_scope_agreement_diagnostic",
                     "statuses": [
                         "AGREEMENT_APPLICABILITY_DISAGREEMENT",
                         "AGREEMENT_INSUFFICIENT_UNITS",
@@ -991,9 +1003,10 @@ _TRUSTED_COMPONENT_ROWS = (
                     "source_generation_id",
                 ],
                 "critical_false_accept_decision_grade_split": "holdout",
-                "critical_false_accept_decision_grade_provenance": "sealed_exact_complete_materialized_scope",
+                "critical_false_accept_decision_grade_admission": "full_live_admission_owned_scope",
                 "critical_false_accept_no_output": "excluded_from_cfa_denominator_but_quality_gate_failure",
                 "critical_false_accept_raw_minimum": False,
+                "critical_false_accept_synthetic_scope_helper": "synthetic_scope_critical_false_accept_summary_ineligible",
                 "critical_false_accept_zero_event_upper_bound": "1-(1/60)^(1/n)",
                 "critical_false_accept_minimum_n": 203,
                 "decision_method": "bonferroni_candidates_conjunctive_strata",
@@ -1048,8 +1061,8 @@ _TRUSTED_COMPONENT_ROWS = (
                         "stratum",
                         "success",
                     ],
-                    "decision_grade_helper": "decision_grade_statistical_unit_summary_holdout_only",
-                    "decision_grade_provenance": "sealed_exact_complete_materialized_scope",
+                    "decision_grade_admission": "full_live_admission_owned_scope",
+                    "decision_grade_helper": "decision_grade_statistical_unit_summary_full_admission_holdout_only",
                     "diagnostic_decision_grade_eligible": False,
                     "diagnostic_scope": "single_split_explicitly_marked",
                     "no_output": "applicable_failure_in_every_dimension_and_gate",
@@ -1058,6 +1071,7 @@ _TRUSTED_COMPONENT_ROWS = (
                     "overall_gate": "forbidden",
                     "overall_source_outcome": "all_applicable_rows_across_strata_success",
                     "source_stratum_outcome": "all_applicable_rows_success",
+                    "synthetic_scope_helper": "synthetic_scope_statistical_unit_summary_ineligible",
                 },
                 "stratum_gate": "intersection_union_all_required_strata",
                 "strata": sorted(STRATA),
@@ -1070,8 +1084,8 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "implementation_identity_policy",
-        "m1b-implementation-identity-policy-v1",
-        FROZEN_COMPONENT_GENERATION,
+        "m1b-implementation-identity-policy-v2",
+        PROTOCOL_GENERATION,
         _canonical_public_json(
             {
                 "admission": _EXPECTED_IMPLEMENTATION_IDENTITY,
@@ -1113,8 +1127,18 @@ _TRUSTED_COMPONENT_ROWS = (
                     "synthetic_fixture_materializer",
                 ],
                 "run_generation_changes_on_implementation_drift": True,
+                "same_process_capability_boundary": "not_security_against_reflection_monkeypatch_import_hooks_debugger_or_tracing",
+                "same_process_tcb": [
+                    "exact_manifest_bound_analysis_engine",
+                    "exact_manifest_bound_contract_validator",
+                    "exact_manifest_bound_provider_request_harness",
+                    "exact_manifest_bound_synthetic_fixture_materializer",
+                    "used_python_runtime_import_and_invocation_state",
+                ],
                 "self_digest_field": "forbidden",
-                "trust_root": "external_owner_accepted_manifest",
+                "separate_process_authority_boundary": "required_for_hostile_same_process_code_out_of_scope_m1b0",
+                "trust_root": "external_owner_accepted_manifest_plus_runtime_invocation_admission",
+                "v1_manifest_limit": "file_bytes_only_does_not_bind_interpreter_import_or_invocation_state",
             }
         ),
     ),
@@ -1237,30 +1261,48 @@ def source_weighted_quadratic_kappa(
     return _quadratic_weighted_kappa_from_matrix(matrix)
 
 
-class _TrustedAnalysisProvenance:
-    """Opaque identity token; trusted rows remain in closure-owned storage."""
+class _SyntheticScopeProvenance:
+    """Nominal token for one validator-materialized synthetic analysis scope.
+
+    The issuer registry prevents accidental use of caller-created rows under the
+    unmodified same-process TCB.  It is not a security boundary against code
+    that can reflect over or monkeypatch this Python process.
+    """
 
     __slots__ = ()
 
 
-def _validate_analysis_row_provenance(
+class _FullDecisionAdmission:
+    """Nominal token required by live/production decision entrypoints.
+
+    Document schema v4 is partial M1B-0 synthetic evidence and never issues this
+    token.  A future live protocol must bind and admit the complete executable
+    TCB before registering an instance.
+    """
+
+    __slots__ = ()
+
+
+def _validate_rows_against_registered_scope(
     rows: Sequence[Mapping[str, Any]],
-    provenance: Any,
+    registered: tuple,
     *,
     row_kind: str,
+    mismatch_code: str,
+    unregistered_code: str,
 ) -> None:
     (
         registered_sources,
         agreement_scopes,
         statistical_scopes,
         cfa_scopes,
-    ) = _require_trusted_analysis_provenance(provenance)
+    ) = registered
     for row in rows:
         source_id = row["source_generation_id"]
         if source_id not in registered_sources:
-            raise ContractError("ANALYSIS_PROVENANCE_UNREGISTERED")
+            raise ContractError(unregistered_code)
     if not rows:
-        raise ContractError("ANALYSIS_PROVENANCE_MISMATCH")
+        raise ContractError(mismatch_code)
     if row_kind == "agreement":
         scope = tuple(
             rows[0][field]
@@ -1284,35 +1326,90 @@ def _validate_analysis_row_provenance(
     expected_rows = dict(trusted_scopes).get(scope)
     supplied_rows = tuple(sorted(_canonical_public_json(row) for row in rows))
     if expected_rows is None or supplied_rows != expected_rows:
-        raise ContractError("ANALYSIS_PROVENANCE_MISMATCH")
+        raise ContractError(mismatch_code)
 
 
-def _trusted_analysis_rows(
+def _validate_synthetic_scope_rows(
+    rows: Sequence[Mapping[str, Any]],
     provenance: Any,
     *,
     row_kind: str,
-    scope: Tuple[str, ...],
-) -> List[Dict[str, Any]]:
-    """Return a detached copy of one sealed scope for internal analysis/tests."""
+) -> None:
+    _validate_rows_against_registered_scope(
+        rows,
+        _require_synthetic_scope_provenance(provenance),
+        row_kind=row_kind,
+        mismatch_code="SYNTHETIC_SCOPE_PROVENANCE_MISMATCH",
+        unregistered_code="SYNTHETIC_SCOPE_PROVENANCE_UNREGISTERED",
+    )
 
+
+def _analysis_rows_from_registered_scope(
+    registered: tuple,
+    *,
+    row_kind: str,
+    scope: Tuple[str, ...],
+    mismatch_code: str,
+) -> List[Dict[str, Any]]:
     (
         _,
         agreement_scopes,
         statistical_scopes,
         cfa_scopes,
-    ) = _require_trusted_analysis_provenance(provenance)
+    ) = registered
     if row_kind == "agreement":
         trusted_scopes = agreement_scopes
+        expected_scope_length = 5
     elif row_kind == "statistical":
         trusted_scopes = statistical_scopes
+        expected_scope_length = 4
     elif row_kind == "cfa":
         trusted_scopes = cfa_scopes
+        expected_scope_length = 4
     else:
+        raise ContractError("INVALID_ANALYSIS_PARAMETER")
+    if (
+        type(scope) is not tuple
+        or len(scope) != expected_scope_length
+        or any(type(value) is not str or not value for value in scope)
+    ):
         raise ContractError("INVALID_ANALYSIS_PARAMETER")
     encoded_rows = dict(trusted_scopes).get(scope)
     if encoded_rows is None:
-        raise ContractError("ANALYSIS_PROVENANCE_MISMATCH")
+        raise ContractError(mismatch_code)
     return [json.loads(row.decode("ascii")) for row in encoded_rows]
+
+
+def _synthetic_scope_rows(
+    provenance: Any,
+    *,
+    row_kind: str,
+    scope: Tuple[str, ...],
+) -> List[Dict[str, Any]]:
+    """Return a detached copy of one frozen synthetic analysis scope."""
+
+    return _analysis_rows_from_registered_scope(
+        _require_synthetic_scope_provenance(provenance),
+        row_kind=row_kind,
+        scope=scope,
+        mismatch_code="SYNTHETIC_SCOPE_PROVENANCE_MISMATCH",
+    )
+
+
+def _full_decision_rows(
+    admission: Any,
+    *,
+    row_kind: str,
+    scope: Tuple[str, ...],
+) -> List[Dict[str, Any]]:
+    """Return rows registered by a complete live decision admission."""
+
+    return _analysis_rows_from_registered_scope(
+        _require_full_decision_admission(admission),
+        row_kind=row_kind,
+        scope=scope,
+        mismatch_code="FULL_DECISION_ADMISSION_MISMATCH",
+    )
 
 
 def agreement_unit_vectors(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
@@ -1492,17 +1589,37 @@ def agreement_diagnostic(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def agreement_gate(
+def synthetic_scope_agreement_diagnostic(
     rows: Sequence[Mapping[str, Any]],
     *,
     provenance: Any = None,
-) -> str:
-    """Apply the decision-grade gate to one frozen holdout scope only."""
+) -> Dict[str, Any]:
+    """Verify one frozen synthetic scope and return diagnostic agreement only."""
 
-    vectors = agreement_unit_vectors(rows)
-    _validate_analysis_row_provenance(
+    diagnostic = agreement_diagnostic(rows)
+    _validate_synthetic_scope_rows(
         rows, provenance, row_kind="agreement"
     )
+    diagnostic["analysis_scope"] = "synthetic_conformance_only"
+    return diagnostic
+
+
+def agreement_gate(
+    rows: Any = None,
+    *,
+    admission: Any = None,
+    scope: Any = None,
+) -> str:
+    """Apply the live decision gate only to rows owned by full admission."""
+
+    if rows is not None:
+        raise ContractError("FULL_DECISION_ADMISSION_REQUIRED")
+    admitted_rows = _full_decision_rows(
+        admission,
+        row_kind="agreement",
+        scope=scope,
+    )
+    vectors = agreement_unit_vectors(admitted_rows)
     if vectors["split"] != "holdout":
         raise ContractError("DECISION_GRADE_SPLIT_INVALID")
     return _agreement_status(vectors)
@@ -1609,17 +1726,37 @@ def statistical_unit_summary(
     }
 
 
-def decision_grade_statistical_unit_summary(
+def synthetic_scope_statistical_unit_summary(
     rows: Sequence[Mapping[str, Any]],
     *,
     provenance: Any = None,
 ) -> Dict[str, Any]:
-    """Return D1-D5/gate denominators only for one frozen holdout scope."""
+    """Verify one frozen synthetic scope and return ineligible diagnostics."""
 
     summary = statistical_unit_summary(rows)
-    _validate_analysis_row_provenance(
+    _validate_synthetic_scope_rows(
         rows, provenance, row_kind="statistical"
     )
+    summary["analysis_scope"] = "synthetic_conformance_only"
+    return summary
+
+
+def decision_grade_statistical_unit_summary(
+    rows: Any = None,
+    *,
+    admission: Any = None,
+    scope: Any = None,
+) -> Dict[str, Any]:
+    """Return live D1-D5/gate denominators owned by full admission."""
+
+    if rows is not None:
+        raise ContractError("FULL_DECISION_ADMISSION_REQUIRED")
+    admitted_rows = _full_decision_rows(
+        admission,
+        row_kind="statistical",
+        scope=scope,
+    )
+    summary = statistical_unit_summary(admitted_rows)
     if summary["scope"] is None or summary["scope"]["split"] != "holdout":
         raise ContractError("DECISION_GRADE_SPLIT_INVALID")
     summary["decision_grade_eligible"] = True
@@ -1681,15 +1818,35 @@ def critical_false_accept_summary(
     }
 
 
-def decision_grade_critical_false_accept_summary(
+def synthetic_scope_critical_false_accept_summary(
     rows: Sequence[Mapping[str, Any]],
     *,
     provenance: Any = None,
 ) -> Dict[str, Any]:
-    """Return CFA gate accounting only for one frozen holdout scope."""
+    """Verify one frozen synthetic CFA scope without live admission."""
 
     summary = critical_false_accept_summary(rows)
-    _validate_analysis_row_provenance(rows, provenance, row_kind="cfa")
+    _validate_synthetic_scope_rows(rows, provenance, row_kind="cfa")
+    summary["analysis_scope"] = "synthetic_conformance_only"
+    return summary
+
+
+def decision_grade_critical_false_accept_summary(
+    rows: Any = None,
+    *,
+    admission: Any = None,
+    scope: Any = None,
+) -> Dict[str, Any]:
+    """Return live CFA gate accounting owned by full admission."""
+
+    if rows is not None:
+        raise ContractError("FULL_DECISION_ADMISSION_REQUIRED")
+    admitted_rows = _full_decision_rows(
+        admission,
+        row_kind="cfa",
+        scope=scope,
+    )
+    summary = critical_false_accept_summary(admitted_rows)
     if summary["split"] != "holdout":
         raise ContractError("DECISION_GRADE_SPLIT_INVALID")
     summary["decision_grade_eligible"] = True
@@ -2906,23 +3063,23 @@ def _validate_results(
     return results
 
 
-def _make_trusted_analysis_boundary():
-    """Keep provenance issuance closed around source validation and issued objects."""
+def _make_synthetic_scope_boundary():
+    """Bind exact synthetic rows under the unmodified same-process TCB."""
 
-    issued: Dict[_TrustedAnalysisProvenance, tuple] = {}
+    issued: Dict[_SyntheticScopeProvenance, tuple] = {}
 
     def require(
         provenance: Any,
     ) -> tuple:
         if (
-            type(provenance) is not _TrustedAnalysisProvenance
+            type(provenance) is not _SyntheticScopeProvenance
             or provenance not in issued
         ):
-            raise ContractError("DECISION_GRADE_PROVENANCE_REQUIRED")
+            raise ContractError("SYNTHETIC_SCOPE_PROVENANCE_REQUIRED")
         return issued[provenance]
 
-    def materialize(document: Any) -> _TrustedAnalysisProvenance:
-        """Validate frozen source state, then freeze every complete analysis scope."""
+    def materialize(document: Any) -> _SyntheticScopeProvenance:
+        """Validate the analysis-source subset and freeze every exact scope."""
 
         _scan_for_forbidden_fields(document)
         root = _require_object(
@@ -3041,7 +3198,7 @@ def _make_trusted_analysis_boundary():
                 for scope, encoded_rows in sorted(grouped.items())
             )
 
-        provenance = _TrustedAnalysisProvenance()
+        provenance = _SyntheticScopeProvenance()
         issued[provenance] = (
             registered_sources,
             freeze_scopes(
@@ -3063,9 +3220,34 @@ def _make_trusted_analysis_boundary():
 
 
 (
-    _materialize_trusted_analysis_provenance,
-    _require_trusted_analysis_provenance,
-) = _make_trusted_analysis_boundary()
+    _materialize_synthetic_scope_provenance,
+    _require_synthetic_scope_provenance,
+) = _make_synthetic_scope_boundary()
+
+
+def _make_full_decision_admission_boundary():
+    """Define the separate live admission authority; M1B-0 issues nothing."""
+
+    issued: Dict[_FullDecisionAdmission, tuple] = {}
+
+    def require(admission: Any) -> tuple:
+        if type(admission) is not _FullDecisionAdmission or admission not in issued:
+            raise ContractError("FULL_DECISION_ADMISSION_REQUIRED")
+        return issued[admission]
+
+    def materialize(document: Any) -> _FullDecisionAdmission:
+        """Revalidate the complete document, then stop at the M1B-0 owner gate."""
+
+        validate_document(document)
+        raise ContractError("OWNER_DECISION_REQUIRED")
+
+    return materialize, require
+
+
+(
+    _materialize_full_decision_admission,
+    _require_full_decision_admission,
+) = _make_full_decision_admission_boundary()
 
 
 def _validate_finding_outcome(
@@ -3981,7 +4163,7 @@ def validate_document(document: Any) -> Dict[str, int]:
         samples,
         agreement_rows,
     )
-    analysis_provenance = _materialize_trusted_analysis_provenance(root)
+    scope_provenance = _materialize_synthetic_scope_provenance(root)
     agreement_scopes: Dict[Tuple[str, str, str, str, str], List[Dict[str, Any]]] = {}
     for row in agreement_rows:
         scope = tuple(
@@ -3991,8 +4173,8 @@ def validate_document(document: Any) -> Dict[str, int]:
         agreement_scopes.setdefault(scope, []).append(row)
     for rows in agreement_scopes.values():
         agreement_unit_vectors(rows)
-        _validate_analysis_row_provenance(
-            rows, analysis_provenance, row_kind="agreement"
+        _validate_synthetic_scope_rows(
+            rows, scope_provenance, row_kind="agreement"
         )
     benchmark_state = _validate_benchmark_state(root["benchmark_state"])
     if root["adjudications"] or any(
