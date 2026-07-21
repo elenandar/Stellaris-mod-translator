@@ -4168,18 +4168,30 @@ def validate_document(document: Any) -> Dict[str, int]:
         agreement_rows,
     )
     scope_provenance = _materialize_synthetic_scope_provenance(root)
-    agreement_scopes: Dict[Tuple[str, str, str, str, str], List[Dict[str, Any]]] = {}
-    for row in agreement_rows:
-        scope = tuple(
-            row[field]
-            for field in ("candidate", "profile", "split", "stratum", "dimension")
-        )
-        agreement_scopes.setdefault(scope, []).append(row)
-    for rows in agreement_scopes.values():
-        agreement_unit_vectors(rows)
-        _validate_synthetic_scope_rows(
-            rows, scope_provenance, row_kind="agreement"
-        )
+    try:
+        agreement_scopes: Dict[
+            Tuple[str, str, str, str, str], List[Dict[str, Any]]
+        ] = {}
+        for row in agreement_rows:
+            scope = tuple(
+                row[field]
+                for field in (
+                    "candidate",
+                    "profile",
+                    "split",
+                    "stratum",
+                    "dimension",
+                )
+            )
+            agreement_scopes.setdefault(scope, []).append(row)
+        for rows in agreement_scopes.values():
+            agreement_unit_vectors(rows)
+            _validate_synthetic_scope_rows(
+                rows, scope_provenance, row_kind="agreement"
+            )
+    finally:
+        # A retained later exception must not keep this internal token registered.
+        del scope_provenance
     benchmark_state = _validate_benchmark_state(root["benchmark_state"])
     if root["adjudications"] or any(
         type(record) is not dict

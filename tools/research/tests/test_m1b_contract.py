@@ -957,38 +957,44 @@ class MethodologyAndStateTests(unittest.TestCase):
         gc.collect()
         self.assertEqual(len(issued), 0)
 
-        def full_admission_code(document):
-            try:
-                contract._materialize_full_decision_admission(document)
-            except contract.ContractError as error:
-                return error.code
-            raise AssertionError("full admission unexpectedly issued")
-
+        owner_errors = []
         for _ in range(25):
-            self.assertEqual(
-                full_admission_code(copy.deepcopy(self.base)),
-                "OWNER_DECISION_REQUIRED",
-            )
+            try:
+                contract._materialize_full_decision_admission(
+                    copy.deepcopy(self.base)
+                )
+            except contract.ContractError as error:
+                owner_errors.append(error)
+            else:
+                self.fail("full admission unexpectedly issued")
         gc.collect()
+        self.assertEqual(
+            [error.code for error in owner_errors],
+            ["OWNER_DECISION_REQUIRED"] * 25,
+        )
         self.assertEqual(len(issued), 0)
 
         coverage_invalid = copy.deepcopy(self.base)
         coverage_invalid["coverage"]["required_primary_assignment_count"] += 1
 
-        def validation_code(document):
-            try:
-                contract.validate_document(document)
-            except contract.ContractError as error:
-                return error.code
-            raise AssertionError("invalid coverage unexpectedly passed")
-
+        coverage_errors = []
         for _ in range(25):
-            self.assertEqual(
-                validation_code(copy.deepcopy(coverage_invalid)),
-                "COVERAGE_COUNT_MISMATCH",
-            )
+            try:
+                contract.validate_document(copy.deepcopy(coverage_invalid))
+            except contract.ContractError as error:
+                coverage_errors.append(error)
+            else:
+                self.fail("invalid coverage unexpectedly passed")
         gc.collect()
+        self.assertEqual(
+            [error.code for error in coverage_errors],
+            ["COVERAGE_COUNT_MISMATCH"] * 25,
+        )
         self.assertEqual(len(issued), 0)
+
+        del owner_errors
+        del coverage_errors
+        gc.collect()
 
     @staticmethod
     def _ground_truth(
