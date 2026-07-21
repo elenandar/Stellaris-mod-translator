@@ -17,6 +17,7 @@ import hashlib
 import json
 import re
 import sys
+import weakref
 from fractions import Fraction
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -1265,11 +1266,12 @@ class _SyntheticScopeProvenance:
     """Nominal token for one validator-materialized synthetic analysis scope.
 
     The issuer registry prevents accidental use of caller-created rows under the
-    unmodified same-process TCB.  It is not a security boundary against code
-    that can reflect over or monkeypatch this Python process.
+    unmodified same-process TCB.  Registration and frozen rows remain live only
+    while the issued token is live.  This is not a security boundary against
+    code that can reflect over or monkeypatch this Python process.
     """
 
-    __slots__ = ()
+    __slots__ = ("__weakref__",)
 
 
 class _FullDecisionAdmission:
@@ -3066,7 +3068,9 @@ def _validate_results(
 def _make_synthetic_scope_boundary():
     """Bind exact synthetic rows under the unmodified same-process TCB."""
 
-    issued: Dict[_SyntheticScopeProvenance, tuple] = {}
+    issued: weakref.WeakKeyDictionary[_SyntheticScopeProvenance, tuple] = (
+        weakref.WeakKeyDictionary()
+    )
 
     def require(
         provenance: Any,

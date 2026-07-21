@@ -506,6 +506,13 @@ Analysis trust имеет два несовместимых уровня.
    не выдаёт; canonical partial report останавливается на
    `OWNER_DECISION_REQUIRED`.
 
+Synthetic issuer registry не владеет выданным token: registration и frozen rows
+живут, пока вызывающий код удерживает exact issued token. Живые tokens не
+очищаются и не вытесняются. После исчезновения последней strong reference token,
+его registration и frozen rows становятся collectible; registry value не
+содержит обратной ссылки на token. Эта lifetime-bound ownership не меняет
+exact-type/issuer checks, full-admission separation или same-process TCB.
+
 Caller-supplied split, UUID membership, direct token construction, copy/deepcopy,
 pickle, subclass, relabel, subset, extra row или outcome/stratum/risk mutation не
 создают admission. Missing/unknown split отклоняется; mixed-split input не

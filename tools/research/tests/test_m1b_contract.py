@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import copy
 from fractions import Fraction
+import gc
 import hashlib
 import json
 import os
@@ -14,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+import weakref
 
 from tools.research import m1b_contract as contract
 
@@ -877,6 +879,118 @@ class MethodologyAndStateTests(unittest.TestCase):
         return registry, samples, results, provenance
 
     @staticmethod
+    def _synthetic_scope_registry():
+        require = contract._require_synthetic_scope_provenance
+        freevars = require.__code__.co_freevars
+        closure = require.__closure__
+        if closure is None or "issued" not in freevars:
+            raise AssertionError("synthetic scope registry closure is unavailable")
+        return closure[freevars.index("issued")].cell_contents
+
+    def test_synthetic_scope_registration_follows_live_token_lifetime(
+        self,
+    ) -> None:
+        issued = self._synthetic_scope_registry()
+        gc.collect()
+        self.assertEqual(len(issued), 0)
+
+        first = contract._materialize_synthetic_scope_provenance(
+            copy.deepcopy(self.base)
+        )
+        second_document = copy.deepcopy(self.base)
+        second = contract._materialize_synthetic_scope_provenance(second_document)
+        first_ref = weakref.ref(first)
+        second_ref = weakref.ref(second)
+        gc.collect()
+        self.assertEqual(len(issued), 2)
+
+        result = second_document["conformance_results"][0]
+        scope = (
+            result["candidate_id"],
+            contract.PROFILE_VERSION,
+            "tuning",
+            "schema_atom_stability",
+        )
+        rows = contract._synthetic_scope_rows(
+            second, row_kind="statistical", scope=scope
+        )
+        summary = contract.synthetic_scope_statistical_unit_summary(
+            rows, provenance=second
+        )
+        self.assertFalse(summary["decision_grade_eligible"])
+        self.assertEqual(summary["analysis_scope"], "synthetic_conformance_only")
+
+        del first
+        gc.collect()
+        self.assertIsNone(first_ref())
+        self.assertIs(second_ref(), second)
+        self.assertEqual(len(issued), 1)
+        self.assertEqual(
+            contract._synthetic_scope_rows(
+                second, row_kind="statistical", scope=scope
+            ),
+            rows,
+        )
+
+        del summary
+        del rows
+        del second
+        gc.collect()
+        self.assertIsNone(second_ref())
+        self.assertEqual(len(issued), 0)
+
+    def test_repeated_validation_does_not_retain_synthetic_scopes(self) -> None:
+        issued = self._synthetic_scope_registry()
+        gc.collect()
+        self.assertEqual(len(issued), 0)
+        for _ in range(25):
+            counts = contract.validate_document(copy.deepcopy(self.base))
+            self.assertEqual(counts["candidates"], 3)
+        del counts
+        gc.collect()
+        self.assertEqual(len(issued), 0)
+
+    def test_owner_gate_and_post_materialization_errors_release_scopes(
+        self,
+    ) -> None:
+        issued = self._synthetic_scope_registry()
+        gc.collect()
+        self.assertEqual(len(issued), 0)
+
+        def full_admission_code(document):
+            try:
+                contract._materialize_full_decision_admission(document)
+            except contract.ContractError as error:
+                return error.code
+            raise AssertionError("full admission unexpectedly issued")
+
+        for _ in range(25):
+            self.assertEqual(
+                full_admission_code(copy.deepcopy(self.base)),
+                "OWNER_DECISION_REQUIRED",
+            )
+        gc.collect()
+        self.assertEqual(len(issued), 0)
+
+        coverage_invalid = copy.deepcopy(self.base)
+        coverage_invalid["coverage"]["required_primary_assignment_count"] += 1
+
+        def validation_code(document):
+            try:
+                contract.validate_document(document)
+            except contract.ContractError as error:
+                return error.code
+            raise AssertionError("invalid coverage unexpectedly passed")
+
+        for _ in range(25):
+            self.assertEqual(
+                validation_code(copy.deepcopy(coverage_invalid)),
+                "COVERAGE_COUNT_MISMATCH",
+            )
+        gc.collect()
+        self.assertEqual(len(issued), 0)
+
+    @staticmethod
     def _ground_truth(
         identifier,
         reviewer,
@@ -1487,15 +1601,12 @@ class MethodologyAndStateTests(unittest.TestCase):
             raised.exception.code, "FULL_DECISION_ADMISSION_REQUIRED"
         )
 
-        constructed = contract._SyntheticScopeProvenance()
-        with self.assertRaises(contract.ContractError) as raised:
-            contract.synthetic_scope_statistical_unit_summary(
-                holdout_stat, provenance=constructed
-            )
-        self.assertEqual(
-            raised.exception.code, "SYNTHETIC_SCOPE_PROVENANCE_REQUIRED"
-        )
+        class ForgedProvenance(contract._SyntheticScopeProvenance):
+            pass
+
         for clone in (
+            contract._SyntheticScopeProvenance(),
+            ForgedProvenance(),
             copy.copy(provenance),
             copy.deepcopy(provenance),
             pickle.loads(pickle.dumps(provenance)),
@@ -1643,10 +1754,7 @@ class MethodologyAndStateTests(unittest.TestCase):
             }
             for index in range(203)
         ]
-        freevars = contract._require_synthetic_scope_provenance.__code__.co_freevars
-        closure = contract._require_synthetic_scope_provenance.__closure__
-        self.assertIsNotNone(closure)
-        issued = closure[freevars.index("issued")].cell_contents
+        issued = self._synthetic_scope_registry()
         issued[token] = (
             frozenset(row["source_generation_id"] for row in rows),
             (),
