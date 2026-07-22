@@ -299,6 +299,8 @@ def _read_explicit_regular_file(value: str) -> bytes:
     flags |= getattr(os, "O_NOFOLLOW", 0)
     flags |= getattr(os, "O_NONBLOCK", 0)
     descriptor = -1
+    primary_error: Optional[OwnerFreezeError] = None
+    data = b""
     try:
         descriptor = os.open(value, flags)
         before = os.fstat(descriptor)
@@ -340,17 +342,20 @@ def _read_explicit_regular_file(value: str) -> bytes:
             raise OwnerFreezeError("INPUT_CHANGED")
         if len(data) != before.st_size:
             raise OwnerFreezeError("INPUT_CHANGED")
-        return data
-    except OwnerFreezeError:
-        raise
+    except OwnerFreezeError as caught_error:
+        primary_error = caught_error
     except (OSError, OverflowError, ValueError):
-        raise OwnerFreezeError("INPUT_READ_FAILED")
+        primary_error = OwnerFreezeError("INPUT_READ_FAILED")
     finally:
         if descriptor >= 0:
             try:
                 os.close(descriptor)
             except OSError:
-                pass
+                if primary_error is None:
+                    primary_error = OwnerFreezeError("INPUT_READ_FAILED")
+    if primary_error is not None:
+        raise primary_error
+    return data
 
 
 def _require_object(value: Any, fields: Sequence[str], code: str) -> Dict[str, Any]:
