@@ -1,7 +1,7 @@
 # M1B executable/TCB admission adversarial fixtures
 
 `cases.json` is public, synthetic and explicitly untrusted test material for
-the M1B-1A0 generation-3 contract-only verifier. It contains mutation
+the M1B-1A0 generation-4 contract-only verifier. It contains mutation
 instructions and expected controlled outcomes only. It is not an executable
 manifest, an implementation or runtime acceptance record, an execution
 envelope, a benchmark report, an implementation identity or an authority
@@ -16,12 +16,13 @@ is stored in this fixture directory. The temporary synthetic runtime acceptance
 proves only closed shape and exact linkage; it is not an owner-controlled trust
 root.
 
-The final table has `218` unique cases: one synthetic success and `217`
-controlled failures. Exact fixture identity is `61682` bytes with diagnostic
-SHA-256
-`0f14d9b28ee41095a2373b02409b288c30959013840d7d1c891538266a84eeaa`.
+The final v5 table has `241` unique cases: one synthetic success and `240`
+controlled failures. Exact fixture identity is `73746` compact sorted-key
+UTF-8 JSON bytes plus one LF, with
+diagnostic SHA-256
+`b729305612bdf5f3e88d42a90603cf6a10b2100bd31b144c28399a155984d862`.
 These values were independently recalculated; the superseded generation-1 and
-generation-2 identities are not evidence for v3.
+generation-2 identities are not evidence for v4.
 
 The table covers the closed manifest, unchanged five-field implementation
 acceptance, new 16-field runtime acceptance, canonical envelope framed digest,
@@ -31,6 +32,14 @@ launcher blockers, all-four-role linkage, non-empty imports/sys-path, stale byte
 mutations explicitly refresh runtime acceptance linkage so they reach the deep
 validator; a separate coherent-state mutation intentionally leaves the runtime
 record stale and must fail on envelope binding.
+
+The v5 additions preserve the external owner-decision and provider-source
+eligibility blockers against deletion, rename and ordering drift. They also
+exercise coherent cwd/`sys_path` reuse, unique path-bearing imports and every
+representable source/extension/interpreter/manifest/provider-to-native purpose
+collision. The single positive case exercises all three intentional cached
+reuse profiles; generated tests separately count opens and reads to prove that
+allowed cached binding does not reopen a pathname.
 
 The adversarial matrix must also prove that a manifest-bound entrypoint whose
 raw relative path begins with ASCII `-` fails closed even when manifest, plan,
@@ -46,6 +55,13 @@ faithfully as ordinary JSON mutations. Platform-independent tests cover aliases
 between all input and executable surface classes and prove that an alias is
 rejected before its content is read.
 
+Injected directory physical aliases, case-insensitive APFS aliases, directory
+replacement/metadata/stat/close faults, mid-protocol FD substitution and
+provider payloads containing invalid UTF-8, NUL or invalid Python syntax also
+remain generated tests. Those provider payloads may satisfy only synthetic
+shape/linkage; the exact launcher and global
+`PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN` blocker remains mandatory.
+
 For every controlled CLI failure the tests require a non-zero exit, empty
 stderr, an allowlisted compact result and no path, input, digest, marker,
 exception or traceback leakage. Descriptor lifecycle tests account for every
@@ -53,8 +69,10 @@ opened descriptor and use a saved native close only to clean up descriptors
 which an intentionally injected close failure leaves open. Transport-specific
 tests additionally require one full atomic write, writer close before any
 possible child, exact readback plus EOF, correct pipe access modes and
-non-inheritability, rejection of reused/duplicate descriptors, and cached-byte
-stability after the source pathname changes.
+non-inheritability, pre/post FIFO/access/physical-identity checks, rejection of
+reused/substituted descriptors, and cached-byte stability after the source
+pathname changes. This does not claim protection from hostile same-process
+monkeypatching and does not prove a future launcher.
 
 Run from the repository root:
 

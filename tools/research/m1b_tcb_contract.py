@@ -32,15 +32,15 @@ MAX_SEQUENCE_ENTRIES = 1024
 MAX_JSON_INTEGER = (1 << 63) - 1
 MIN_JSON_INTEGER = -(1 << 63)
 
-CONTRACT_SCHEMA = "m1b-offline-executable-tcb-contract-v3"
-CONTRACT_VERSION = "m1b-offline-executable-tcb-admission-v3"
-CONTRACT_GENERATION = 3
+CONTRACT_SCHEMA = "m1b-offline-executable-tcb-contract-v4"
+CONTRACT_VERSION = "m1b-offline-executable-tcb-admission-v4"
+CONTRACT_GENERATION = 4
 MANIFEST_SCHEMA = "m1b-executable-implementation-manifest-v1"
 ACCEPTANCE_STATE = "owner_accepted"
-EXECUTION_ENVELOPE_SCHEMA = "m1b-execution-envelope-v3"
-EXECUTION_ENVELOPE_GENERATION = 3
-EXECUTION_PLAN_SCHEMA = "m1b-execution-plan-v2"
-EXECUTION_PLAN_GENERATION = 2
+EXECUTION_ENVELOPE_SCHEMA = "m1b-execution-envelope-v4"
+EXECUTION_ENVELOPE_GENERATION = 4
+EXECUTION_PLAN_SCHEMA = "m1b-execution-plan-v3"
+EXECUTION_PLAN_GENERATION = 3
 RUNTIME_ACCEPTANCE_SCHEMA = (
     "m1b-runtime-execution-envelope-acceptance-v1"
 )
@@ -50,7 +50,7 @@ PROTOCOL_GENERATION = 108
 # Filled from the canonical normative registry record.  It is deliberately
 # external to that record; the record contains no self hash.
 EXPECTED_CONTRACT_SHA256 = (
-    "c346fdd761ea477a85930c041858e7444a576263f3fb5ca568cc1ab005ef9744"
+    "ad6bce1a5c516753d79ee0d807f5445e9b860a398e661adfb9730d9c4fee9c31"
 )
 
 FileIdentity = Tuple[int, int]
@@ -63,8 +63,8 @@ REQUIRED_ROLES = (
 )
 
 _MANIFEST_DOMAIN = b"stellaris-m1b-executable-manifest-v1"
-_CONTRACT_DOMAIN = b"stellaris-m1b-offline-executable-tcb-contract-v3"
-_ENVELOPE_DOMAIN = b"stellaris-m1b-execution-envelope-v3"
+_CONTRACT_DOMAIN = b"stellaris-m1b-offline-executable-tcb-contract-v4"
+_ENVELOPE_DOMAIN = b"stellaris-m1b-execution-envelope-v4"
 _RUNTIME_ACCEPTANCE_DOMAIN = (
     b"stellaris-m1b-runtime-execution-envelope-acceptance-v1"
 )
@@ -94,6 +94,7 @@ _ALLOWED_CODES = frozenset(
         "ENTRYPOINT_TRANSPORT_IO_FAILED",
         "ENTRYPOINT_TRANSPORT_REQUIRED",
         "ENTRYPOINT_TRANSPORT_SIZE_LIMIT",
+        "ENTRYPOINT_TRANSPORT_SUBSTITUTED",
         "EXECUTABLE_CHANGED",
         "EXECUTABLE_FILE_INVALID",
         "EXECUTABLE_FILE_SIZE_LIMIT",
@@ -101,6 +102,7 @@ _ALLOWED_CODES = frozenset(
         "EXECUTABLE_TOTAL_SIZE_LIMIT",
         "EXECUTION_ENVELOPE_INVALID",
         "EXECUTION_ENVELOPE_NONCANONICAL",
+        "EXECUTION_FILE_PURPOSE_CONFLICT",
         "EXECUTION_FILE_HASH_MISMATCH",
         "EXECUTION_LINKAGE_MISMATCH",
         "EXECUTION_PLAN_ENTRYPOINT_MISMATCH",
@@ -119,11 +121,13 @@ _ALLOWED_CODES = frozenset(
         "INVALID_TYPE",
         "INVOCATION_ARGV_GRAMMAR_INVALID",
         "INVOCATION_CWD_INVALID",
+        "INVOCATION_DIRECTORY_PURPOSE_COLLISION",
         "INVOCATION_ENTRYPOINT_MISMATCH",
         "INVOCATION_FLAGS_MISMATCH",
         "INVOCATION_INTERPRETER_MISMATCH",
         "INVOCATION_LOCATOR_INVALID",
         "INVOCATION_POLICY_INVALID",
+        "INVOCATION_SYS_PATH_INVALID",
         "JSON_DUPLICATE_KEY",
         "JSON_FLOAT_FORBIDDEN",
         "JSON_INTEGER_OUT_OF_RANGE",
@@ -247,8 +251,94 @@ _PLAN_LAUNCHER_FIELDS = ("blockers", "status")
 _PLAN_LAUNCHER_BLOCKERS = (
     "INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN",
     "LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN",
+    "PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN",
     "ROLE_IMPORT_TRANSPORT_UNPROVEN",
 )
+_REQUIRED_STATUS_BLOCKERS = (
+    "EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN",
+    "EXECUTABLE_TCB_OWNER_DECISION_REQUIRED",
+    "PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN",
+    "ROLE_IMPORT_TRANSPORT_UNPROVEN",
+    "LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN",
+    "INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN",
+    "NATIVE_DEPENDENCY_CLOSURE_UNPROVEN",
+    "CONTEXT_LIMIT_BINDING_UNPROVEN",
+    "PROVIDER_PERSISTENCE_UNPROVEN",
+    "RESIDENCY_UNPROVEN",
+    "OUTPUT_LIMIT_BINDING_UNPROVEN",
+    "LIFECYCLE_STATE_UNPROVEN",
+    "MISSING_PROMPT_BYTES",
+    "MISSING_TEMPLATE_BYTES",
+    "MISSING_REAL_CANDIDATE_IDENTITIES",
+    "PARTIAL_REPORT_CANNOT_BE_COMPLETE",
+)
+_STATUS_POLICY_FIELDS = (
+    "blockers",
+    "contract_state",
+    "executable_implementation_identity",
+    "executable_tcb_admission",
+    "m1a_state",
+    "m1b_1a_provider_execution",
+    "m1b_state",
+    "m2_state",
+    "owner_freeze",
+    "stable_read_hardening",
+)
+_PROVIDER_SOURCE_ELIGIBILITY_POLICY = {
+    "authority": "exact_admitted_cpython_over_exact_cached_provider_bytes",
+    "host_ast_or_compile_is_evidence": False,
+    "state": "unproven",
+}
+_FILE_PURPOSE_COMPATIBILITY = {
+    "default": "deny",
+    "path_bearing_import_path_policy": (
+        "globally_unique_across_module_and_kind"
+    ),
+    "profiles": {
+        "interpreter": {
+            "allowed_bindings": [
+                "plan_interpreter",
+                "invocation_argv0",
+                "invocation_os_exec_target",
+                "import_builtin_any_unique_module",
+                "import_frozen_any_unique_module",
+            ],
+            "origin": "interpreter",
+        },
+        "manifest_provider_role": {
+            "allowed_bindings": [
+                "plan_entrypoint",
+                "entrypoint_transport",
+            ],
+            "origin": "manifest_role_provider_request_harness",
+        },
+        "manifest_source_role": {
+            "allowed_bindings": [
+                "matching_plan_role_import",
+                "matching_source_import",
+            ],
+            "matching_keys": ["role", "module"],
+            "origins": [
+                "manifest_role_analysis_engine",
+                "manifest_role_contract_validator",
+                "manifest_role_synthetic_fixture_materializer",
+            ],
+        },
+        "native_dependency": {
+            "allowed_bindings": [],
+            "origin": "one_native_install_name",
+        },
+        "standalone_extension_import": {
+            "allowed_bindings": [],
+            "origin": "one_extension_import_module",
+        },
+        "standalone_source_import": {
+            "allowed_bindings": [],
+            "origin": "one_source_import_module",
+        },
+    },
+    "reuse_io": "cached_exact_path_digest_no_reopen_no_read",
+}
 _REQUIRED_IMPORTED_ROLES = (
     "analysis_engine",
     "contract_validator",
@@ -365,6 +455,129 @@ class TCBContractError(RuntimeError):
         super().__init__(code)
 
 
+def _file_purpose_profile_allowed(purposes: Set[str]) -> bool:
+    """Return whether a partial purpose ledger belongs to one closed profile."""
+
+    if not purposes or any(type(item) is not str for item in purposes):
+        return False
+
+    manifest_roles = {
+        item.split(":", 1)[1]
+        for item in purposes
+        if item.startswith("manifest_role:") and item.count(":") == 1
+    }
+    plan_roles = {
+        tuple(item.split(":", 2)[1:])
+        for item in purposes
+        if item.startswith("plan_role_import:") and item.count(":") == 2
+    }
+    source_imports = {
+        item.split(":", 2)[2]
+        for item in purposes
+        if item.startswith("import:source:") and item.count(":") == 2
+    }
+    extension_imports = {
+        item.split(":", 2)[2]
+        for item in purposes
+        if item.startswith("import:extension:") and item.count(":") == 2
+    }
+    builtin_imports = {
+        item.split(":", 2)[2]
+        for item in purposes
+        if item.startswith("import:builtin:") and item.count(":") == 2
+    }
+    frozen_imports = {
+        item.split(":", 2)[2]
+        for item in purposes
+        if item.startswith("import:frozen:") and item.count(":") == 2
+    }
+    native_dependencies = {
+        item.split(":", 1)[1]
+        for item in purposes
+        if item.startswith("native_dependency:") and item.count(":") == 1
+    }
+    recognized = set()
+    recognized.update("manifest_role:{}".format(role) for role in manifest_roles)
+    recognized.update(
+        "plan_role_import:{}:{}".format(role, module)
+        for role, module in plan_roles
+    )
+    recognized.update("import:source:{}".format(item) for item in source_imports)
+    recognized.update(
+        "import:extension:{}".format(item) for item in extension_imports
+    )
+    recognized.update("import:builtin:{}".format(item) for item in builtin_imports)
+    recognized.update("import:frozen:{}".format(item) for item in frozen_imports)
+    recognized.update(
+        "native_dependency:{}".format(item) for item in native_dependencies
+    )
+    recognized.update(
+        purposes
+        & {
+            "entrypoint_transport",
+            "interpreter",
+            "invocation_argv0",
+            "invocation_os_exec_target",
+            "plan_entrypoint",
+            "plan_interpreter",
+        }
+    )
+    if recognized != purposes:
+        return False
+
+    if manifest_roles:
+        if len(manifest_roles) != 1 or native_dependencies:
+            return False
+        role = next(iter(manifest_roles))
+        if role == "provider_request_harness":
+            return purposes <= {
+                "manifest_role:provider_request_harness",
+                "plan_entrypoint",
+                "entrypoint_transport",
+            }
+        if role not in _REQUIRED_IMPORTED_ROLES:
+            return False
+        if (
+            len(plan_roles) > 1
+            or len(source_imports) > 1
+            or extension_imports
+            or builtin_imports
+            or frozen_imports
+            or purposes
+            & {
+                "entrypoint_transport",
+                "interpreter",
+                "invocation_argv0",
+                "invocation_os_exec_target",
+                "plan_entrypoint",
+                "plan_interpreter",
+            }
+        ):
+            return False
+        if plan_roles and next(iter(plan_roles))[0] != role:
+            return False
+        if plan_roles and source_imports:
+            return next(iter(plan_roles))[1] == next(iter(source_imports))
+        return True
+
+    if "interpreter" in purposes:
+        return not (
+            plan_roles
+            or source_imports
+            or extension_imports
+            or native_dependencies
+            or purposes & {"entrypoint_transport", "plan_entrypoint"}
+        )
+
+    if source_imports:
+        return len(source_imports) == 1 and len(purposes) == 1
+    if extension_imports:
+        return len(extension_imports) == 1 and len(purposes) == 1
+    if native_dependencies:
+        return len(native_dependencies) == 1 and len(purposes) == 1
+    return False
+
+
 class AdmittedFile:
     """One stable file admission retained for exact no-reopen reuse."""
 
@@ -404,6 +617,14 @@ class AdmittedFileIndex:
         self.by_path[entry.path] = entry
         self.by_identity[entry.identity] = entry
         return entry
+
+    @staticmethod
+    def _bind_purpose(entry: AdmittedFile, purpose: str) -> None:
+        proposed = set(entry.purposes)
+        proposed.add(purpose)
+        if not _file_purpose_profile_allowed(proposed):
+            raise TCBContractError("EXECUTION_FILE_PURPOSE_CONFLICT")
+        entry.purposes = proposed
 
     def admit_record(
         self,
@@ -456,8 +677,10 @@ class AdmittedFileIndex:
                 raise TCBContractError(alias_code)
             if existing.sha256 != digest:
                 raise TCBContractError(hash_code)
-            existing.purposes.add(purpose)
+            self._bind_purpose(existing, purpose)
             return existing, False
+        if not _file_purpose_profile_allowed({purpose}):
+            raise TCBContractError("EXECUTION_FILE_PURPOSE_CONFLICT")
         identities: List[FileIdentity] = []
         data = _read_rooted_regular_file(
             self.root_descriptor,
@@ -491,6 +714,8 @@ class AdmittedFileIndex:
         relative_path: str,
         expected_sha256: str,
         code: str,
+        *,
+        purpose: Optional[str] = None,
     ) -> AdmittedFile:
         """Resolve only an already admitted exact path; never touch filesystem."""
 
@@ -501,6 +726,57 @@ class AdmittedFileIndex:
             or entry.sha256 != expected_sha256
         ):
             raise TCBContractError(code)
+        if purpose is not None:
+            self._bind_purpose(entry, purpose)
+        return entry
+
+
+class AdmittedDirectory:
+    """One stable directory identity used only during envelope validation."""
+
+    __slots__ = ("identity", "path", "purpose")
+
+    def __init__(
+        self, path: str, identity: FileIdentity, purpose: str
+    ) -> None:
+        self.path = path
+        self.identity = identity
+        self.purpose = purpose
+
+
+class AdmittedDirectoryIndex:
+    """Separate lexical and physical index for cwd and sys.path directories."""
+
+    def __init__(self, root_descriptor: int) -> None:
+        if type(root_descriptor) is not int or root_descriptor < 0:
+            raise TCBContractError("INVOCATION_CWD_INVALID")
+        self.root_descriptor = root_descriptor
+        self.by_path: Dict[str, AdmittedDirectory] = {}
+        self.by_identity: Dict[FileIdentity, AdmittedDirectory] = {}
+
+    def admit(self, path: str, purpose: str, code: str) -> AdmittedDirectory:
+        existing = self.by_path.get(path)
+        if existing is not None:
+            if existing.purpose != purpose:
+                raise TCBContractError(
+                    "INVOCATION_DIRECTORY_PURPOSE_COLLISION"
+                )
+            raise TCBContractError(code)
+        identities: List[FileIdentity] = []
+        _verify_rooted_directory(
+            self.root_descriptor,
+            path,
+            code,
+            identity_out=identities,
+            known_identities=self.by_identity,
+        )
+        if len(identities) != 1:
+            raise TCBContractError(code)
+        entry = AdmittedDirectory(path, identities[0], purpose)
+        if entry.identity in self.by_identity:
+            raise TCBContractError("PHYSICAL_IDENTITY_ALIAS")
+        self.by_path[path] = entry
+        self.by_identity[entry.identity] = entry
         return entry
 
 
@@ -735,6 +1011,44 @@ def _close_descriptors_once(
     return result
 
 
+def _pipe_endpoint_state(descriptor: int, expected_access: int) -> Tuple[Any, ...]:
+    """Capture one valid non-inheritable FIFO endpoint state."""
+
+    try:
+        identity = os.fstat(descriptor)
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        inheritable = os.get_inheritable(descriptor)
+    except BaseException:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+    if (
+        not stat.S_ISFIFO(identity.st_mode)
+        or flags & os.O_ACCMODE != expected_access
+        or inheritable
+    ):
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+    return (
+        _physical_identity(identity),
+        stat.S_IFMT(identity.st_mode),
+        flags & os.O_ACCMODE,
+        inheritable,
+    )
+
+
+def _verify_pipe_endpoint_state(
+    descriptor: int, expected: Tuple[Any, ...], expected_access: int
+) -> None:
+    """Fail closed if a critical endpoint changed after initial admission."""
+
+    try:
+        observed = _pipe_endpoint_state(descriptor, expected_access)
+    except TCBContractError:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_SUBSTITUTED")
+    except BaseException:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_SUBSTITUTED")
+    if observed != expected:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_SUBSTITUTED")
+
+
 def _verify_atomic_entrypoint_snapshot(data: bytes) -> None:
     """Prove the bounded pre-spawn pipe primitive from cached admitted bytes.
 
@@ -770,25 +1084,26 @@ def _verify_atomic_entrypoint_snapshot(data: bytes) -> None:
         ):
             raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
         read_descriptor, write_descriptor = pair
-        read_status = os.fstat(read_descriptor)
-        write_status = os.fstat(write_descriptor)
-        read_flags = fcntl.fcntl(read_descriptor, fcntl.F_GETFL)
-        write_flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
-        if (
-            not stat.S_ISFIFO(read_status.st_mode)
-            or not stat.S_ISFIFO(write_status.st_mode)
-            or read_flags & os.O_ACCMODE != os.O_RDONLY
-            or write_flags & os.O_ACCMODE != os.O_WRONLY
-            or os.get_inheritable(read_descriptor)
-            or os.get_inheritable(write_descriptor)
-        ):
-            raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+        read_state = _pipe_endpoint_state(read_descriptor, os.O_RDONLY)
+        write_state = _pipe_endpoint_state(write_descriptor, os.O_WRONLY)
         pipe_buf = os.fpathconf(write_descriptor, "PC_PIPE_BUF")
         if type(pipe_buf) is not int or pipe_buf < MAX_ATOMIC_ENTRYPOINT_BYTES:
             raise TCBContractError("ENTRYPOINT_TRANSPORT_SIZE_LIMIT")
+        _verify_pipe_endpoint_state(
+            read_descriptor, read_state, os.O_RDONLY
+        )
+        _verify_pipe_endpoint_state(
+            write_descriptor, write_state, os.O_WRONLY
+        )
         written = os.write(write_descriptor, data)
         if type(written) is not int or written != len(data):
             raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+        _verify_pipe_endpoint_state(
+            read_descriptor, read_state, os.O_RDONLY
+        )
+        _verify_pipe_endpoint_state(
+            write_descriptor, write_state, os.O_WRONLY
+        )
 
         # A writer is attempted exactly once.  The future launcher may spawn
         # only after this close returns successfully.
@@ -801,12 +1116,24 @@ def _verify_atomic_entrypoint_snapshot(data: bytes) -> None:
         chunks: List[bytes] = []
         remaining = len(data)
         while remaining:
+            _verify_pipe_endpoint_state(
+                read_descriptor, read_state, os.O_RDONLY
+            )
             chunk = os.read(read_descriptor, remaining)
+            _verify_pipe_endpoint_state(
+                read_descriptor, read_state, os.O_RDONLY
+            )
             if type(chunk) is not bytes or not chunk:
                 raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
             chunks.append(chunk)
             remaining -= len(chunk)
+        _verify_pipe_endpoint_state(
+            read_descriptor, read_state, os.O_RDONLY
+        )
         extra = os.read(read_descriptor, 1)
+        _verify_pipe_endpoint_state(
+            read_descriptor, read_state, os.O_RDONLY
+        )
         if type(extra) is not bytes or extra:
             raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
         observed = b"".join(chunks)
@@ -897,6 +1224,10 @@ def _verify_rooted_directory(
     root_descriptor: int,
     relative_path: str,
     code: str = "INVOCATION_CWD_INVALID",
+    *,
+    identity_out: Optional[List[FileIdentity]] = None,
+    known_identities: Optional[Mapping[FileIdentity, Any]] = None,
+    alias_code: str = "PHYSICAL_IDENTITY_ALIAS",
 ) -> None:
     """Verify one stable rooted directory without following any component."""
 
@@ -905,6 +1236,7 @@ def _verify_rooted_directory(
         raise TCBContractError(code)
     descriptors: List[int] = []
     links: List[Tuple[int, str, int, Tuple[int, ...]]] = []
+    candidate_identity: Optional[FileIdentity] = None
     primary: Optional[TCBContractError] = None
     try:
         current = root_descriptor
@@ -916,6 +1248,8 @@ def _verify_rooted_directory(
                 )
             except BaseException:
                 raise TCBContractError(code)
+            if current == root_descriptor or current in descriptors:
+                raise TCBContractError(code)
             descriptors.append(current)
             current_stat = os.fstat(current)
             if not stat.S_ISDIR(current_stat.st_mode):
@@ -924,6 +1258,15 @@ def _verify_rooted_directory(
         _verify_open_directory_links(
             links, code, strict_metadata=True
         )
+        final_stat = os.fstat(current)
+        if not stat.S_ISDIR(final_stat.st_mode):
+            raise TCBContractError(code)
+        candidate_identity = _physical_identity(final_stat)
+        if (
+            known_identities is not None
+            and candidate_identity in known_identities
+        ):
+            raise TCBContractError(alias_code)
     except TCBContractError as error:
         primary = error
     except BaseException:
@@ -932,6 +1275,10 @@ def _verify_rooted_directory(
         primary = _close_descriptors_once(descriptors, primary, code)
     if primary is not None:
         raise primary
+    if identity_out is not None:
+        if candidate_identity is None:
+            raise TCBContractError(code)
+        identity_out.append(candidate_identity)
 
 
 def _read_rooted_regular_file(
@@ -1128,7 +1475,7 @@ def canonical_envelope_bytes(value: Any) -> bytes:
 
 
 def envelope_digest(canonical_bytes: bytes) -> str:
-    """Return the v3 domain-separated canonical envelope digest."""
+    """Return the v4 domain-separated canonical envelope digest."""
 
     if type(canonical_bytes) is not bytes:
         raise TCBContractError("INVALID_TYPE")
@@ -1181,10 +1528,77 @@ def _validate_contract_bytes(contract_bytes: bytes) -> Tuple[Dict[str, Any], str
     contract = _require_object(
         parse_json_bytes(contract_bytes), _CONTRACT_FIELDS, "CONTRACT_INVALID"
     )
-    _require_string(contract["contract_schema"], "CONTRACT_INVALID")
-    _require_string(contract["contract_version"], "CONTRACT_INVALID")
-    _require_positive_int(contract["contract_generation"], "CONTRACT_INVALID")
-    _require_positive_int(contract["protocol_generation"], "CONTRACT_INVALID")
+    if (
+        _require_string(contract["contract_schema"], "CONTRACT_INVALID")
+        != CONTRACT_SCHEMA
+        or _require_string(contract["contract_version"], "CONTRACT_INVALID")
+        != CONTRACT_VERSION
+        or _require_positive_int(
+            contract["contract_generation"], "CONTRACT_INVALID"
+        )
+        != CONTRACT_GENERATION
+        or _require_positive_int(
+            contract["protocol_generation"], "CONTRACT_INVALID"
+        )
+        != PROTOCOL_GENERATION
+    ):
+        raise TCBContractError("CONTRACT_IDENTITY_MISMATCH")
+    status_policy = _require_object(
+        contract["status_policy"], _STATUS_POLICY_FIELDS, "CONTRACT_INVALID"
+    )
+    blockers = _require_list(
+        status_policy["blockers"], "CONTRACT_INVALID", 32
+    )
+    expected_status = {
+        "contract_state": "ready_for_review",
+        "executable_implementation_identity": "unproven_preserved",
+        "executable_tcb_admission": "not_granted",
+        "m1a_state": "blocked",
+        "m1b_1a_provider_execution": "not_started",
+        "m1b_state": "not_evaluated",
+        "m2_state": "forbidden",
+        "owner_freeze": "accepted",
+        "stable_read_hardening": "accepted",
+    }
+    if tuple(blockers) != _REQUIRED_STATUS_BLOCKERS or any(
+        status_policy[field] != expected
+        for field, expected in expected_status.items()
+    ):
+        raise TCBContractError("CONTRACT_IDENTITY_MISMATCH")
+    envelope_policy = contract["execution_envelope"]
+    runtime_policy = contract["runtime_acceptance"]
+    implementation_policy = contract["implementation_acceptance"]
+    if (
+        type(envelope_policy) is not dict
+        or type(runtime_policy) is not dict
+        or type(implementation_policy) is not dict
+    ):
+        raise TCBContractError("CONTRACT_INVALID")
+    plan_policy = envelope_policy.get("execution_plan")
+    if type(plan_policy) is not dict:
+        raise TCBContractError("CONTRACT_INVALID")
+    if (
+        envelope_policy.get("envelope_schema") != EXECUTION_ENVELOPE_SCHEMA
+        or envelope_policy.get("envelope_generation")
+        != EXECUTION_ENVELOPE_GENERATION
+        or envelope_policy.get("digest_domain")
+        != _ENVELOPE_DOMAIN.decode("ascii")
+        or plan_policy.get("schema") != EXECUTION_PLAN_SCHEMA
+        or plan_policy.get("generation") != EXECUTION_PLAN_GENERATION
+        or plan_policy.get("launcher_blockers")
+        != list(_PLAN_LAUNCHER_BLOCKERS)
+        or plan_policy.get("provider_entrypoint_source_eligibility")
+        != _PROVIDER_SOURCE_ELIGIBILITY_POLICY
+        or envelope_policy.get("file_purpose_compatibility")
+        != _FILE_PURPOSE_COMPATIBILITY
+        or runtime_policy.get("schema") != RUNTIME_ACCEPTANCE_SCHEMA
+        or runtime_policy.get("generation") != RUNTIME_ACCEPTANCE_GENERATION
+        or runtime_policy.get("envelope_digest_domain")
+        != _ENVELOPE_DOMAIN.decode("ascii")
+        or runtime_policy.get("fields") != list(_RUNTIME_ACCEPTANCE_FIELDS)
+        or implementation_policy.get("fields") != list(_ACCEPTANCE_FIELDS)
+    ):
+        raise TCBContractError("CONTRACT_IDENTITY_MISMATCH")
     canonical = canonical_contract_bytes(contract)
     if canonical != contract_bytes:
         raise TCBContractError("CONTRACT_IDENTITY_MISMATCH")
@@ -1608,8 +2022,10 @@ def _validate_execution_plan_shape(value: Any) -> Dict[str, Any]:
 def _validate_invocation(
     value: Any,
     interpreter: Mapping[str, Any],
+    interpreter_entry: AdmittedFile,
     plan: Mapping[str, Any],
     manifest_bindings: Mapping[str, AdmittedFile],
+    admitted_files: AdmittedFileIndex,
     bytecode: Mapping[str, Any],
     environment: Mapping[str, Any],
 ) -> Tuple[Dict[str, Any], Tuple[str, ...]]:
@@ -1629,6 +2045,23 @@ def _validate_invocation(
         argv0["path"] != interpreter_locator
         or os_exec_target["path"] != interpreter_locator
         or plan["interpreter"]["repository_locator"] != interpreter_locator
+    ):
+        raise TCBContractError("INVOCATION_INTERPRETER_MISMATCH")
+    if (
+        admitted_files.lookup_exact(
+            argv0["path"],
+            interpreter["executable_sha256"],
+            "INVOCATION_INTERPRETER_MISMATCH",
+            purpose="invocation_argv0",
+        )
+        is not interpreter_entry
+        or admitted_files.lookup_exact(
+            os_exec_target["path"],
+            interpreter["executable_sha256"],
+            "INVOCATION_INTERPRETER_MISMATCH",
+            purpose="invocation_os_exec_target",
+        )
+        is not interpreter_entry
     ):
         raise TCBContractError("INVOCATION_INTERPRETER_MISMATCH")
 
@@ -1677,7 +2110,7 @@ def _validate_invocation(
         locator = _validate_repository_locator(raw_locator)
         sys_paths.append(locator["path"])
     if len(sys_paths) != len(set(sys_paths)):
-        raise TCBContractError("INVOCATION_POLICY_INVALID")
+        raise TCBContractError("INVOCATION_SYS_PATH_INVALID")
 
     fd_rows = _require_list(
         invocation["inherited_fds"],
@@ -1732,6 +2165,16 @@ def _validate_invocation(
         raise TCBContractError("ENTRYPOINT_TRANSPORT_BINDING_MISMATCH")
     if byte_count > MAX_ATOMIC_ENTRYPOINT_BYTES:
         raise TCBContractError("ENTRYPOINT_TRANSPORT_SIZE_LIMIT")
+    if (
+        admitted_files.lookup_exact(
+            supplied_locator,
+            supplied_digest,
+            "ENTRYPOINT_TRANSPORT_BINDING_MISMATCH",
+            purpose="entrypoint_transport",
+        )
+        is not provider_entry
+    ):
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_BINDING_MISMATCH")
     _verify_atomic_entrypoint_snapshot(provider_entry.data)
 
     stdio = _require_object(
@@ -1779,6 +2222,7 @@ def _validate_execution_plan_primary_bindings(
             plan_interpreter["repository_locator"],
             plan_interpreter["sha256"],
             "EXECUTION_PLAN_INTERPRETER_MISMATCH",
+            purpose="plan_interpreter",
         )
         is not interpreter_entry
     ):
@@ -1794,6 +2238,7 @@ def _validate_execution_plan_primary_bindings(
             entrypoint["repository_locator"],
             entrypoint["sha256"],
             "EXECUTION_PLAN_ENTRYPOINT_MISMATCH",
+            purpose="plan_entrypoint",
         )
         is not provider_entry
     ):
@@ -1844,6 +2289,9 @@ def _validate_execution_plan_bindings(
                 plan_row["path"],
                 plan_row["sha256"],
                 "EXECUTION_PLAN_ROLE_BINDING_MISMATCH",
+                purpose="plan_role_import:{}:{}".format(
+                    role, plan_row["module"]
+                ),
             )
             is not manifest_entry
         ):
@@ -1952,6 +2400,27 @@ def _validate_imports(
     raw_rows = _require_list(
         value, "IMPORT_CLOSURE_INVALID", MAX_IMPORT_ENTRIES
     )
+    prepared_modules: Set[str] = set()
+    prepared_paths: Set[str] = set()
+    for raw in raw_rows:
+        row = _require_object(raw, _IMPORT_FIELDS, "IMPORT_CLOSURE_INVALID")
+        kind = _require_string(row["kind"], "IMPORT_CLOSURE_INVALID")
+        if kind not in ("builtin", "extension", "frozen", "source"):
+            raise TCBContractError("IMPORT_CLOSURE_INVALID")
+        module = _require_string(row["module"], "IMPORT_CLOSURE_INVALID")
+        if _MODULE.fullmatch(module) is None or module in prepared_modules:
+            raise TCBContractError("IMPORT_CLOSURE_INVALID")
+        prepared_modules.add(module)
+        _require_digest(row["sha256"], "IMPORT_CLOSURE_INVALID")
+        if kind in ("builtin", "frozen"):
+            if row["path"] is not None:
+                raise TCBContractError("IMPORT_CLOSURE_INVALID")
+        else:
+            path = _require_string(row["path"], "IMPORT_CLOSURE_INVALID")
+            _relative_components(path, "IMPORT_CLOSURE_INVALID")
+            if path in prepared_paths:
+                raise TCBContractError("IMPORT_CLOSURE_INVALID")
+            prepared_paths.add(path)
     rows: List[Dict[str, Any]] = []
     bindings: List[AdmittedFile] = []
     modules: Set[str] = set()
@@ -1969,7 +2438,12 @@ def _validate_imports(
         if kind in ("builtin", "frozen"):
             if row["path"] is not None or digest != interpreter_sha256:
                 raise TCBContractError("IMPORT_CLOSURE_INVALID")
-            entry = interpreter_entry
+            entry = admitted_files.lookup_exact(
+                interpreter_entry.path,
+                interpreter_sha256,
+                "IMPORT_CLOSURE_INVALID",
+                purpose="import:{}:{}".format(kind, module),
+            )
         else:
             path = _require_string(row["path"], "IMPORT_CLOSURE_INVALID")
             _relative_components(path, "IMPORT_CLOSURE_INVALID")
@@ -2024,14 +2498,21 @@ def _validate_execution_state(
     invocation, sys_paths = _validate_invocation(
         state["invocation"],
         interpreter,
+        interpreter_entry,
         plan,
         manifest_bindings,
+        admitted_files,
         bytecode,
         environment,
     )
-    _verify_rooted_directory(
-        root_descriptor, invocation["cwd"]["path"]
+    admitted_directories = AdmittedDirectoryIndex(root_descriptor)
+    admitted_directories.admit(
+        invocation["cwd"]["path"], "cwd", "INVOCATION_CWD_INVALID"
     )
+    for path in sys_paths:
+        admitted_directories.admit(
+            path, "sys_path", "INVOCATION_SYS_PATH_INVALID"
+        )
     if state["imports"] == []:
         raise TCBContractError("EXECUTION_PLAN_IMPORT_BINDING_MISMATCH")
     imports, total_bytes, import_bindings = _validate_imports(

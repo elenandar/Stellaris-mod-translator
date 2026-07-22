@@ -1,15 +1,18 @@
 # Offline executable/TCB admission contract M1B-1A0
 
 - Milestone: `M1B-1A0 — Offline executable/TCB admission contract`
-- Contract schema: `m1b-offline-executable-tcb-contract-v3`
-- Contract version: `m1b-offline-executable-tcb-admission-v3`
-- Contract generation: `3`
-- Execution-envelope schema/generation: `m1b-execution-envelope-v3` / `3`
+- Contract schema: `m1b-offline-executable-tcb-contract-v4`
+- Contract version: `m1b-offline-executable-tcb-admission-v4`
+- Contract generation: `4`
+- Execution-envelope schema/generation: `m1b-execution-envelope-v4` / `4`
 - Runtime-acceptance schema/generation: `m1b-runtime-execution-envelope-acceptance-v1` / `1`
-- Execution-plan schema/generation: `m1b-execution-plan-v2` / `2`
+- Execution-plan schema/generation: `m1b-execution-plan-v3` / `3`
 - Preserved benchmark protocol: `m1b-benchmark-contract-v7`, generation `108`
+- Remediation state: `REMEDIATION: READY_FOR_REVIEW`
 - Review state: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`
 - Admission state: `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`
+- Owner-decision blocker: `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`
+- Provider-source blocker: `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`
 - Identity blocker: `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`
 
 Этот contract определяет fail-closed форму будущего доказательства exact
@@ -25,12 +28,15 @@ interpreter и manifest roles, а lexical cache не предотвращал п
 одного physical inode через case alias. Generation 3 заменяет невыполнимый
 pathname script plan на typed descriptor-backed provider transport и отделяет
 repository locator, OS exec target, `argv[0]`, process cwd и `sys_path`.
-Generation 1 и 2 не являются допустимой identity для generation-3 semantics.
+Generation 4 дополнительно закрывает directory-alias, cross-purpose file reuse,
+provider-source eligibility и mid-protocol pipe-substitution gaps generation 3.
+Generation 1, 2 и 3 не являются допустимой identity для generation-4
+semantics.
 
 ## Contract identity
 
 Normative machine-readable bytes находятся в
-[`registry/m1b/offline-executable-tcb-contract-v3.json`](../../registry/m1b/offline-executable-tcb-contract-v3.json).
+[`registry/m1b/offline-executable-tcb-contract-v4.json`](../../registry/m1b/offline-executable-tcb-contract-v4.json).
 Файл — compact sorted-key ASCII JSON плюс ровно один LF. Root closed schema
 имеет поля `contract_generation`, `contract_schema`, `contract_version`,
 `digest_framing`, `execution_envelope`, `implementation_acceptance`,
@@ -41,10 +47,10 @@ Contract не содержит self-hash. Его external review identity:
 
 ```text
 SHA-256(
-  ASCII("stellaris-m1b-offline-executable-tcb-contract-v3") || NUL ||
+  ASCII("stellaris-m1b-offline-executable-tcb-contract-v4") || NUL ||
   u64be(len(canonical_contract)) || canonical_contract
 )
-= c346fdd761ea477a85930c041858e7444a576263f3fb5ca568cc1ab005ef9744
+= ad6bce1a5c516753d79ee0d807f5445e9b860a398e661adfb9730d9c4fee9c31
 ```
 
 Length включает завершающий LF. Digest фиксируется внешним review document и
@@ -53,12 +59,15 @@ Length включает завершающий LF. Digest фиксируется
 
 ## Trust boundary и запрещённые доказательства
 
-Будущий admission требует owner-controlled решения над exact implementation
-acceptance, runtime acceptance, manifest, envelope и launcher/opened-byte
-chain. Caller-supplied records, даже полностью согласованные и содержащие
-`owner_accepted`, подтверждают только closed shape и linkage. Они не становятся
-trust root. Реальный owner-controlled expected record identity должен поступать
-из канала, не контролируемого caller; M1B-1A0 такой operational канал не создаёт.
+Будущий admission требует отдельного owner-controlled решения над уже
+известными exact implementation acceptance, runtime acceptance, manifest,
+envelope и launcher/opened-byte chain. Caller-supplied records, даже полностью
+согласованные и содержащие `owner_accepted`, подтверждают только closed shape
+и linkage. Они не становятся trust root и не снимают
+`EXECUTABLE_TCB_OWNER_DECISION_REQUIRED`. Задание, создающее candidate bytes,
+не может в том же gate принять созданные им identities. Реальный
+owner-controlled expected record identity должен поступать из канала, не
+контролируемого caller; M1B-1A0 такой operational канал не создаёт.
 
 Fixture, expected hash, Git SHA, clean tree, merge, `status=ok`, report
 self-assertion, `sys.version`, `sys.executable`, `__file__`, mtime/size,
@@ -116,9 +125,11 @@ protocol_generation
 ```
 
 Synthetic shape требует `acceptance_state=owner_accepted` и exact linkage к
-manifest/generation/protocol 108. `proposed`, `retired`, mismatched либо
-self-asserted `proven` отклоняются. Этот record связывает implementation
-manifest; он не заменяет новый runtime acceptance.
+manifest/generation/protocol 108. Это caller-supplied значение проверяет только
+форму и linkage; оно не выражает operational owner decision. `proposed`,
+`retired`, mismatched либо self-asserted `proven` отклоняются. Этот record
+связывает implementation manifest; он не заменяет новый runtime acceptance и
+не снимает `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED`.
 
 ## Descriptor-rooted stable bytes и global identity
 
@@ -128,20 +139,33 @@ acceptance. Repository root открывается component-wise с `O_NOFOLLOW
 `O_DIRECTORY`, `O_CLOEXEC`; root symlink, relative root, ambiguity или platform
 без primitives fail closed.
 
-Единый verifier-wide index содержит:
+Отдельный verifier-wide file index содержит:
 
 - exact lexical relative path;
 - physical identity `(st_dev, st_ino)`;
 - admitted raw digest, bytes и surface kind.
 
 Политика применяется к пяти records, четырём manifest roles, interpreter,
-source/extension imports и native dependencies. Exact повтор уже принятого
-executable path с тем же expected digest переиспользует admitted bytes и
-identity без open/read. Exact повтор с другим digest отклоняется без reopen.
-Другой lexical path, чей открытый descriptor имеет уже известный physical
-identity, отклоняется после `fstat`, но до чтения content. `.lower()` и
-`casefold()` не являются identity evidence. Input record никогда не
-переиспользуется как executable surface.
+source/extension imports и native dependencies. Любой reuse executable file
+дополнительно проходит closed purpose matrix с default deny:
+
+- matching non-provider manifest role, matching plan role и matching source
+  import могут ссылаться на один admitted file;
+- provider manifest role, plan entrypoint и descriptor transport могут
+  ссылаться на один admitted file;
+- interpreter, plan interpreter, invocation `argv0`/`os_exec_target` и
+  pathless builtin/frozen imports могут ссылаться на один admitted interpreter;
+- standalone source import, standalone extension import и native dependency
+  имеют ровно один purpose каждый; два path-bearing import rows не могут иметь
+  один lexical path независимо от module/kind.
+
+Любое иное cross-purpose сочетание отклоняется. Разрешённый exact повтор с тем
+же expected digest bind-ит новый разрешённый purpose к admitted bytes и
+identity без open/read. Exact повтор с другим digest либо запрещённым purpose
+отклоняется без reopen. Другой lexical path, чей открытый descriptor имеет уже
+известный physical identity, отклоняется после `fstat`, но до чтения content.
+`.lower()` и `casefold()` не являются identity evidence. Input record никогда
+не переиспользуется как executable surface.
 
 Reader принимает только regular single-link leaf, фиксирует descriptor
 metadata до чтения, накапливает short positive reads, выполняет bounded extra
@@ -150,7 +174,17 @@ replacement и metadata drift. Каждый успешно открытый desc
 ровно одну production close attempt. Alias primary error сохраняется при
 injected close failure; retry отсутствует.
 
-## Layer 2: execution envelope v3
+Directory identity хранится отдельно от file identity. `cwd` и каждый
+`sys_path` открываются component-wise descriptor-rooted с `O_NOFOLLOW`,
+`O_DIRECTORY`, strict pre/post `fstat`, stable parent-entry identity и ровно
+одной close attempt. Отдельные lexical и physical directory indices запрещают
+exact cwd/sys_path reuse, повтор одного sys_path, case alias и любую другую
+physical alias identity. Replacement, metadata drift, stat/open ambiguity и
+close failure fail closed. Разные lexical paths с разными physical identities
+разрешены. Этот directory snapshot доказывает только stable directory
+identity; он не доказывает import transport или bytes, открытые будущим child.
+
+## Layer 2: execution envelope v4
 
 Envelope — closed canonical JSON с exact root fields:
 
@@ -180,7 +214,7 @@ external digest охватывает весь envelope, включая оба st
 
 ```text
 SHA-256(
-  ASCII("stellaris-m1b-execution-envelope-v3") || NUL ||
+  ASCII("stellaris-m1b-execution-envelope-v4") || NUL ||
   u64be(len(canonical_envelope)) || canonical_envelope
 )
 ```
@@ -217,7 +251,7 @@ Exact constants:
 - `runtime_acceptance_schema=m1b-runtime-execution-envelope-acceptance-v1`;
 - `runtime_acceptance_generation=1`;
 - `runtime_acceptance_state=owner_accepted` для synthetic closed-shape case;
-- `envelope_digest_domain=stellaris-m1b-execution-envelope-v3`;
+- `envelope_digest_domain=stellaris-m1b-execution-envelope-v4`;
 - `envelope_digest_framing=sha256_domain_nul_u64be_length_canonical_envelope`.
 
 Record atomically связывает actual contract schema/version/generation/framed
@@ -264,7 +298,7 @@ Bytecode object имеет `cache_mode`, `dont_write_bytecode`,
 `executed_bytecode`, `pycache_prefix`. Единственная policy:
 `sealed_empty`, `true`, `[]`, `null`. Stale bytecode запрещён.
 
-### Closed execution plan v2
+### Closed execution plan v3
 
 Execution plan root имеет ровно:
 
@@ -277,7 +311,7 @@ plan_schema
 role_imports
 ```
 
-`plan_schema=m1b-execution-plan-v2`, `plan_generation=2`.
+`plan_schema=m1b-execution-plan-v3`, `plan_generation=3`.
 
 - plan interpreter имеет ровно `repository_locator`, `sha256` и exact
   совпадает с envelope interpreter locator/digest и уже admitted opened bytes;
@@ -288,6 +322,7 @@ role_imports
 - launcher имеет `status=unproven` и exact blockers
   `INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN`,
   `LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN`,
+  `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN`,
   `ROLE_IMPORT_TRANSPORT_UNPROVEN`. Caller не может удалить их либо объявить
   launcher `proven`;
 - каждый ordered `role_imports` row имеет `kind`, `module`, `path`, `role`,
@@ -303,6 +338,16 @@ surface. Role, path, digest или physical-identity swap, missing role,
 unmanifested entrypoint, case alias и попытка repository reopen отклоняются.
 Descriptor loader остальных трёх source roles ещё не доказан, поэтому linkage
 не выдаёт operational admission.
+
+Provider entrypoint source eligibility остаётся отдельным exact blocker.
+Снять `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN` может только будущий
+admitted CPython, проверивший exact cached provider bytes, которые передаются
+через descriptor transport. `ast.parse`, `compile` или иная проверка host
+Python над pathname/повторно прочитанными bytes не является таким evidence и
+не может снять blocker. Поэтому arbitrary synthetic bytes, включая invalid
+UTF-8, NUL и синтаксически недопустимый Python, всё ещё могут пройти structural
+synthetic conformance при обязательном сохранении blocker; это не утверждение,
+что child CPython сможет исполнить их как source.
 
 ### Closed invocation
 
@@ -338,7 +383,10 @@ reordered flags и extra positionals запрещены. Запрет перво
 `-I`, `-S`, `-B`, `-X utf8`
 семантически совпадают с exact `python_flags`, empty environment и sealed
 bytecode policy. `sys_path` non-empty и содержит только explicit
-repository-root locators.
+repository-root locators. `cwd` и каждый `sys_path` проходят отдельный
+descriptor-rooted stable directory admission; exact или physical cwd/sys_path
+reuse, duplicate sys_path и case alias запрещены. Эта проверка не заменяет
+descriptor import transport.
 
 `mode=typed_entrypoint_fd_no_repository_reopen`. `inherited_fds` содержит
 ровно один closed typed row с полями `byte_count`, `child_fd`, `mode`,
@@ -351,18 +399,26 @@ repository-root locators.
 Verifier materializes только synthetic transport primitive: fresh anonymous
 pipe, non-inheritable read/write ends с правильными access modes, observed
 `PC_PIPE_BUF >= 512`, один полный atomic write cached bytes, затем successful
-writer close до любого возможного child и exact readback/EOF. Short/zero write,
-wrong end/type/access/inheritability, reused/duplicate descriptor, wrong bytes,
-extra/early EOF и любой close failure fail closed. Source pathname после
-admission не читается повторно и его mutation не меняет snapshot bytes.
+writer close до любого возможного child и exact readback/EOF. До и после write
+verifier повторно проверяет оба ends; после единственной successful close writer
+он проверяет read end до и после каждого read и после EOF. Каждая проверка
+связывает FIFO type, access mode, non-inheritability и stable physical identity
+`(st_dev, st_ino)`. Controlled descriptor substitution в середине write/read
+protocol fail closed. Short/zero write, wrong end/type/access/inheritability,
+reused/duplicate descriptor, wrong bytes, extra/early EOF и любой close failure
+тоже fail closed. Source pathname после admission не читается повторно и его
+mutation не меняет snapshot bytes.
 
-Это доказывает primitive, но JSON `child_fd=3` не доказывает будущий live
-launcher handoff. macOS interpreter exec остаётся
+Это доказывает bounded primitive против проверяемой controlled substitution,
+но не security boundary против hostile same-process monkeypatching/reflection.
+JSON `child_fd=3` также не доказывает будущий live launcher handoff. macOS
+interpreter exec остаётся
 `INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN`, полный opened-byte handoff —
-`LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN`, а descriptor loader остальных roles —
-`ROLE_IMPORT_TRANSPORT_UNPROVEN`.
-`cwd.path` всё равно открывается descriptor-rooted как stable directory. Stdio
-exact bind-ит fd/mode/target: stdin — devnull, stdout/stderr — captured pipes.
+`LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN`, source eligibility —
+`PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN`, а descriptor loader
+остальных roles — `ROLE_IMPORT_TRANSPORT_UNPROVEN`. Launcher остаётся
+`unproven`. Stdio exact bind-ит fd/mode/target: stdin — devnull, stdout/stderr —
+captured pipes.
 
 Environment имеет `ambient_inheritance=false`, `policy=empty`, `variables=[]`.
 Runtime hooks запрещают debugger/trace/profile/startup и требуют exact builtin
@@ -419,25 +475,58 @@ Stdout — один compact ASCII JSON object с fixed allowlisted `status`, `co
 path, hash, bytes, marker, numeric token, exception или traceback. Success
 возвращает только `SYNTHETIC_CONFORMANCE_ONLY`, не capability или admission.
 
+Global `status_policy.blockers` — exact ordered list; deletion, rename,
+addition либо reorder fail closed:
+
+```text
+EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN
+EXECUTABLE_TCB_OWNER_DECISION_REQUIRED
+PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN
+ROLE_IMPORT_TRANSPORT_UNPROVEN
+LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN
+INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN
+NATIVE_DEPENDENCY_CLOSURE_UNPROVEN
+CONTEXT_LIMIT_BINDING_UNPROVEN
+PROVIDER_PERSISTENCE_UNPROVEN
+RESIDENCY_UNPROVEN
+OUTPUT_LIMIT_BINDING_UNPROVEN
+LIFECYCLE_STATE_UNPROVEN
+MISSING_PROMPT_BYTES
+MISSING_TEMPLATE_BYTES
+MISSING_REAL_CANDIDATE_IDENTITIES
+PARTIAL_REPORT_CANNOT_BE_COMPLETE
+```
+
+Plan launcher отдельно сохраняет exact ordered subset:
+`INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN`,
+`LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN`,
+`PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN`,
+`ROLE_IMPORT_TRANSPORT_UNPROVEN`.
+
 ## Public synthetic fixture
 
 [`fixtures/m1b/tcb-admission/cases.json`](../../fixtures/m1b/tcb-admission/cases.json)
 и его [README](../../fixtures/m1b/tcb-admission/README.md) содержат только
-synthetic mutations. Four role files, interpreter и imports материализуются
+synthetic mutations под schema `m1b-tcb-admission-cases-v5`. Four role files,
+interpreter и imports материализуются
 тестом во временном root и не исполняются.
 
-Final fixture identity: `218` unique cases, `61682` bytes, SHA-256
-`0f14d9b28ee41095a2373b02409b288c30959013840d7d1c891538266a84eeaa`.
-Verifier identity: `86594` bytes, SHA-256
-`0df39292b306afdfd2187ffb554b5ad2714bbe0353ca176f6fe49cf7eb162c10`.
-Обе identity независимо пересчитаны; generation-1 и generation-2 values не
-являются evidence v3.
+Final fixture identity: `241` unique cases, `73746` exact compact sorted-key
+UTF-8 JSON bytes plus one LF,
+SHA-256
+`b729305612bdf5f3e88d42a90603cf6a10b2100bd31b144c28399a155984d862`.
+Final verifier identity: `104137` bytes, SHA-256
+`242b115d6eb8f7df143eeeccc94c2b7029dc1a7b601d9a29bd436a183e446551`.
+Они независимо пересчитаны после завершения normative bytes; generation-1,
+generation-2 и generation-3 values не являются evidence v4.
 
 Matrix обязана покрыть runtime acceptance binding, closed execution plan,
 typed repository locators, exact `/dev/fd/3` argv, atomic cached-byte pipe
-transport, FD type/access/inheritability/reuse и close lifecycle, explicit
-launcher blockers, all-role linkage, global lexical/physical aliasing,
-no-reopen, stable-read lifecycle и controlled no-leak output. Deep envelope
+transport, pre/post FD type/access/inheritability/physical identity,
+mid-protocol substitution и close lifecycle, explicit launcher blockers,
+provider source-eligibility preservation, all-role linkage, closed file-purpose
+matrix, global file alias/no-reopen, separate cwd/sys_path lexical/physical
+directory identity, stable-read lifecycle и controlled no-leak output. Deep envelope
 mutations explicitly обновляют runtime acceptance digest, чтобы проверять deep
 validator; отдельный stale-binding case оставляет record неизменным.
 
@@ -450,7 +539,9 @@ v7/generation 108, 17 component identities, bundle
 и owner-freeze snapshot
 `df84871be332ee52c315d0c0cc1a7a0046251352a2a0131382b5cb994cffcb58`.
 
-Независимо остаются blockers: executable implementation identity,
+Независимо остаются blockers:
+`EXECUTABLE_TCB_OWNER_DECISION_REQUIRED`, executable implementation identity,
+`PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN`,
 `INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN`,
 `LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN`, `ROLE_IMPORT_TRANSPORT_UNPROVEN`, native
 dependency closure, context/output binding, persistence, residency, lifecycle,
@@ -458,8 +549,11 @@ missing frozen prompt/template bytes, real candidate identities и
 `PARTIAL_REPORT_CANNOT_BE_COMPLETE`.
 
 ```text
+REMEDIATION: READY_FOR_REVIEW
 M1B-1A0 CONTRACT: READY_FOR_REVIEW
 EXECUTABLE_TCB_ADMISSION: NOT_GRANTED
+EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED
+PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED
 EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED
 OWNER_FREEZE: ACCEPTED
 STABLE_READ_HARDENING: ACCEPTED
@@ -469,6 +563,12 @@ M1A: BLOCKED
 M2: FORBIDDEN
 ```
 
-После review и merge разрешено только отдельное задание на реальные four-role
-surfaces и external owner-controlled implementation/runtime admission. Даже
-merge не разрешает Ollama probe, model call, private corpus или benchmark.
+После review и merge следующий разрешённый отдельный gate — `M1B-1A1`:
+предложить offline four-role candidate bytes и exact manifest/envelope/launcher/
+import/source-eligibility evidence. M1B-1A1 не создаёт operational
+`owner_accepted`, не выдаёт executable admission и не запускает provider.
+Только следующий отдельный `M1B-1A2` может зафиксировать owner-controlled
+решение над уже известными exact identities; задача, создавшая candidate bytes,
+не может сама принять их. Даже M1B-1A2 не разрешает Ollama probe, model call,
+private corpus, provider execution или benchmark: для них требуется следующий
+явный gate.

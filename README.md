@@ -8,7 +8,7 @@
 
 Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) слит как [`2b51879`](https://github.com/elenandar/Stellaris-mod-translator/commit/2b51879d8e358cf5412f3a6792f33c71ae79d863), hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) — как [`9cd10d1`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240), M1B protocol proposal [PR #5](https://github.com/elenandar/Stellaris-mod-translator/pull/5) — как [`ed07bcc`](https://github.com/elenandar/Stellaris-mod-translator/commit/ed07bcca96945dbb49206c975908e00c832210b5), external owner-freeze [PR #6](https://github.com/elenandar/Stellaris-mod-translator/pull/6) — как [`9f854da`](https://github.com/elenandar/Stellaris-mod-translator/commit/9f854da7501dec6ec9afc5e4bf71dfaa1ea9ecbc), а stable-read hardening [PR #7](https://github.com/elenandar/Stellaris-mod-translator/pull/7) — как [`424a4e4`](https://github.com/elenandar/Stellaris-mod-translator/commit/424a4e45066cfbff3f9b3da2ec2cf6ad62a643fb). Текущий verdict остаётся `M1A: BLOCKED`. Это evidence-этап, а не начало product CLI.
 
-После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Exact proposal v7/generation 108 принят отдельным external owner-freeze record только как declarative basis записанного `M1B-1A local synthetic provider preflight`; после merge PR #6 exact scope действует со state `OWNER_FREEZE: ACCEPTED`, а merge PR #7 выставил `STABLE_READ_HARDENING: ACCEPTED`. Отдельный contract-only этап теперь определяет будущий executable/runtime admission: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`, `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`, `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`. `M1B-1A PROVIDER EXECUTION: NOT_STARTED`, `M1B: NOT_EVALUATED`; benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
+После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Exact proposal v7/generation 108 принят отдельным external owner-freeze record только как declarative basis записанного `M1B-1A local synthetic provider preflight`; после merge PR #6 exact scope действует со state `OWNER_FREEZE: ACCEPTED`, а merge PR #7 выставил `STABLE_READ_HARDENING: ACCEPTED`. Отдельный contract-only этап теперь определяет будущий executable/runtime admission: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`, `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`, `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`, `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`, `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`. `M1B-1A PROVIDER EXECUTION: NOT_STARTED`, `M1B: NOT_EVALUATED`; benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
 
 Текущая synthetic proposal identity — protocol v7/generation 108 и analysis
 policy v6/generation 108. PR #5 смержен; historical 17 report/fixture entries
@@ -29,14 +29,21 @@ Same-process Python runtime, imports, globals/closures и analysis code вход
 TCB; capability предотвращает случайное смешение raw rows, но не является
 security boundary против reflection или monkeypatching внутри TCB. Existing
 reviewer/HGT/no-output invariants сохранены. Synthetic corpus bytes не менялись:
-corpus v3/generation 304 остаётся тем же. M1B-1A0 contract generation 3 имеет
-отдельные contract/envelope/runtime-acceptance identities, closed execution
-plan, typed repository locators, cached provider bytes через exact `/dev/fd/3`
-pipe transport и global lexical/physical no-reopen policy. Interpreter exec,
-launcher opened-byte handoff и descriptor imports остальных roles остаются
-explicit blockers. Caller-supplied runtime record не заменяет external owner-controlled
-trust root; contract не принимает текущие executable bytes, runtime или
-invocation state. Это contract evidence, а не model call или quality verdict.
+corpus v3/generation 304 остаётся тем же. M1B-1A0 contract v4/generation 4
+имеет envelope v4/generation 4, execution plan v3/generation 3 и отдельную
+runtime-acceptance v1 identity. Closed file-purpose matrix, descriptor-rooted
+stable nofollow admission cwd/каждого sys_path и отдельные lexical/physical
+directory indices запрещают ambiguous reuse; directory snapshot сам по себе не
+доказывает import transport. Cached provider bytes проходят exact `/dev/fd/3`
+pipe transport с pre/post FIFO/access/inheritability/physical-identity checks,
+но это не защита от hostile same-process patching и launcher остаётся blocked.
+Interpreter exec, launcher opened-byte handoff, exact admitted-CPython provider
+source eligibility и descriptor imports остальных roles остаются explicit
+blockers; host `ast`/`compile` не являются eligibility evidence. Caller-supplied
+`owner_accepted` и runtime record доказывают только shape/linkage, не заменяют
+external owner-controlled trust root и не снимают executable owner blocker.
+Contract не принимает текущие executable bytes, runtime или invocation state.
+Это contract evidence, а не model call или quality verdict.
 
 ## Контракт MVP
 
@@ -108,14 +115,19 @@ Hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) 
 
 External owner-freeze PR #6 и stable-read hardening PR #7 слиты;
 `OWNER_FREEZE: ACCEPTED`, `STABLE_READ_HARDENING: ACCEPTED`. M1B-1A0 создаёт
-только reviewable generation-3 offline contract и synthetic conformance gate.
+только reviewable v4/generation-4 offline contract и synthetic conformance gate.
 Existing five-field implementation acceptance остаётся неизменным, а отдельный
-runtime acceptance exact bind-ит canonical envelope без выдачи authority.
-Следующий
-разрешённый шаг после review и merge этого contract PR — отдельное задание на
-реальные four-role executable surfaces и external implementation/runtime
-admission. Даже тогда model call, private corpus и complete benchmark не
-разрешены автоматически. `M1B: NOT_EVALUATED`: contract review не является
+runtime acceptance exact bind-ит canonical envelope без выдачи authority;
+synthetic `owner_accepted` — только проверка shape/linkage.
+
+Следующий разрешённый шаг после review и merge этого contract PR — отдельный
+`M1B-1A1`, который только предлагает offline four-role candidate bytes и exact
+manifest/envelope/launcher/import/source-eligibility evidence. Он не создаёт
+operational `owner_accepted`, admission или provider execution. Только
+последующий отдельный `M1B-1A2` может зафиксировать owner-controlled решение
+над уже известными exact identities; задача создания bytes не может сама их
+принять. Даже M1B-1A2 не разрешает provider/model call, private corpus или
+complete benchmark без следующего явного gate. `M1B: NOT_EVALUATED`: contract review не является
 feasibility verdict. Только позднее принятые verdicts `M1A: GO` и
 `M1B: QUALITY_FEASIBLE` вместе разрешат safety kernel; до этого `M1A: BLOCKED`
 и `M2: FORBIDDEN`.

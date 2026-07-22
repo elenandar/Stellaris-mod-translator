@@ -7,6 +7,8 @@
   только как основа подготовки будущего M1B-1A
 - Operational effect: exact declarative scope действует после merge owner-freeze PR #6 в `main` как `9f854da`; `OWNER_FREEZE: ACCEPTED`
 - Gate state: `M1B: NOT_EVALUATED`; `M1A: BLOCKED`; `M2: FORBIDDEN`
+- Executable owner gate: `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`
+- Provider-source gate: `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`
 
 Этот contract создаёт отдельную внешнюю фиксацию решения владельца. Он не
 изменяет historical M1B-0 registry entries: все 17 entries внутри benchmark
@@ -35,7 +37,10 @@ provenance.
 Offline verifier независимо bind-ит expected proposal identities и проверяет
 consistency records. Он не доказывает свои executable bytes, Python runtime,
 imports или invocation state и не выдаёт full decision admission. Поэтому
-`EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN` остаётся live blocker.
+`EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN` остаётся live blocker. Это
+accepted declarative решение также не является executable owner decision и не
+снимает `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED` либо
+`PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN`.
 
 ## Registry snapshot schema
 
@@ -139,7 +144,10 @@ component count, а также требует одновременно:
   `real_candidate_identities`;
 - exact gates `m1b_state=not_evaluated`, `m1a_state=blocked`,
   `m2_state=forbidden`;
-- полный ordered список шести независимых live blockers.
+- полный ordered список шести независимых live blockers exact M1B-0F
+  declarative scope. Этот protected record не переписывается новыми
+  executable-TCB blockers; contract v4 проверяет их отдельно в собственном
+  exact global status policy.
 
 Удаление blocker, расширение scope, смена gate, разрешение model/private/live
 действия или coherent подмена snapshot вместе с report/fixture acceptance
@@ -199,6 +207,8 @@ cases и все 17 `proposed` entries не меняются.
 
 Owner-freeze не снимает:
 
+- `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED`;
+- `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN`;
 - `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN`;
 - `CONTEXT_LIMIT_BINDING_UNPROVEN`;
 - `PROVIDER_PERSISTENCE_UNPROVEN`;
@@ -212,15 +222,24 @@ Owner-freeze не снимает:
 - `M1A: BLOCKED`;
 - `M2: FORBIDDEN`.
 
-`OWNER_DECISION_REQUIRED` разрешён только для exact declarative freeze,
-описанного этим record. Любой последующий prompt/profile/provider/live/holdout,
-report-schema, executable-TCB или feasibility owner decision остаётся отдельным
-gate.
+Исторический `OWNER_DECISION_REQUIRED` разрешён только для exact declarative
+freeze, описанного этим record. Отдельный exact
+`EXECUTABLE_TCB_OWNER_DECISION_REQUIRED` не разрешён. Любой последующий
+prompt/profile/provider/live/holdout, report-schema, executable-TCB или
+feasibility owner decision остаётся отдельным gate.
 
 После merge PR #6 owner-freeze действует только в exact accepted scope.
 Stable-reader hardening PR #7 merged as `424a4e4` и имеет state
 `STABLE_READ_HARDENING: ACCEPTED`; accepted snapshot и decision bytes не
 изменились. Отдельный [M1B-1A0 executable/TCB contract](m1b-offline-executable-tcb-admission-contract.md)
 теперь `READY_FOR_REVIEW`, но сохраняет `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`
-и `M1B-1A PROVIDER EXECUTION: NOT_STARTED`. Он не расширяет owner-freeze scope и
-не разрешает model/provider action.
+и `M1B-1A PROVIDER EXECUTION: NOT_STARTED`, а также exact blockers
+`EXECUTABLE_TCB_OWNER_DECISION_REQUIRED` и
+`PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN`. Он не расширяет owner-freeze
+scope и не разрешает model/provider action.
+
+После review/merge M1B-1A0 отдельный `M1B-1A1` может только предложить offline
+four-role candidate и exact evidence; он не создаёт operational
+`owner_accepted` и не принимает созданные bytes. Отдельный `M1B-1A2` может
+рассмотреть owner-controlled решение только над уже известными exact identities.
+Даже M1B-1A2 не разрешает provider/model execution без следующего явного gate.

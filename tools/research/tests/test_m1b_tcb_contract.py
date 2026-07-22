@@ -32,7 +32,7 @@ CONTRACT = (
     REPOSITORY_ROOT
     / "registry"
     / "m1b"
-    / "offline-executable-tcb-contract-v3.json"
+    / "offline-executable-tcb-contract-v4.json"
 )
 CASES = REPOSITORY_ROOT / "fixtures" / "m1b" / "tcb-admission" / "cases.json"
 VERIFIER = REPOSITORY_ROOT / "tools" / "research" / "m1b_tcb_contract.py"
@@ -41,13 +41,13 @@ IMPLEMENTATION_GENERATION = 2
 PROTOCOL_GENERATION = 108
 MANIFEST_SCHEMA = "m1b-executable-implementation-manifest-v1"
 MANIFEST_DOMAIN = b"stellaris-m1b-executable-manifest-v1"
-CONTRACT_SCHEMA = "m1b-offline-executable-tcb-contract-v3"
-CONTRACT_VERSION = "m1b-offline-executable-tcb-admission-v3"
-CONTRACT_GENERATION = 3
-CONTRACT_DOMAIN = b"stellaris-m1b-offline-executable-tcb-contract-v3"
-EXECUTION_ENVELOPE_SCHEMA = "m1b-execution-envelope-v3"
-EXECUTION_ENVELOPE_GENERATION = 3
-EXECUTION_ENVELOPE_DOMAIN = b"stellaris-m1b-execution-envelope-v3"
+CONTRACT_SCHEMA = "m1b-offline-executable-tcb-contract-v4"
+CONTRACT_VERSION = "m1b-offline-executable-tcb-admission-v4"
+CONTRACT_GENERATION = 4
+CONTRACT_DOMAIN = b"stellaris-m1b-offline-executable-tcb-contract-v4"
+EXECUTION_ENVELOPE_SCHEMA = "m1b-execution-envelope-v4"
+EXECUTION_ENVELOPE_GENERATION = 4
+EXECUTION_ENVELOPE_DOMAIN = b"stellaris-m1b-execution-envelope-v4"
 EXECUTION_ENVELOPE_DIGEST_FRAMING = (
     "sha256_domain_nul_u64be_length_canonical_envelope"
 )
@@ -56,24 +56,24 @@ RUNTIME_ACCEPTANCE_GENERATION = 1
 RUNTIME_ACCEPTANCE_DOMAIN = (
     b"stellaris-m1b-runtime-execution-envelope-acceptance-v1"
 )
-EXECUTION_PLAN_SCHEMA = "m1b-execution-plan-v2"
-EXECUTION_PLAN_GENERATION = 2
+EXECUTION_PLAN_SCHEMA = "m1b-execution-plan-v3"
+EXECUTION_PLAN_GENERATION = 3
 
-# Independently recomputed from canonical registry v3 bytes.
-EXPECTED_CONTRACT_BYTES = 8438
+# Independently recomputed from canonical registry v4 bytes.
+EXPECTED_CONTRACT_BYTES = 10264
 EXPECTED_CONTRACT_FILE_SHA256 = (
-    "cf91f64e8fa85dde15e85702199860f62974d86e54163b080a95fe2ac9c7a75d"
+    "fd5e54a8c4b03b6a9c0a62b715ce6d8b2eac070965467bd2de0dbe772808ce6f"
 )
 EXPECTED_CONTRACT_DIGEST = (
-    "c346fdd761ea477a85930c041858e7444a576263f3fb5ca568cc1ab005ef9744"
+    "ad6bce1a5c516753d79ee0d807f5445e9b860a398e661adfb9730d9c4fee9c31"
 )
-EXPECTED_CASE_COUNT = 218
-EXPECTED_CASE_BYTES = 61682
+EXPECTED_CASE_COUNT = 241
+EXPECTED_CASE_BYTES = 73746
 EXPECTED_CASES_SHA256 = (
-    "0f14d9b28ee41095a2373b02409b288c30959013840d7d1c891538266a84eeaa"
+    "b729305612bdf5f3e88d42a90603cf6a10b2100bd31b144c28399a155984d862"
 )
 EXPECTED_VERIFIER_SHA256 = (
-    "0df39292b306afdfd2187ffb554b5ad2714bbe0353ca176f6fe49cf7eb162c10"
+    "242b115d6eb8f7df143eeeccc94c2b7029dc1a7b601d9a29bd436a183e446551"
 )
 REQUIRED_MATRIX_IDS = frozenset(
     """
@@ -192,6 +192,29 @@ REQUIRED_MATRIX_IDS = frozenset(
     entrypoint-transport-zero-byte-count
     entrypoint-transport-extra-field
     runtime-acceptance-stale-after-coherent-transport-change
+    contract-owner-decision-blocker-deleted
+    contract-owner-decision-blocker-renamed
+    contract-provider-eligibility-blocker-deleted
+    contract-provider-eligibility-blocker-renamed
+    contract-required-blocker-order-drift
+    execution-plan-provider-eligibility-blocker-deleted
+    execution-plan-provider-eligibility-blocker-renamed
+    execution-plan-provider-eligibility-blocker-order-drift
+    invocation-cwd-sys-path-exact-reuse
+    invocation-sys-path-exact-duplicate
+    invocation-sys-path-missing-directory-deep
+    imports-two-source-modules-one-path
+    imports-two-extension-modules-one-path
+    imports-source-extension-one-path
+    source-import-native-purpose-conflict
+    extension-import-native-purpose-conflict
+    interpreter-native-purpose-conflict
+    interpreter-source-import-purpose-conflict
+    interpreter-extension-import-purpose-conflict
+    manifest-source-role-native-purpose-conflict
+    provider-role-native-purpose-conflict
+    provider-role-import-purpose-conflict
+    manifest-source-role-incompatible-module-purpose
     """.split()
 )
 
@@ -348,6 +371,7 @@ def _execution_state(manifest, auxiliary_payloads, role_payloads=ROLE_PAYLOADS):
             "blockers": [
                 "INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN",
                 "LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN",
+                "PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN",
                 "ROLE_IMPORT_TRANSPORT_UNPROVEN",
             ],
             "status": "unproven",
@@ -984,7 +1008,7 @@ class IndependentManifestIdentityTests(unittest.TestCase):
             {"manifest_sha256", "sha256", "self_hash"}.isdisjoint(self.manifest)
         )
         self.assertNotIn(
-            "registry/m1b/offline-executable-tcb-contract-v3.json",
+            "registry/m1b/offline-executable-tcb-contract-v4.json",
             {row["path"] for row in self.manifest["files"]},
         )
 
@@ -1025,23 +1049,37 @@ class PhysicalIdentityAliasTests(unittest.TestCase):
             with _root_descriptor(root) as root_fd:
                 index = tcb.AdmittedFileIndex(root_fd)
                 first, added = self._admit_executable(
-                    index, "cache/value.opaque", payload, "manifest_role"
+                    index,
+                    "cache/value.opaque",
+                    payload,
+                    "manifest_role:analysis_engine",
                 )
                 self.assertTrue(added)
                 with mock.patch.object(tcb.os, "open") as injected_open, mock.patch.object(
                     tcb.os, "read"
                 ) as injected_read:
                     second, added = self._admit_executable(
-                        index, "cache/value.opaque", payload, "source_import"
+                        index,
+                        "cache/value.opaque",
+                        payload,
+                        "plan_role_import:analysis_engine:synthetic_analysis_engine",
+                    )
+                    third, added_again = self._admit_executable(
+                        index,
+                        "cache/value.opaque",
+                        payload,
+                        "import:source:synthetic_analysis_engine",
                     )
                     self.assertIs(second, first)
+                    self.assertIs(third, first)
                     self.assertFalse(added)
+                    self.assertFalse(added_again)
                     with self.assertRaises(tcb.TCBContractError) as raised:
                         index.admit_executable(
                             "cache/value.opaque",
                             "f" * 64,
                             len(payload),
-                            purpose="native_dependency",
+                            purpose="native_dependency:libsynthetic.dylib",
                             size_code="EXECUTABLE_FILE_SIZE_LIMIT",
                         )
                 _assert_controlled_error(
@@ -1082,7 +1120,7 @@ class PhysicalIdentityAliasTests(unittest.TestCase):
                                 index,
                                 "right/casealias",
                                 second_payload,
-                                "source_import:synthetic_alias",
+                                "import:source:synthetic_alias",
                             )
                     _assert_controlled_error(
                         self, raised, "PHYSICAL_IDENTITY_ALIAS"
@@ -1253,7 +1291,7 @@ class PhysicalIdentityAliasTests(unittest.TestCase):
                             index,
                             "right/casealias",
                             second_payload,
-                            "source_import",
+                            "import:source:synthetic_alias",
                         )
                 _assert_controlled_error(
                     self, raised, "PHYSICAL_IDENTITY_ALIAS"
@@ -1279,7 +1317,10 @@ class PhysicalIdentityAliasTests(unittest.TestCase):
             ), _root_descriptor(root) as root_fd:
                 index = tcb.AdmittedFileIndex(root_fd)
                 self._admit_executable(
-                    index, "left/CaseAlias", first_payload, "manifest_role"
+                    index,
+                    "left/CaseAlias",
+                    first_payload,
+                    "manifest_role:analysis_engine",
                 )
                 with _injected_close_failure(marker) as (
                     _injected_open,
@@ -1291,7 +1332,7 @@ class PhysicalIdentityAliasTests(unittest.TestCase):
                             index,
                             "right/casealias",
                             second_payload,
-                            "extension_import",
+                            "import:extension:synthetic_alias",
                         )
                 _assert_controlled_error(
                     self, raised, "PHYSICAL_IDENTITY_ALIAS"
@@ -1342,6 +1383,178 @@ class PhysicalIdentityAliasTests(unittest.TestCase):
             self.assertEqual(identities, [])
 
 
+class FilePurposeCompatibilityTests(unittest.TestCase):
+    """Exercise the closed path/digest purpose ledger without reopens."""
+
+    @staticmethod
+    def _admit(index, path, payload, purpose):
+        return index.admit_executable(
+            path,
+            hashlib.sha256(payload).hexdigest(),
+            len(payload),
+            purpose=purpose,
+            size_code="EXECUTABLE_FILE_SIZE_LIMIT",
+        )
+
+    def test_allowed_cached_reuse_profiles_never_reopen_or_reread(self):
+        profiles = {
+            "source-role": (
+                "manifest_role:analysis_engine",
+                "plan_role_import:analysis_engine:synthetic_analysis_engine",
+                "import:source:synthetic_analysis_engine",
+            ),
+            "provider-entrypoint": (
+                "manifest_role:provider_request_harness",
+                "plan_entrypoint",
+                "entrypoint_transport",
+            ),
+            "interpreter": (
+                "interpreter",
+                "plan_interpreter",
+                "invocation_argv0",
+                "invocation_os_exec_target",
+                "import:builtin:sys",
+                "import:frozen:importlib._bootstrap",
+            ),
+        }
+        for label, purposes in profiles.items():
+            payload = ("synthetic-" + label).encode("ascii")
+            with self.subTest(profile=label), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root)
+                path = "cache/{}.opaque".format(label)
+                _write_relative(root, path, payload)
+                with _root_descriptor(root) as root_fd:
+                    index = tcb.AdmittedFileIndex(root_fd)
+                    first, added = self._admit(
+                        index, path, payload, purposes[0]
+                    )
+                    self.assertTrue(added)
+                    with mock.patch.object(
+                        tcb.os, "open"
+                    ) as injected_open, mock.patch.object(
+                        tcb.os, "read"
+                    ) as injected_read:
+                        for purpose in purposes[1:]:
+                            reused, added = self._admit(
+                                index, path, payload, purpose
+                            )
+                            self.assertIs(reused, first)
+                            self.assertFalse(added)
+                    injected_open.assert_not_called()
+                    injected_read.assert_not_called()
+                    self.assertEqual(first.purposes, set(purposes))
+
+    def test_conflicting_cached_reuse_matrix_fails_before_open_or_read(self):
+        conflicts = {
+            "two-source-modules": (
+                "import:source:module_one",
+                "import:source:module_two",
+            ),
+            "two-extension-modules": (
+                "import:extension:module_one",
+                "import:extension:module_two",
+            ),
+            "source-extension": (
+                "import:source:module_one",
+                "import:extension:module_one",
+            ),
+            "source-native": (
+                "import:source:module_one",
+                "native_dependency:libsynthetic.dylib",
+            ),
+            "extension-native": (
+                "import:extension:module_one",
+                "native_dependency:libsynthetic.dylib",
+            ),
+            "interpreter-native": (
+                "interpreter",
+                "native_dependency:libsynthetic.dylib",
+            ),
+            "interpreter-source": (
+                "interpreter",
+                "import:source:module_one",
+            ),
+            "interpreter-extension": (
+                "interpreter",
+                "import:extension:module_one",
+            ),
+            "manifest-native": (
+                "manifest_role:analysis_engine",
+                "native_dependency:libsynthetic.dylib",
+            ),
+            "manifest-extension": (
+                "manifest_role:analysis_engine",
+                "import:extension:module_one",
+            ),
+            "provider-source": (
+                "manifest_role:provider_request_harness",
+                "import:source:module_one",
+            ),
+            "role-entrypoint": (
+                "manifest_role:analysis_engine",
+                "entrypoint_transport",
+            ),
+            "wrong-plan-role": (
+                "manifest_role:analysis_engine",
+                "plan_role_import:contract_validator:module_one",
+            ),
+        }
+        for label, purposes in conflicts.items():
+            payload = ("synthetic-conflict-" + label).encode("ascii")
+            with self.subTest(conflict=label), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root)
+                path = "cache/{}.opaque".format(label)
+                _write_relative(root, path, payload)
+                with _root_descriptor(root) as root_fd:
+                    index = tcb.AdmittedFileIndex(root_fd)
+                    first, added = self._admit(
+                        index, path, payload, purposes[0]
+                    )
+                    self.assertTrue(added)
+                    with mock.patch.object(
+                        tcb.os, "open"
+                    ) as injected_open, mock.patch.object(
+                        tcb.os, "read"
+                    ) as injected_read:
+                        with self.assertRaises(tcb.TCBContractError) as raised:
+                            self._admit(index, path, payload, purposes[1])
+                    _assert_controlled_error(
+                        self, raised, "EXECUTION_FILE_PURPOSE_CONFLICT"
+                    )
+                    injected_open.assert_not_called()
+                    injected_read.assert_not_called()
+                    self.assertEqual(first.purposes, {purposes[0]})
+
+    def test_role_module_linkage_conflict_does_not_mutate_cached_ledger(self):
+        payload = b"synthetic-role-module-linkage"
+        purposes = (
+            "manifest_role:analysis_engine",
+            "plan_role_import:analysis_engine:module_one",
+            "import:source:module_two",
+        )
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            path = "cache/role.opaque"
+            _write_relative(root, path, payload)
+            with _root_descriptor(root) as root_fd:
+                index = tcb.AdmittedFileIndex(root_fd)
+                entry, _ = self._admit(index, path, payload, purposes[0])
+                self._admit(index, path, payload, purposes[1])
+                with mock.patch.object(
+                    tcb.os, "open"
+                ) as injected_open, mock.patch.object(
+                    tcb.os, "read"
+                ) as injected_read:
+                    with self.assertRaises(tcb.TCBContractError) as raised:
+                        self._admit(index, path, payload, purposes[2])
+                _assert_controlled_error(
+                    self, raised, "EXECUTION_FILE_PURPOSE_CONFLICT"
+                )
+                injected_open.assert_not_called()
+                injected_read.assert_not_called()
+                self.assertEqual(entry.purposes, set(purposes[:2]))
+
+
 class IndependentContractIdentityTests(unittest.TestCase):
     def test_contract_exact_bytes_and_external_digest_are_independently_recomputed(self):
         contract_bytes = CONTRACT.read_bytes()
@@ -1384,6 +1597,171 @@ class IndependentContractIdentityTests(unittest.TestCase):
         self.assertNotEqual(expected, wrong_domain)
         self.assertNotEqual(expected, wrong_length)
         self.assertNotEqual(expected, _independent_contract_digest(bytes(changed)))
+
+
+class OwnerAndProviderBlockerTests(unittest.TestCase):
+    OWNER_BLOCKER = "EXECUTABLE_TCB_OWNER_DECISION_REQUIRED"
+    PROVIDER_BLOCKER = "PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN"
+
+    @staticmethod
+    def _mutate_required_blockers(blockers, scenario, blocker):
+        blockers = list(blockers)
+        index = blockers.index(blocker)
+        if scenario == "deleted":
+            del blockers[index]
+        elif scenario == "renamed":
+            blockers[index] = blocker + "_RENAMED"
+        elif scenario == "order":
+            other = index + 1 if index + 1 < len(blockers) else index - 1
+            blockers[index], blockers[other] = blockers[other], blockers[index]
+        else:
+            raise AssertionError("unknown blocker mutation")
+        return blockers
+
+    def test_global_owner_and_provider_blockers_are_exact_and_ordered(self):
+        contract = json.loads(CONTRACT.read_text("ascii"))
+        required = contract["status_policy"]["blockers"]
+        self.assertIn(self.OWNER_BLOCKER, required)
+        self.assertIn(self.PROVIDER_BLOCKER, required)
+        for blocker in (self.OWNER_BLOCKER, self.PROVIDER_BLOCKER):
+            for scenario in ("deleted", "renamed", "order"):
+                mutated = copy.deepcopy(contract)
+                mutated["status_policy"]["blockers"] = (
+                    self._mutate_required_blockers(
+                        required, scenario, blocker
+                    )
+                )
+                with self.subTest(
+                    blocker=blocker, scenario=scenario
+                ), self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._validate_contract_bytes(_encode(mutated))
+                _assert_controlled_error(
+                    self, raised, "CONTRACT_IDENTITY_MISMATCH"
+                )
+
+    def test_plan_provider_blocker_cannot_be_deleted_renamed_or_reordered(self):
+        plan = _positive_documents()["envelope"]["admitted_state"][
+            "execution_plan"
+        ]
+        blockers = plan["launcher"]["blockers"]
+        self.assertIn(self.PROVIDER_BLOCKER, blockers)
+        self.assertIs(tcb._validate_execution_plan_shape(plan), plan)
+        for scenario in ("deleted", "renamed", "order"):
+            mutated = copy.deepcopy(plan)
+            mutated["launcher"]["blockers"] = self._mutate_required_blockers(
+                blockers, scenario, self.PROVIDER_BLOCKER
+            )
+            with self.subTest(scenario=scenario), self.assertRaises(
+                tcb.TCBContractError
+            ) as raised:
+                tcb._validate_execution_plan_shape(mutated)
+            _assert_controlled_error(
+                self, raised, "LAUNCHER_POLICY_INVALID"
+            )
+
+    def test_coherent_envelope_and_runtime_rebinding_cannot_bypass_plan_blocker(self):
+        for scenario in ("deleted", "renamed", "order"):
+            documents = _positive_documents()
+            for state_name in ("admitted_state", "observed_state"):
+                launcher = documents["envelope"][state_name][
+                    "execution_plan"
+                ]["launcher"]
+                launcher["blockers"] = self._mutate_required_blockers(
+                    launcher["blockers"], scenario, self.PROVIDER_BLOCKER
+                )
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root).resolve()
+                paths = _materialize_documents(root, documents)
+                result = tcb.verify_paths(
+                    paths["contract"],
+                    paths["manifest"],
+                    paths["acceptance"],
+                    paths["envelope"],
+                    paths["runtime_acceptance"],
+                    str(root),
+                )
+            self.assertEqual(result["status"], "error")
+            self.assertEqual(result["codes"], ["LAUNCHER_POLICY_INVALID"])
+
+
+class ProviderEntrypointEligibilityTests(unittest.TestCase):
+    OWNER_BLOCKER = "EXECUTABLE_TCB_OWNER_DECISION_REQUIRED"
+    PROVIDER_BLOCKER = "PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN"
+
+    @staticmethod
+    def _documents_for_provider_bytes(provider_bytes):
+        role_payloads = dict(ROLE_PAYLOADS)
+        provider_path = next(
+            path
+            for path, (role, _payload) in role_payloads.items()
+            if role == "provider_request_harness"
+        )
+        role_payloads[provider_path] = (
+            "provider_request_harness",
+            provider_bytes,
+        )
+        manifest = _manifest_for_payloads(role_payloads)
+        manifest_bytes = _independent_manifest_bytes(manifest)
+        manifest_sha256 = _independent_manifest_digest(manifest_bytes)
+        envelope = _envelope_for_manifest(
+            manifest,
+            manifest_sha256,
+            AUXILIARY_PAYLOADS,
+            role_payloads,
+        )
+        documents = {
+            "acceptance": _acceptance_for_manifest(manifest_sha256),
+            "contract": json.loads(CONTRACT.read_text("ascii")),
+            "envelope": envelope,
+            "manifest": manifest,
+            "runtime_acceptance": _runtime_acceptance_for_envelope(
+                envelope, manifest_sha256
+            ),
+        }
+        return documents, role_payloads
+
+    def test_invalid_provider_bytes_remain_synthetic_only_with_blocker_preserved(self):
+        payloads = {
+            "invalid-utf8": b"\xff\xfe\xfa",
+            "embedded-nul": b"synthetic\x00provider\n",
+            "syntax-invalid": b"def synthetic_broken(:\n",
+        }
+        for label, provider_bytes in payloads.items():
+            documents, role_payloads = self._documents_for_provider_bytes(
+                provider_bytes
+            )
+            self.assertIn(
+                self.PROVIDER_BLOCKER,
+                documents["contract"]["status_policy"]["blockers"],
+            )
+            self.assertIn(
+                self.OWNER_BLOCKER,
+                documents["contract"]["status_policy"]["blockers"],
+            )
+            for state_name in ("admitted_state", "observed_state"):
+                self.assertIn(
+                    self.PROVIDER_BLOCKER,
+                    documents["envelope"][state_name]["execution_plan"][
+                        "launcher"
+                    ]["blockers"],
+                )
+            with self.subTest(payload=label), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root).resolve()
+                paths = _materialize_documents(
+                    root,
+                    documents,
+                    payloads={"roles": role_payloads},
+                )
+                result = tcb.verify_paths(
+                    paths["contract"],
+                    paths["manifest"],
+                    paths["acceptance"],
+                    paths["envelope"],
+                    paths["runtime_acceptance"],
+                    str(root),
+                )
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["codes"], ["SYNTHETIC_CONFORMANCE_ONLY"])
 
 
 class IndependentEnvelopeAndRuntimeAcceptanceIdentityTests(unittest.TestCase):
@@ -1470,7 +1848,7 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
             EXPECTED_CASES_SHA256,
         )
         self.assertEqual(
-            self.fixture["fixture_schema"], "m1b-tcb-admission-cases-v4"
+            self.fixture["fixture_schema"], "m1b-tcb-admission-cases-v5"
         )
         self.assertEqual(len(self.fixture["cases"]), EXPECTED_CASE_COUNT)
         ids = [case["id"] for case in self.fixture["cases"]]
@@ -1938,8 +2316,8 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
             self.base_documents["envelope"]["admitted_state"]["invocation"]
         )
         invocation["sys_path"] = [
-            {"base": "repository_root", "path": "synthetic/a"},
-            {"base": "repository_root", "path": "synthetic/A"},
+            {"base": "repository_root", "path": "synthetic/zeta"},
+            {"base": "repository_root", "path": "synthetic/Alpha"},
         ]
         state = self.base_documents["envelope"]["admitted_state"]
         harness_path, (_role, harness_bytes) = next(
@@ -1947,44 +2325,68 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
             for path, row in ROLE_PAYLOADS.items()
             if row[0] == "provider_request_harness"
         )
-        provider_entry = tcb.AdmittedFile(
-            harness_path,
-            harness_bytes,
-            hashlib.sha256(harness_bytes).hexdigest(),
-            (1, 1),
-            is_record=False,
-            purpose="test_provider_harness",
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            _write_relative(root, INTERPRETER_PATH, AUXILIARY_PAYLOADS[INTERPRETER_PATH])
+            _write_relative(root, harness_path, harness_bytes)
+            with _root_descriptor(root) as root_fd:
+                admitted_files = tcb.AdmittedFileIndex(root_fd)
+                interpreter_entry, _ = admitted_files.admit_executable(
+                    INTERPRETER_PATH,
+                    state["interpreter"]["executable_sha256"],
+                    len(AUXILIARY_PAYLOADS[INTERPRETER_PATH]),
+                    purpose="interpreter",
+                    size_code="EXECUTABLE_FILE_SIZE_LIMIT",
+                )
+                provider_entry, _ = admitted_files.admit_executable(
+                    harness_path,
+                    hashlib.sha256(harness_bytes).hexdigest(),
+                    len(harness_bytes),
+                    purpose="manifest_role:provider_request_harness",
+                    size_code="EXECUTABLE_FILE_SIZE_LIMIT",
+                )
+                manifest_bindings = {
+                    "provider_request_harness": provider_entry
+                }
+                with mock.patch.object(
+                    tcb, "_verify_atomic_entrypoint_snapshot", return_value=None
+                ):
+                    validated, paths = tcb._validate_invocation(
+                        invocation,
+                        state["interpreter"],
+                        interpreter_entry,
+                        state["execution_plan"],
+                        manifest_bindings,
+                        admitted_files,
+                        state["bytecode"],
+                        state["environment"],
+                    )
+                self.assertEqual(
+                    paths, ("synthetic/zeta", "synthetic/Alpha")
+                )
+                self.assertEqual(validated["sys_path"], invocation["sys_path"])
+                self.assertNotEqual(
+                    list(paths),
+                    sorted(paths, key=lambda value: value.encode("ascii")),
+                )
+                invocation["sys_path"] = [
+                    {"base": "repository_root", "path": "synthetic/zeta"},
+                    {"base": "repository_root", "path": "synthetic/zeta"},
+                ]
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._validate_invocation(
+                        invocation,
+                        state["interpreter"],
+                        interpreter_entry,
+                        state["execution_plan"],
+                        manifest_bindings,
+                        admitted_files,
+                        state["bytecode"],
+                        state["environment"],
+                    )
+        _assert_controlled_error(
+            self, raised, "INVOCATION_SYS_PATH_INVALID"
         )
-        manifest_bindings = {
-            "provider_request_harness": provider_entry
-        }
-        validated, paths = tcb._validate_invocation(
-            invocation,
-            state["interpreter"],
-            state["execution_plan"],
-            manifest_bindings,
-            state["bytecode"],
-            state["environment"],
-        )
-        self.assertEqual(paths, ("synthetic/a", "synthetic/A"))
-        self.assertEqual(validated["sys_path"], invocation["sys_path"])
-        self.assertNotEqual(
-            list(paths), sorted(paths, key=lambda value: value.encode("ascii"))
-        )
-        invocation["sys_path"] = [
-            {"base": "repository_root", "path": "synthetic/a"},
-            {"base": "repository_root", "path": "synthetic/a"},
-        ]
-        with self.assertRaises(tcb.TCBContractError) as raised:
-            tcb._validate_invocation(
-                invocation,
-                state["interpreter"],
-                state["execution_plan"],
-                manifest_bindings,
-                state["bytecode"],
-                state["environment"],
-            )
-        _assert_controlled_error(self, raised, "INVOCATION_POLICY_INVALID")
 
     def test_manifest_roles_interpreter_and_imports_reuse_admitted_bytes_without_reopen(self):
         documents = copy.deepcopy(self.base_documents)
@@ -2016,6 +2418,63 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
                 1,
                 relative_path,
             )
+
+    def test_all_path_bearing_import_rows_require_unique_paths_before_reads(self):
+        collisions = (
+            ("source", "source"),
+            ("extension", "extension"),
+            ("source", "extension"),
+        )
+        interpreter_payload = AUXILIARY_PAYLOADS[INTERPRETER_PATH]
+        interpreter_digest = hashlib.sha256(interpreter_payload).hexdigest()
+        for first_kind, second_kind in collisions:
+            with self.subTest(
+                first=first_kind, second=second_kind
+            ), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root)
+                _write_relative(root, INTERPRETER_PATH, interpreter_payload)
+                with _root_descriptor(root) as root_fd:
+                    admitted_files = tcb.AdmittedFileIndex(root_fd)
+                    interpreter_entry, _ = admitted_files.admit_executable(
+                        INTERPRETER_PATH,
+                        interpreter_digest,
+                        len(interpreter_payload),
+                        purpose="interpreter",
+                        size_code="EXECUTABLE_FILE_SIZE_LIMIT",
+                    )
+                    rows = [
+                        {
+                            "kind": first_kind,
+                            "module": "module_one",
+                            "path": "synthetic/imports/shared.opaque",
+                            "sha256": "a" * 64,
+                        },
+                        {
+                            "kind": second_kind,
+                            "module": "module_two",
+                            "path": "synthetic/imports/shared.opaque",
+                            "sha256": "a" * 64,
+                        },
+                    ]
+                    with mock.patch.object(
+                        tcb.os, "open"
+                    ) as injected_open, mock.patch.object(
+                        tcb.os, "read"
+                    ) as injected_read:
+                        with self.assertRaises(tcb.TCBContractError) as raised:
+                            tcb._validate_imports(
+                                rows,
+                                interpreter_digest,
+                                interpreter_entry,
+                                ("synthetic/imports",),
+                                admitted_files,
+                                len(interpreter_payload),
+                            )
+                    _assert_controlled_error(
+                        self, raised, "IMPORT_CLOSURE_INVALID"
+                    )
+                    injected_open.assert_not_called()
+                    injected_read.assert_not_called()
 
     def test_executable_total_exact_boundary_and_one_unique_byte_over_fail_closed(self):
         role_payloads = {}
@@ -2377,6 +2836,114 @@ class AtomicEntrypointTransportBoundaryTests(unittest.TestCase):
             for descriptor in set(descriptors):
                 with self.assertRaises(OSError):
                     os.fstat(descriptor)
+
+    def test_endpoint_state_recheck_rejects_type_access_identity_and_inheritability(self):
+        for scenario in ("type", "access", "identity", "inheritable"):
+            read_descriptor, write_descriptor = os.pipe()
+            extra_descriptors = []
+            temporary_file = None
+            try:
+                expected = tcb._pipe_endpoint_state(
+                    read_descriptor, os.O_RDONLY
+                )
+                if scenario == "type":
+                    temporary_file = tempfile.TemporaryFile()
+                    os.dup2(temporary_file.fileno(), read_descriptor)
+                elif scenario == "access":
+                    extra_read, extra_write = os.pipe()
+                    extra_descriptors.extend((extra_read, extra_write))
+                    os.dup2(extra_write, read_descriptor)
+                elif scenario == "identity":
+                    extra_read, extra_write = os.pipe()
+                    extra_descriptors.extend((extra_read, extra_write))
+                    os.dup2(extra_read, read_descriptor)
+                else:
+                    os.set_inheritable(read_descriptor, True)
+                with self.subTest(scenario=scenario), self.assertRaises(
+                    tcb.TCBContractError
+                ) as raised:
+                    tcb._verify_pipe_endpoint_state(
+                        read_descriptor, expected, os.O_RDONLY
+                    )
+                _assert_controlled_error(
+                    self, raised, "ENTRYPOINT_TRANSPORT_SUBSTITUTED"
+                )
+            finally:
+                if temporary_file is not None:
+                    temporary_file.close()
+                for descriptor in dict.fromkeys(
+                    [read_descriptor, write_descriptor] + extra_descriptors
+                ):
+                    try:
+                        os.close(descriptor)
+                    except OSError:
+                        pass
+
+    def test_mid_write_fd_substitution_is_detected_after_atomic_write(self):
+        payload = b"synthetic-mid-write-substitution"
+        native_pipe = os.pipe
+        native_write = os.write
+        native_close = os.close
+        replacement_descriptors = []
+
+        def substitute_writer(descriptor, data):
+            replacement_read, replacement_write = native_pipe()
+            replacement_descriptors.extend(
+                (replacement_read, replacement_write)
+            )
+            os.dup2(replacement_write, descriptor)
+            return native_write(descriptor, data)
+
+        try:
+            with mock.patch.object(
+                tcb.os, "write", side_effect=substitute_writer
+            ):
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._verify_atomic_entrypoint_snapshot(payload)
+        finally:
+            for descriptor in dict.fromkeys(replacement_descriptors):
+                try:
+                    native_close(descriptor)
+                except OSError:
+                    pass
+        _assert_controlled_error(
+            self, raised, "ENTRYPOINT_TRANSPORT_SUBSTITUTED"
+        )
+
+    def test_mid_read_fd_substitution_is_detected_after_first_read(self):
+        payload = b"synthetic-mid-read-substitution"
+        native_pipe = os.pipe
+        native_write = os.write
+        native_read = os.read
+        native_close = os.close
+        replacement_descriptors = []
+
+        def substitute_reader(descriptor, count):
+            replacement_read, replacement_write = native_pipe()
+            replacement_descriptors.extend(
+                (replacement_read, replacement_write)
+            )
+            native_write(replacement_write, payload)
+            native_close(replacement_write)
+            replacement_descriptors.remove(replacement_write)
+            os.dup2(replacement_read, descriptor)
+            return native_read(descriptor, count)
+
+        try:
+            with mock.patch.object(
+                tcb.os, "read", side_effect=substitute_reader
+            ):
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._verify_atomic_entrypoint_snapshot(payload)
+        finally:
+            for descriptor in dict.fromkeys(replacement_descriptors):
+                try:
+                    native_close(descriptor)
+                except OSError:
+                    pass
+        _assert_controlled_error(
+            self, raised, "ENTRYPOINT_TRANSPORT_SUBSTITUTED"
+        )
 
     def test_duplicate_or_closed_reused_pipe_fd_never_succeeds(self):
         native_pipe = os.pipe
@@ -3117,6 +3684,287 @@ class CwdAdmissionBoundaryTests(unittest.TestCase):
         _assert_controlled_error(self, raised, "INVOCATION_CWD_INVALID")
         self.assertEqual(Counter(opened), Counter(close_attempts))
         self.assertNotIn(marker, str(raised.exception))
+
+
+class DirectoryAdmissionIndexTests(unittest.TestCase):
+    @staticmethod
+    def _forced_identity_patch(*paths):
+        native_identities = {
+            (path.stat().st_dev, path.stat().st_ino) for path in paths
+        }
+        native_physical_identity = tcb._physical_identity
+
+        def injected_identity(stat_result):
+            native = (stat_result.st_dev, stat_result.st_ino)
+            if native in native_identities:
+                return (301, 401)
+            return native_physical_identity(stat_result)
+
+        return mock.patch.object(
+            tcb, "_physical_identity", side_effect=injected_identity
+        )
+
+    @staticmethod
+    def _make_directories(root, *relative_paths):
+        for relative_path in relative_paths:
+            (root / relative_path).mkdir(parents=True, exist_ok=True)
+
+    def test_exact_cwd_sys_path_collision_is_forbidden(self):
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            self._make_directories(root, "synthetic/shared")
+            with _root_descriptor(root) as root_fd:
+                index = tcb.AdmittedDirectoryIndex(root_fd)
+                first = index.admit(
+                    "synthetic/shared", "cwd", "INVOCATION_CWD_INVALID"
+                )
+                with mock.patch.object(
+                    tcb.os, "open"
+                ) as injected_open, self.assertRaises(
+                    tcb.TCBContractError
+                ) as raised:
+                    index.admit(
+                        "synthetic/shared",
+                        "sys_path",
+                        "INVOCATION_SYS_PATH_INVALID",
+                    )
+                injected_open.assert_not_called()
+        _assert_controlled_error(
+            self, raised, "INVOCATION_DIRECTORY_PURPOSE_COLLISION"
+        )
+        self.assertEqual(index.by_path, {"synthetic/shared": first})
+        self.assertEqual(index.by_identity, {first.identity: first})
+
+    def test_injected_physical_alias_rejects_sys_sys_and_cwd_sys(self):
+        scenarios = (
+            ("sys-sys", "sys_path", "sys_path"),
+            ("cwd-sys", "cwd", "sys_path"),
+        )
+        for label, first_purpose, second_purpose in scenarios:
+            with self.subTest(alias=label), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root)
+                self._make_directories(
+                    root, "synthetic/first", "synthetic/second"
+                )
+                first_path = root / "synthetic" / "first"
+                second_path = root / "synthetic" / "second"
+                with self._forced_identity_patch(
+                    first_path, second_path
+                ), _root_descriptor(root) as root_fd:
+                    index = tcb.AdmittedDirectoryIndex(root_fd)
+                    first = index.admit(
+                        "synthetic/first",
+                        first_purpose,
+                        "INVOCATION_CWD_INVALID"
+                        if first_purpose == "cwd"
+                        else "INVOCATION_SYS_PATH_INVALID",
+                    )
+                    with self.assertRaises(tcb.TCBContractError) as raised:
+                        index.admit(
+                            "synthetic/second",
+                            second_purpose,
+                            "INVOCATION_SYS_PATH_INVALID",
+                        )
+                _assert_controlled_error(
+                    self, raised, "PHYSICAL_IDENTITY_ALIAS"
+                )
+                self.assertEqual(index.by_path, {"synthetic/first": first})
+                self.assertEqual(index.by_identity, {first.identity: first})
+
+    @unittest.skipUnless(sys.platform == "darwin", "Darwin filesystem smoke")
+    def test_case_insensitive_filesystem_alias_is_rejected_when_supported(self):
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            canonical = root / "synthetic" / "CaseProbe"
+            canonical.mkdir(parents=True)
+            alias = root / "synthetic" / "caseprobe"
+            if not alias.exists() or alias.stat().st_ino != canonical.stat().st_ino:
+                self.skipTest("temporary filesystem is case-sensitive")
+            with _root_descriptor(root) as root_fd:
+                index = tcb.AdmittedDirectoryIndex(root_fd)
+                first = index.admit(
+                    "synthetic/CaseProbe",
+                    "sys_path",
+                    "INVOCATION_SYS_PATH_INVALID",
+                )
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    index.admit(
+                        "synthetic/caseprobe",
+                        "sys_path",
+                        "INVOCATION_SYS_PATH_INVALID",
+                    )
+        _assert_controlled_error(self, raised, "PHYSICAL_IDENTITY_ALIAS")
+        self.assertEqual(index.by_path, {"synthetic/CaseProbe": first})
+
+    def test_sys_path_replacement_and_metadata_drift_fail_before_publish(self):
+        for scenario in ("replacement", "metadata"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root)
+                self._make_directories(root, "synthetic/imports")
+                leaf = root / "synthetic" / "imports"
+                moved = root / "synthetic" / "opened-imports"
+                native_open = os.open
+                native_close = os.close
+                native_fstat = os.fstat
+                leaf_descriptors = []
+                opened = []
+                close_attempts = []
+                mutated = False
+
+                def tracked_open(*args, **kwargs):
+                    descriptor = native_open(*args, **kwargs)
+                    opened.append(descriptor)
+                    if args[0] == "imports":
+                        leaf_descriptors.append(descriptor)
+                    return descriptor
+
+                def mutate_after_initial_leaf_stat(descriptor):
+                    nonlocal mutated
+                    result = native_fstat(descriptor)
+                    if (
+                        leaf_descriptors
+                        and descriptor == leaf_descriptors[0]
+                        and not mutated
+                    ):
+                        mutated = True
+                        if scenario == "replacement":
+                            leaf.rename(moved)
+                            leaf.mkdir()
+                        else:
+                            current = leaf.stat()
+                            os.utime(
+                                leaf,
+                                ns=(
+                                    current.st_atime_ns,
+                                    current.st_mtime_ns + 1_000_000,
+                                ),
+                            )
+                    return result
+
+                def tracked_close(descriptor):
+                    close_attempts.append(descriptor)
+                    native_close(descriptor)
+
+                with _root_descriptor(root) as root_fd:
+                    index = tcb.AdmittedDirectoryIndex(root_fd)
+                    with mock.patch.object(
+                        tcb.os, "open", side_effect=tracked_open
+                    ), mock.patch.object(
+                        tcb.os, "fstat", side_effect=mutate_after_initial_leaf_stat
+                    ), mock.patch.object(
+                        tcb.os, "close", side_effect=tracked_close
+                    ):
+                        with self.assertRaises(tcb.TCBContractError) as raised:
+                            index.admit(
+                                "synthetic/imports",
+                                "sys_path",
+                                "INVOCATION_SYS_PATH_INVALID",
+                            )
+                _assert_controlled_error(
+                    self, raised, "INVOCATION_SYS_PATH_INVALID"
+                )
+                self.assertTrue(mutated)
+                self.assertEqual(Counter(opened), Counter(close_attempts))
+                self.assertEqual(index.by_path, {})
+                self.assertEqual(index.by_identity, {})
+
+    def test_sys_path_fd_and_entry_stat_failures_are_controlled(self):
+        for scenario in ("fstat", "entry-stat"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root)
+                self._make_directories(root, "synthetic/imports")
+                native_open = os.open
+                native_close = os.close
+                native_fstat = os.fstat
+                native_stat = os.stat
+                leaf_descriptors = []
+                opened = []
+                close_attempts = []
+
+                def tracked_open(*args, **kwargs):
+                    descriptor = native_open(*args, **kwargs)
+                    opened.append(descriptor)
+                    if args[0] == "imports":
+                        leaf_descriptors.append(descriptor)
+                    return descriptor
+
+                def injected_fstat(descriptor):
+                    if (
+                        scenario == "fstat"
+                        and leaf_descriptors
+                        and descriptor == leaf_descriptors[0]
+                    ):
+                        raise OSError("SYNTHETIC_SYS_PATH_FSTAT_FAILURE")
+                    return native_fstat(descriptor)
+
+                def injected_stat(*args, **kwargs):
+                    if scenario == "entry-stat" and args[0] == "imports":
+                        raise OSError("SYNTHETIC_SYS_PATH_STAT_FAILURE")
+                    return native_stat(*args, **kwargs)
+
+                def tracked_close(descriptor):
+                    close_attempts.append(descriptor)
+                    native_close(descriptor)
+
+                with _root_descriptor(root) as root_fd:
+                    index = tcb.AdmittedDirectoryIndex(root_fd)
+                    with mock.patch.object(
+                        tcb.os, "open", side_effect=tracked_open
+                    ), mock.patch.object(
+                        tcb.os, "fstat", side_effect=injected_fstat
+                    ), mock.patch.object(
+                        tcb.os, "stat", side_effect=injected_stat
+                    ), mock.patch.object(
+                        tcb.os, "close", side_effect=tracked_close
+                    ):
+                        with self.assertRaises(tcb.TCBContractError) as raised:
+                            index.admit(
+                                "synthetic/imports",
+                                "sys_path",
+                                "INVOCATION_SYS_PATH_INVALID",
+                            )
+                _assert_controlled_error(
+                    self, raised, "INVOCATION_SYS_PATH_INVALID"
+                )
+                self.assertEqual(Counter(opened), Counter(close_attempts))
+                self.assertEqual(index.by_path, {})
+                self.assertEqual(index.by_identity, {})
+
+    def test_sys_path_close_failure_blocks_identity_publication(self):
+        marker = "SYNTHETIC_SYS_PATH_CLOSE_FAILURE_MUST_NOT_ESCAPE"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            self._make_directories(root, "synthetic/imports")
+            with _root_descriptor(root) as root_fd:
+                index = tcb.AdmittedDirectoryIndex(root_fd)
+                with _injected_close_failure(marker) as (
+                    _injected_open,
+                    injected_close,
+                    opened,
+                ):
+                    with self.assertRaises(tcb.TCBContractError) as raised:
+                        index.admit(
+                            "synthetic/imports",
+                            "sys_path",
+                            "INVOCATION_SYS_PATH_INVALID",
+                        )
+                _assert_controlled_error(
+                    self, raised, "INVOCATION_SYS_PATH_INVALID"
+                )
+                self.assertNotIn(marker, str(raised.exception))
+                self.assertEqual(injected_close.call_count, len(opened))
+                self.assertEqual(index.by_path, {})
+                self.assertEqual(index.by_identity, {})
+
+                admitted = index.admit(
+                    "synthetic/imports",
+                    "sys_path",
+                    "INVOCATION_SYS_PATH_INVALID",
+                )
+                self.assertEqual(index.by_path, {admitted.path: admitted})
+                self.assertEqual(
+                    index.by_identity, {admitted.identity: admitted}
+                )
 
 
 class StaticOfflineSurfaceTests(unittest.TestCase):

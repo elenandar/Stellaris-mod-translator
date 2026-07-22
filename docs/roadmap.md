@@ -7,7 +7,7 @@ Roadmap показывает порядок решений, а не даты. П
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
-| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6 и stable-read PR #7 merged; `OWNER_FREEZE: ACCEPTED`; `STABLE_READ_HARDENING: ACCEPTED`; `M1B-1A0 CONTRACT: READY_FOR_REVIEW`; executable TCB admission не выдан; `M1B: NOT_EVALUATED`; benchmark не запускался |
+| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6 и stable-read PR #7 merged; `OWNER_FREEZE: ACCEPTED`; `STABLE_READ_HARDENING: ACCEPTED`; `M1B-1A0 CONTRACT: READY_FOR_REVIEW`; `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED` и `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN` сохранены; executable TCB admission не выдан; `M1B: NOT_EVALUATED`; benchmark не запускался |
 | M2 — Safety kernel & technical CLI | lossless CST, typed atoms, controlled render, containment | M1A, M1B | одновременно получены `GO` и `QUALITY_FEASIBLE`; taxonomy/holdout проходят technical gates | **FORBIDDEN**: M1A is `BLOCKED`; M1B is `NOT_EVALUATED` |
 | M3 — Incremental engine & publishing | SQLite, identity, jobs, backup, versioned artifact и rollback | M2 | unchanged = zero work; crash/update/conflict/restore безопасны | not started |
 | M4 — Local quality engine | context, glossary, memory, Ollama, review/repair и editorial states | M1B, M3 | quality thresholds и human-review policy соблюдены | not started |
@@ -37,33 +37,47 @@ snapshot, bundle identities, acceptance scope или authorization booleans.
 
 [Offline executable/TCB contract](specs/m1b-offline-executable-tcb-admission-contract.md)
 и [review record](decisions/M1B-1A0-contract-review.md) задают отдельные
-contract v3/version v3/generation 3, manifest v1 verifier, execution envelope
-v3 и runtime acceptance v1 для будущего exact executable/runtime admission.
-External contract digest —
-`c346fdd761ea477a85930c041858e7444a576263f3fb5ca568cc1ab005ef9744`.
+contract v4/version v4/generation 4, manifest v1 verifier, execution envelope
+v4, execution plan v3/generation 3 и runtime acceptance v1 для будущего exact
+executable/runtime admission. Final v4 identities и validation evidence
+зафиксированы в review record после post-remediation revalidation.
 
-Generation 3 использует `m1b-execution-envelope-v3`, closed
-`m1b-execution-plan-v2` и отдельный
+Generation 4 использует `m1b-execution-envelope-v4`, closed
+`m1b-execution-plan-v3` и отдельный
 `m1b-runtime-execution-envelope-acceptance-v1`. Typed repository locators
 отделены от OS exec target, `argv[0]`, cwd и `sys_path`; exact argv принимает
 provider harness только как cached admitted bytes через `/dev/fd/3` и bounded
-atomic pipe preload. Ordered role imports покрывают остальные три manifest
-roles, а global lexical/physical identity index запрещает case aliases и
-pathname reopen на всех record/executable surfaces.
+atomic pipe preload с pre/post FIFO/access/inheritability/physical-identity
+checks и controlled substitution rejection. Ordered role imports покрывают
+остальные три manifest roles. Closed default-deny file-purpose matrix разрешает
+только точные role/plan/source, provider/entrypoint/transport и
+interpreter/invocation/builtin-frozen связи; standalone source/extension/native
+reuse запрещён. Отдельные lexical/physical directory indices открывают cwd и
+каждый sys_path descriptor-rooted stable nofollow и запрещают exact/physical
+cwd/sys reuse; directory snapshot не доказывает import transport.
 Provider harness entrypoint дополнительно требует raw relative path, первый
 ASCII byte которого не `-`; coherent option-like paths (`-c`, `-m`, `-`, `--`,
 `-E`) не могут обойти script argv grammar.
 Caller-supplied runtime record остаётся только linkage evidence: external
 owner-controlled decision — отдельный trust root. Interpreter path exec,
-launcher opened-byte handoff и role-import transport остаются explicit
-blockers, поэтому operational admission не выдан.
+launcher opened-byte handoff, exact admitted-CPython provider source eligibility
+и role-import transport остаются explicit blockers. Host `ast`/`compile` не
+доказывают source eligibility, а synthetic invalid bytes могут подтвердить
+только structural conformance при сохранённом blocker. Caller-supplied
+`owner_accepted` означает только shape/linkage, не operational owner decision.
 
 Это contract-only state: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`,
 `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`,
+`EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`,
+`PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`,
 `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`,
-`M1B-1A PROVIDER EXECUTION: NOT_STARTED`. Следующий отдельный gate после review
-и merge — реальные four-role surfaces плюс external implementation/runtime
-admission; model/provider action ещё запрещён. States остаются
+`M1B-1A PROVIDER EXECUTION: NOT_STARTED`. После review и merge следующий
+отдельный gate — `M1B-1A1`: только proposed offline four-role candidate и
+manifest/envelope/launcher/import/source-eligibility evidence, без operational
+`owner_accepted`, admission или provider execution. `M1B-1A2` — отдельное
+owner-controlled решение над уже известными exact identities; создание bytes и
+их acceptance нельзя объединять. Даже M1B-1A2 не разрешает provider/model
+action. States остаются
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
 
 ## Точки решения
