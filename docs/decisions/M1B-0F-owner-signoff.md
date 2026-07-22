@@ -2,8 +2,11 @@
 
 - Milestone: `M1B-0F — external owner-freeze admission contract`
 - Decision state: `owner_accepted`
-- Review state: `OWNER_FREEZE: READY_FOR_REVIEW`
-- Operational effect: только после review и merge этого PR в `main`
+- Review state: `OWNER_FREEZE: ACCEPTED`
+- Merge provenance: [PR #6](https://github.com/elenandar/Stellaris-mod-translator/pull/6) head `a73555f679b057a07d31a094a38d61b2803e478c`, merged в `main` как `9f854da7501dec6ec9afc5e4bf71dfaa1ea9ecbc`
+- Post-merge hardening state: `STABLE_READ_HARDENING: READY_FOR_REVIEW`
+- Operational effect: exact accepted declarative scope действует с merge PR #6
+- Next stage: `M1B-1A0: NOT_STARTED` до review и merge M1B-0F-H1
 - M1B verdict: `M1B: NOT_EVALUATED`
 - Dependent gates: `M1A: BLOCKED`; `M2: FORBIDDEN`
 
@@ -35,8 +38,8 @@ df84871be332ee52c315d0c0cc1a7a0046251352a2a0131382b5cb994cffcb58
 
 Snapshot не содержит self-hash; digest хранится в отдельном owner decision
 record. Git SHA и fixture SHA являются provenance/evidence, но не executable
-или protocol trust identity. Operational admission этого freeze начинает
-действовать только после review и merge records в `main`.
+или protocol trust identity. Operational admission exact freeze действует с
+merge PR #6 в `main`; post-merge hardening не изменяет identity или scope.
 
 ## Exact scope
 
@@ -50,8 +53,10 @@ record. Git SHA и fixture SHA являются provenance/evidence, но не e
   real candidate profile;
 - product CLI, M2, translation, activation или publish.
 
-Следующий возможный этап после merge — отдельное задание
-`M1B-1A local synthetic provider preflight`; оно не начато этим решением.
+Accepted machine record сохраняет exact next-stage value
+`m1b_1a_local_synthetic_provider_preflight`. Его первый отдельно gated
+contract-only этап — `M1B-1A0 — Offline executable/TCB admission contract`;
+он остаётся `NOT_STARTED` и может начаться только после merge M1B-0F-H1.
 
 ## Preserved blockers
 
@@ -82,5 +87,5 @@ Benchmark не запускался; model observations, human scores и quality
 - `M1A: BLOCKED`;
 - `M2: FORBIDDEN`.
 
-До merge итог этого PR может быть только `OWNER_FREEZE: READY_FOR_REVIEW` либо
-fail-closed `OWNER_FREEZE: BLOCKED`.
+Post-merge state — `OWNER_FREEZE: ACCEPTED`. M1B-0F-H1 не пересматривает это
+решение: `STABLE_READ_HARDENING: READY_FOR_REVIEW`, `M1B-1A0: NOT_STARTED`.
