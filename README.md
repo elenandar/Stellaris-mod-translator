@@ -6,9 +6,25 @@
 
 ## Статус
 
-Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) слит как [`2b51879`](https://github.com/elenandar/Stellaris-mod-translator/commit/2b51879d8e358cf5412f3a6792f33c71ae79d863); текущий verdict остаётся `M1A: BLOCKED`, а hardening follow-up проходит review. Это evidence-этап, а не начало product CLI.
+Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) слит как [`2b51879`](https://github.com/elenandar/Stellaris-mod-translator/commit/2b51879d8e358cf5412f3a6792f33c71ae79d863), а hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) — как [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240). Текущий verdict остаётся `M1A: BLOCKED`. Это evidence-этап, а не начало product CLI.
 
-После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`, not started). Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас M2, массовый перевод и active publish запрещены.
+После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Сейчас M1B protocol находится under review: `M1B: NOT_EVALUATED`, feasibility verdict отсутствует и benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
+
+Текущая synthetic proposal identity — protocol v7/generation 108 и analysis
+policy v6/generation 108. Она разделяет exact frozen synthetic-scope provenance
+и полный live decision admission: первый capability разрешает только
+diagnostic math с `decision_grade_eligible=false`, второй M1B-0 не выдаёт.
+Protocol v7 и validator policy v7 byte-bind lifetime ownership: registry не
+владеет token, не вытесняет живые registrations и освобождает недостижимые
+tokens вместе с frozen rows без value-to-token back-reference.
+Provider/request/context/implementation/benchmark/coverage/acceptance/aggregate/
+execution gates остаются обязательными для будущего полного admission.
+Same-process Python runtime, imports, globals/closures и analysis code входят в
+TCB; capability предотвращает случайное смешение raw rows, но не является
+security boundary против reflection или monkeypatching внутри TCB. Existing
+reviewer/HGT/no-output invariants сохранены. Synthetic corpus bytes не менялись:
+corpus v3/generation 304 остаётся тем же. Это contract hardening, а не запуск
+M1B-1 и не quality verdict.
 
 ## Контракт MVP
 
@@ -65,9 +81,13 @@ Production-реализация ещё не начата. Персональны
 - [Version profile Stellaris 4.4.6](docs/version-profiles/stellaris-4.4.6.md)
 - [Итоговое evidence M1A](docs/evidence/m1a-format-playset-2026-07-17.md)
 - [Hardening revalidation M1A, 18 июля](docs/evidence/m1a-format-playset-revalidation-2026-07-18.md)
+- [Benchmark contract M1B](docs/specs/m1b-benchmark-contract.md)
+- [Политика корпуса M1B](docs/m1b-corpus-policy.md)
+- [Quality rubric M1B](docs/specs/m1b-quality-rubric.md)
+- [Модель угроз M1B](docs/m1b-threat-model.md)
 
 ## Следующий шлюз
 
-Следующий шаг — owner review [hardening revalidation](docs/evidence/m1a-format-playset-revalidation-2026-07-18.md). Исторический report 17 июля и повторная проверка 18 июля честно сохраняют `BLOCKED`: byte/containment evidence собрано, но atomic cross-file coherence, arbitrary same-UID path-race protection и effective load-order/collision policy недостаточны для `GO`. Это не разрешает active experiment либо M2.
+Hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) слит, но исторический report 17 июля и повторная проверка 18 июля честно сохраняют `M1A: BLOCKED`: byte/containment evidence собрано, а atomic cross-file coherence, arbitrary same-UID path-race protection и effective load-order/collision policy недостаточны для `GO`.
 
-`M1B` остаётся отдельным допустимым evidence milestone и не меняет M1A verdict. Только позднее принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешат safety kernel. `BLOCKED` или `QUALITY_NOT_FEASIBLE` останавливают соответствующую ветвь даже при принятом отрицательном отчёте.
+Следующий разрешённый шаг — только owner review M1B protocol. `M1B: NOT_EVALUATED`: review контракта не является feasibility verdict и не разрешает benchmark, active experiment или product implementation. Только позднее принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешат safety kernel; до этого `M2: FORBIDDEN`.

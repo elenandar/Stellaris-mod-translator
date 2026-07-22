@@ -117,3 +117,50 @@ Run the synthetic-only suite with:
 ```sh
 python3 -m unittest discover -s tools/research/tests -v
 ```
+
+## M1B synthetic protocol gate
+
+The M1B-0 [benchmark contract](../../docs/specs/m1b-benchmark-contract.md),
+[corpus policy](../../docs/m1b-corpus-policy.md),
+[quality rubric](../../docs/specs/m1b-quality-rubric.md), and
+[threat model](../../docs/m1b-threat-model.md) define the protocol currently
+under review. The offline [synthetic fixture contract](../../fixtures/m1b/README.md)
+is checked by [`m1b_contract.py`](m1b_contract.py) without Ollama, network, corpus,
+game, Workshop, launcher, or active-path access.
+
+Current public proposal identity is protocol v7/generation 108, analysis policy
+v6/generation 108, document,
+fixture and output schema v4, synthetic corpus v3/generation 304, and 17
+components. The table has 173 cases: 3 controlled successes and 170 exact
+controlled failures. Bundle SHA-256 is
+`50f51b3cf9be042ebc310d1a6c57791dd31a43362778798455d7ea9678c31e06`;
+the public synthetic corpus SHA-256 is
+`ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`.
+The fixture file SHA-256 is
+`ec2f958ce90fd5e97036b3658ae0a5a3f946aebe75c83b02b6998c3639133cb2`.
+Synthetic-scope agreement, D1-D5/statistical, and CFA helpers bind exact frozen
+analysis-source rows but remain explicitly diagnostic with
+`decision_grade_eligible=false`. Production holdout decision entrypoints accept
+neither caller rows nor that scope token; they require separate full admission
+after complete report/run/owner/executable-TCB validation, which M1B-0 cannot
+issue. The token is a same-process misuse guard, not a reflection/monkeypatch
+security boundary.
+
+Protocol v7 and validator policy v7 bind its lifetime semantics: the registry
+does not own or evict a live token, has no value-to-token back-reference, and
+releases unreachable registrations and frozen rows.
+
+Finding reviews preserve reviewer-specific closed outcomes and distinct initial
+human identities. HGT adjudication requires two existing conflicting same-scope
+initials, one distinct third human, and full consumption. No-output/no-attempt
+rows reject all content findings and human/model reviews; no-attempt has zero
+technical success and every no-output row is a conservative synthetic quality/gate
+failure.
+These identities bind public declarative definitions and synthetic corpus
+bytes. They do not prove provider context/tokenizer binding or exact executable
+implementation identity; `CONTEXT_LIMIT_BINDING_UNPROVEN` and
+`EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN` remain independent live
+pre-request blockers.
+
+Passing this synthetic conformance gate does not evaluate model quality:
+`M1B: NOT_EVALUATED`, `M1A: BLOCKED`, and `M2: FORBIDDEN` remain in force.

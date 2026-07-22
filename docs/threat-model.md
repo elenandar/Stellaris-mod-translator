@@ -1,6 +1,6 @@
 # Модель угроз M1A
 
-- Статус: `M1A — BLOCKED`; evidence PR #3 merged, hardening revalidation in review
+- Статус: `M1A — BLOCKED`; evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) merged; hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240)
 - Исходный снимок: 17 июля 2026 года; hardening revalidation: 18 июля 2026 года
 - Область: read-only discovery, immutable in-memory generation, research round trip и disposable candidate build
 - Вне области: перевод, Ollama, production parser/CLI, activation, publish в игру и Steam Workshop
