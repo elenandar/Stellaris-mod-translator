@@ -26,10 +26,10 @@ README = REPOSITORY_ROOT / "fixtures" / "m1b" / "README.md"
 EXPECTED_FIXTURE_CASES = 173
 EXPECTED_POSITIVE_CASES = 3
 EXPECTED_FIXTURE_SHA256 = (
-    "22c43f48f139b906b922da5ab5ceeb6f1378cf7ad36a4f019dae61fc0c361828"
+    "ec2f958ce90fd5e97036b3658ae0a5a3f946aebe75c83b02b6998c3639133cb2"
 )
 EXPECTED_BUNDLE_HASH = (
-    "7f1e417a843a0f3d0658e1e2abeb794c5c21a1dcb6f6482cd5f561c986ae00a9"
+    "50f51b3cf9be042ebc310d1a6c57791dd31a43362778798455d7ea9678c31e06"
 )
 
 
@@ -251,7 +251,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
                 for component in bundle["components"]
             },
             {
-                "benchmark_contract": ("m1b-benchmark-contract-v6", 107),
+                "benchmark_contract": ("m1b-benchmark-contract-v7", 108),
                 "output_schema": ("m1b-synthetic-output-v4", 105),
                 "prompt_policy": ("m1b-synthetic-prompt-policy-v1", 101),
                 "candidate_profile.glm_4_7_flash": (
@@ -267,7 +267,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
                     202,
                 ),
                 "corpus_policy": ("m1b-corpus-policy-v3", 105),
-                "split_policy": ("m1b-split-policy-v5", 107),
+                "split_policy": ("m1b-split-policy-v5", 108),
                 "generation_policy": ("m1b-generation-policy-v2", 105),
                 "context_limit_policy": ("m1b-context-limit-policy-v2", 105),
                 "randomization_blinding_policy": (
@@ -280,11 +280,11 @@ class SyntheticContractCaseTests(unittest.TestCase):
                     "m1b-retention-leakage-policy-v1",
                     101,
                 ),
-                "validator_policy": ("m1b-validator-policy-v6", 107),
-                "analysis_policy": ("m1b-analysis-policy-v6", 107),
+                "validator_policy": ("m1b-validator-policy-v7", 108),
+                "analysis_policy": ("m1b-analysis-policy-v6", 108),
                 "implementation_identity_policy": (
                     "m1b-implementation-identity-policy-v2",
-                    107,
+                    108,
                 ),
             },
         )
@@ -297,10 +297,10 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(
             analysis_component["generation"], contract.PROTOCOL_GENERATION
         )
-        self.assertEqual(self.base["protocol"]["generation"], 107)
+        self.assertEqual(self.base["protocol"]["generation"], 108)
         self.assertEqual(
             self.base["protocol"]["protocol_version"],
-            "m1b-benchmark-contract-v6",
+            "m1b-benchmark-contract-v7",
         )
 
     def test_component_hash_has_a_fixed_public_vector(self) -> None:
@@ -312,7 +312,7 @@ class SyntheticContractCaseTests(unittest.TestCase):
         )
         self.assertEqual(
             actual,
-            "e180ba237311a7d7de3aa4c7c97881f09507651910a8469df7bcef0cd04cd7f0",
+            "4d5a1d1b343cbed19bac4f9d6e58101975a62c2e30d9f6eaa2730b37e8a59532",
         )
         self.assertEqual(actual, component["sha256"])
 
@@ -354,6 +354,16 @@ class SyntheticContractCaseTests(unittest.TestCase):
             benchmark["full_decision_admission"],
             "unavailable_in_document_schema_v4",
         )
+        self.assertEqual(
+            benchmark["synthetic_scope_lifetime"],
+            {
+                "frozen_rows_lifetime": "while_exact_issued_token_has_external_strong_reference",
+                "issuer_registry_key_ownership": "non_owning",
+                "live_token_eviction": "forbidden",
+                "registry_value_token_back_reference": "forbidden",
+                "unreachable_scope_cleanup": "token_registration_and_frozen_rows_collectible",
+            },
+        )
         output = definitions["output_schema"]
         self.assertEqual(output["result_fields"], list(contract._RESULT_FIELDS))
         self.assertEqual(
@@ -384,6 +394,13 @@ class SyntheticContractCaseTests(unittest.TestCase):
             corpus["synthetic_corpus_sha256"],
             contract.SYNTHETIC_CORPUS_SHA256,
         )
+        self.assertEqual(
+            contract.SYNTHETIC_CORPUS_SHA256,
+            "ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250",
+        )
+        self.assertEqual(contract.CORPUS_VERSION, "m1b-synthetic-corpus-v3")
+        self.assertEqual(contract.CORPUS_GENERATION, 304)
+        self.assertEqual(len(contract._EXPECTED_SYNTHETIC_CORPUS_BYTES), 1869)
         self.assertEqual(corpus["decision_grade_split"], "holdout")
         split = definitions["split_policy"]
         self.assertEqual(
@@ -450,6 +467,18 @@ class SyntheticContractCaseTests(unittest.TestCase):
         self.assertEqual(
             validator["synthetic_scope_issuance"],
             "analysis_source_subset_revalidated_under_unmodified_same_process_tcb",
+        )
+        self.assertEqual(
+            validator["synthetic_scope_registry"],
+            {
+                "internal_materialization_token": "released_before_post_materialization_errors_escape",
+                "key_strength": "weak_non_owning",
+                "live_registration": "retained_while_external_strong_reference_exists",
+                "live_token_eviction": "forbidden",
+                "registered_token": "exact_type_and_issuer_membership_required",
+                "unreachable_release": "registration_and_frozen_rows_collectible",
+                "value_to_token_back_reference": "forbidden",
+            },
         )
         self.assertEqual(validator["json_integer_min"], contract.MIN_JSON_INTEGER)
         self.assertEqual(validator["json_integer_max"], contract.MAX_JSON_INTEGER)

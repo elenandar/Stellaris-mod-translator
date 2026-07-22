@@ -3,7 +3,7 @@
 - Статус: `M1B: NOT_EVALUATED`; proposal для owner review, human scoring и
   holdout ещё не выполнялись
 - Версия proposal: `m1b-quality-rubric-v6`; analysis policy
-  `m1b-analysis-policy-v6`; protocol generation `107`; quality-rubric definition
+  `m1b-analysis-policy-v6`; protocol generation `108`; quality-rubric definition
   generation `106`; definition state: `proposed`
 - Quality verdict: отсутствует
 - Gate state: `M1A: BLOCKED`; `M2: FORBIDDEN`

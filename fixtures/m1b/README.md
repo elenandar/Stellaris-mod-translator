@@ -29,20 +29,21 @@ D2–D5 and editorial state remain `not_evaluated`.
 The fixture uses:
 
 - fixture schema `m1b-synthetic-contract-cases-v4`;
-- protocol `m1b-benchmark-contract-v6`, generation `107`;
+- protocol `m1b-benchmark-contract-v7`, generation `108`;
 - output schema `m1b-synthetic-output-v4`;
 - corpus `m1b-synthetic-corpus-v3`, generation `304`;
 - quality rubric `m1b-quality-rubric-v6`, generation `106`;
-- analysis policy `m1b-analysis-policy-v6`, generation `107`;
+- validator policy `m1b-validator-policy-v7`, generation `108`;
+- analysis policy `m1b-analysis-policy-v6`, generation `108`;
 - `17` byte-exact public proposal components;
 - bundle SHA-256
-  `7f1e417a843a0f3d0658e1e2abeb794c5c21a1dcb6f6482cd5f561c986ae00a9`;
+  `50f51b3cf9be042ebc310d1a6c57791dd31a43362778798455d7ea9678c31e06`;
 - public synthetic corpus SHA-256
   `ec5a1201f790a5c1645a29002b37848d7e98aa79988da0eb186b6cb2147bc250`;
 - fixed first-component vector
-  `e180ba237311a7d7de3aa4c7c97881f09507651910a8469df7bcef0cd04cd7f0`;
+  `4d5a1d1b343cbed19bac4f9d6e58101975a62c2e30d9f6eaa2730b37e8a59532`;
 - fixture file SHA-256
-  `22c43f48f139b906b922da5ab5ceeb6f1378cf7ad36a4f019dae61fc0c361828`.
+  `ec2f958ce90fd5e97036b3658ae0a5a3f946aebe75c83b02b6998c3639133cb2`.
 
 All definitions remain `proposed`; none is `owner_accepted`. The bundle binds
 declarative definitions and the public synthetic corpus, not the exact current
@@ -106,10 +107,16 @@ minimum. The synthetic-scope issuer revalidates the exact analysis-source subset
 (proposal bundle/protocol, canonical corpus, candidates, results, findings and
 HGT) before materializing complete per-scope rows. Its nominal token prevents
 accidental caller-row use under an unmodified same-process TCB, but is not a
-security boundary against reflection/monkeypatching inside that TCB. Agreement
-rows retain linked frozen initial records and the source sample split. Tuning and
-holdout scope math remain explicitly marked diagnostics and cannot satisfy a
-production gate without separate full admission.
+security boundary against reflection/monkeypatching inside that TCB.
+
+The canonical protocol and validator definitions require a non-owning weak-key
+registry: externally held live tokens remain registered and are never evicted;
+after the last strong reference disappears, the token, registration and frozen
+rows become collectible without a value-to-token back-reference.
+
+Agreement rows retain linked frozen initial records and the source sample split.
+Tuning and holdout scope math remain explicitly marked diagnostics and cannot
+satisfy a production gate without separate full admission.
 
 For official/private data, exact values, positions, row IDs, content-derived
 hashes, and reviewer/source mappings must remain local. Only controlled codes

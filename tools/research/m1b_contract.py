@@ -31,12 +31,12 @@ MATERIALIZATION_PREENCODE_RESERVE_BYTES = MAX_INPUT_BYTES
 MAX_JSON_INTEGER = (1 << 63) - 1
 MIN_JSON_INTEGER = -(1 << 63)
 
-PROTOCOL_VERSION = "m1b-benchmark-contract-v6"
+PROTOCOL_VERSION = "m1b-benchmark-contract-v7"
 OUTPUT_SCHEMA_VERSION = "m1b-synthetic-output-v4"
 PROMPT_VERSION = "m1b-synthetic-prompt-policy-v1"
 PROFILE_VERSION = "m1b-primary-common-profile-v1"
 CORPUS_VERSION = "m1b-synthetic-corpus-v3"
-PROTOCOL_GENERATION = 107
+PROTOCOL_GENERATION = 108
 FROZEN_COMPONENT_GENERATION = 105
 PROFILE_GENERATION = 202
 CORPUS_GENERATION = 304
@@ -630,6 +630,13 @@ _TRUSTED_COMPONENT_ROWS = (
                 },
                 "full_decision_admission": "unavailable_in_document_schema_v4",
                 "same_process_capability_boundary": "misuse_guard_not_hostile_code_security_boundary",
+                "synthetic_scope_lifetime": {
+                    "frozen_rows_lifetime": "while_exact_issued_token_has_external_strong_reference",
+                    "issuer_registry_key_ownership": "non_owning",
+                    "live_token_eviction": "forbidden",
+                    "registry_value_token_back_reference": "forbidden",
+                    "unreachable_scope_cleanup": "token_registration_and_frozen_rows_collectible",
+                },
             }
         ),
     ),
@@ -863,7 +870,7 @@ _TRUSTED_COMPONENT_ROWS = (
     ),
     (
         "validator_policy",
-        "m1b-validator-policy-v6",
+        "m1b-validator-policy-v7",
         PROTOCOL_GENERATION,
         _canonical_public_json(
             {
@@ -897,6 +904,15 @@ _TRUSTED_COMPONENT_ROWS = (
                 "same_process_capability": "nominal_misuse_guard_under_unmodified_tcb_not_reflection_or_monkeypatch_security",
                 "synthetic_scope_issuance": "analysis_source_subset_revalidated_under_unmodified_same_process_tcb",
                 "synthetic_scope_materialization": "after_frozen_corpus_validated_results_findings_and_hgt_diagnostic_only",
+                "synthetic_scope_registry": {
+                    "internal_materialization_token": "released_before_post_materialization_errors_escape",
+                    "key_strength": "weak_non_owning",
+                    "live_registration": "retained_while_external_strong_reference_exists",
+                    "live_token_eviction": "forbidden",
+                    "registered_token": "exact_type_and_issuer_membership_required",
+                    "unreachable_release": "registration_and_frozen_rows_collectible",
+                    "value_to_token_back_reference": "forbidden",
+                },
             }
         ),
     ),

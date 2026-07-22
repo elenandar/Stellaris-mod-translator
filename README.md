@@ -10,10 +10,13 @@ Production-реализация ещё не начата. Персональны
 
 После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Сейчас M1B protocol находится under review: `M1B: NOT_EVALUATED`, feasibility verdict отсутствует и benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
 
-Текущая synthetic proposal identity — protocol v6/generation 107 и analysis
-policy v6/generation 107. Она разделяет exact frozen synthetic-scope provenance
+Текущая synthetic proposal identity — protocol v7/generation 108 и analysis
+policy v6/generation 108. Она разделяет exact frozen synthetic-scope provenance
 и полный live decision admission: первый capability разрешает только
 diagnostic math с `decision_grade_eligible=false`, второй M1B-0 не выдаёт.
+Protocol v7 и validator policy v7 byte-bind lifetime ownership: registry не
+владеет token, не вытесняет живые registrations и освобождает недостижимые
+tokens вместе с frozen rows без value-to-token back-reference.
 Provider/request/context/implementation/benchmark/coverage/acceptance/aggregate/
 execution gates остаются обязательными для будущего полного admission.
 Same-process Python runtime, imports, globals/closures и analysis code входят в

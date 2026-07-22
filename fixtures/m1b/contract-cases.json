@@ -6,11 +6,11 @@
       "components": [
         {
           "acceptance_state": "proposed",
-          "definition": "{\"analysis_trust_layers\":{\"full_decision_admission\":\"future_complete_report_owner_accepted_executable_tcb_required\",\"m1b0_synthetic_scope_provenance\":\"exact_frozen_analysis_subset_diagnostic_only\"},\"assignment_tuple\":[\"candidate_id\",\"sample_id\",\"profile_version\",\"profile_generation\",\"experiment_lane\",\"attempt_stage\",\"attempt_index\"],\"benchmark_states\":[[false,\"partial_synthetic_conformance\"],[true,\"complete_benchmark\"]],\"document_schema\":\"m1b-synthetic-contract-v4\",\"full_decision_admission\":\"unavailable_in_document_schema_v4\",\"m1b0_complete_state\":\"always_rejected_PARTIAL_REPORT_CANNOT_BE_COMPLETE\",\"no_attempt_state\":\"not_applicable_not_observed_empty_atoms_all_dimensions_not_evaluated_zero_accounting\",\"partial_primary_human_evidence\":\"forbidden\",\"partial_secondary_exception\":\"self_identifying_output_secondary_unblinded_only\",\"protocol_generation\":107,\"root_fields\":[\"adjudications\",\"aggregate_report\",\"benchmark_state\",\"candidate_profiles\",\"conformance_results\",\"context_limit_binding\",\"corpus\",\"coverage\",\"definition_bundle\",\"findings\",\"human_ground_truth\",\"implementation_identity\",\"protocol\",\"provider_policy\",\"request_boundary\",\"schema_version\"],\"same_process_capability_boundary\":\"misuse_guard_not_hostile_code_security_boundary\"}",
-          "generation": 107,
+          "definition": "{\"analysis_trust_layers\":{\"full_decision_admission\":\"future_complete_report_owner_accepted_executable_tcb_required\",\"m1b0_synthetic_scope_provenance\":\"exact_frozen_analysis_subset_diagnostic_only\"},\"assignment_tuple\":[\"candidate_id\",\"sample_id\",\"profile_version\",\"profile_generation\",\"experiment_lane\",\"attempt_stage\",\"attempt_index\"],\"benchmark_states\":[[false,\"partial_synthetic_conformance\"],[true,\"complete_benchmark\"]],\"document_schema\":\"m1b-synthetic-contract-v4\",\"full_decision_admission\":\"unavailable_in_document_schema_v4\",\"m1b0_complete_state\":\"always_rejected_PARTIAL_REPORT_CANNOT_BE_COMPLETE\",\"no_attempt_state\":\"not_applicable_not_observed_empty_atoms_all_dimensions_not_evaluated_zero_accounting\",\"partial_primary_human_evidence\":\"forbidden\",\"partial_secondary_exception\":\"self_identifying_output_secondary_unblinded_only\",\"protocol_generation\":108,\"root_fields\":[\"adjudications\",\"aggregate_report\",\"benchmark_state\",\"candidate_profiles\",\"conformance_results\",\"context_limit_binding\",\"corpus\",\"coverage\",\"definition_bundle\",\"findings\",\"human_ground_truth\",\"implementation_identity\",\"protocol\",\"provider_policy\",\"request_boundary\",\"schema_version\"],\"same_process_capability_boundary\":\"misuse_guard_not_hostile_code_security_boundary\",\"synthetic_scope_lifetime\":{\"frozen_rows_lifetime\":\"while_exact_issued_token_has_external_strong_reference\",\"issuer_registry_key_ownership\":\"non_owning\",\"live_token_eviction\":\"forbidden\",\"registry_value_token_back_reference\":\"forbidden\",\"unreachable_scope_cleanup\":\"token_registration_and_frozen_rows_collectible\"}}",
+          "generation": 108,
           "kind": "benchmark_contract",
-          "sha256": "e180ba237311a7d7de3aa4c7c97881f09507651910a8469df7bcef0cd04cd7f0",
-          "version": "m1b-benchmark-contract-v6"
+          "sha256": "4d5a1d1b343cbed19bac4f9d6e58101975a62c2e30d9f6eaa2730b37e8a59532",
+          "version": "m1b-benchmark-contract-v7"
         },
         {
           "acceptance_state": "proposed",
@@ -63,7 +63,7 @@
         {
           "acceptance_state": "proposed",
           "definition": "{\"auto_eligible_strata\":[\"mechanics\",\"ui\"],\"caller_split_or_uuid_membership_only\":\"never_trusted\",\"decision_grade_split\":\"holdout\",\"decision_row_binding\":\"full_decision_admission_owned_exact_scope\",\"diagnostic_split\":\"tuning_separate_never_satisfies_holdout_gate\",\"full_decision_admission_required\":true,\"related_variants_same_split\":true,\"risk_classes\":[\"auto_eligible_candidate\",\"critical_risk\",\"mandatory_human\"],\"source_cluster_generation_binding\":\"immutable_one_generation\",\"source_generation_identity\":\"opaque_local_mapping\",\"source_generation_within_stratum_collapse\":\"conservative_one_unit\",\"splits\":[\"holdout\",\"tuning\"],\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"],\"synthetic_scope_binding\":\"validator_materialized_exact_frozen_multiset_diagnostic_only\",\"synthetic_scope_decision_grade_eligible\":false}",
-          "generation": 107,
+          "generation": 108,
           "kind": "split_policy",
           "sha256": "16fe20df047eed035507f62f2887ad39746da218babf12c23d4219b0fd8c3ef6",
           "version": "m1b-split-policy-v5"
@@ -118,16 +118,16 @@
         },
         {
           "acceptance_state": "proposed",
-          "definition": "{\"closed_schema\":true,\"component_framing\":\"m1b-length-framed-sha256-v1\",\"fixture_schema\":\"m1b-synthetic-contract-cases-v4\",\"full_decision_admission\":\"complete_document_owner_and_executable_tcb_admission_required_unavailable_in_m1b0\",\"hgt_rows\":\"every_adjudication_exactly_linked_and_every_record_consumed\",\"json_integer_max\":9223372036854775807,\"json_integer_min\":-9223372036854775808,\"materialization_preencode_reserve_bytes\":4194304,\"materialization_work_accounting\":\"accepted_initial_compact_document_plus_each_accepted_post_patch_compact_document\",\"materialized_final_encoding\":\"reuse_last_budgeted_encoding\",\"max_fixture_patch_count\":256,\"max_input_bytes\":4194304,\"max_input_bytes_boundaries\":[\"fixture_manifest_file\",\"materialized_fixture_document\",\"standalone_document\"],\"max_materialization_work_bytes\":16777216,\"no_attempt_cross_field_state\":\"fail_closed\",\"offline\":true,\"output_fields\":[\"codes\",\"counts\",\"status\"],\"same_process_capability\":\"nominal_misuse_guard_under_unmodified_tcb_not_reflection_or_monkeypatch_security\",\"strict_json\":{\"duplicate_keys\":\"reject\",\"floats\":\"reject\",\"nonfinite\":\"reject\",\"unicode\":\"strict_utf8_scalars\"},\"synthetic_scope_issuance\":\"analysis_source_subset_revalidated_under_unmodified_same_process_tcb\",\"synthetic_scope_materialization\":\"after_frozen_corpus_validated_results_findings_and_hgt_diagnostic_only\"}",
-          "generation": 107,
+          "definition": "{\"closed_schema\":true,\"component_framing\":\"m1b-length-framed-sha256-v1\",\"fixture_schema\":\"m1b-synthetic-contract-cases-v4\",\"full_decision_admission\":\"complete_document_owner_and_executable_tcb_admission_required_unavailable_in_m1b0\",\"hgt_rows\":\"every_adjudication_exactly_linked_and_every_record_consumed\",\"json_integer_max\":9223372036854775807,\"json_integer_min\":-9223372036854775808,\"materialization_preencode_reserve_bytes\":4194304,\"materialization_work_accounting\":\"accepted_initial_compact_document_plus_each_accepted_post_patch_compact_document\",\"materialized_final_encoding\":\"reuse_last_budgeted_encoding\",\"max_fixture_patch_count\":256,\"max_input_bytes\":4194304,\"max_input_bytes_boundaries\":[\"fixture_manifest_file\",\"materialized_fixture_document\",\"standalone_document\"],\"max_materialization_work_bytes\":16777216,\"no_attempt_cross_field_state\":\"fail_closed\",\"offline\":true,\"output_fields\":[\"codes\",\"counts\",\"status\"],\"same_process_capability\":\"nominal_misuse_guard_under_unmodified_tcb_not_reflection_or_monkeypatch_security\",\"strict_json\":{\"duplicate_keys\":\"reject\",\"floats\":\"reject\",\"nonfinite\":\"reject\",\"unicode\":\"strict_utf8_scalars\"},\"synthetic_scope_issuance\":\"analysis_source_subset_revalidated_under_unmodified_same_process_tcb\",\"synthetic_scope_materialization\":\"after_frozen_corpus_validated_results_findings_and_hgt_diagnostic_only\",\"synthetic_scope_registry\":{\"internal_materialization_token\":\"released_before_post_materialization_errors_escape\",\"key_strength\":\"weak_non_owning\",\"live_registration\":\"retained_while_external_strong_reference_exists\",\"live_token_eviction\":\"forbidden\",\"registered_token\":\"exact_type_and_issuer_membership_required\",\"unreachable_release\":\"registration_and_frozen_rows_collectible\",\"value_to_token_back_reference\":\"forbidden\"}}",
+          "generation": 108,
           "kind": "validator_policy",
-          "sha256": "d261d0ee17e884b2be0f449b2a45bbebd8ea1af02848fb7e94f9662643d0c7a3",
-          "version": "m1b-validator-policy-v6"
+          "sha256": "a3f6399c76d49a31eb9cf542c2850185d23e5f4d53b48ebc010f580b38804201",
+          "version": "m1b-validator-policy-v7"
         },
         {
           "acceptance_state": "proposed",
           "definition": "{\"agreement\":{\"adjudicator_effect\":\"final_dimension_or_applicability_only_not_kappa_rating\",\"applicability_disagreement\":\"any_unilateral_source_blocks_agreement_gate_after_linked_adjudication\",\"applicable_source_unit\":\"source_generation_with_at_least_one_ordinal_applicable_pair\",\"both_not_applicable\":\"separate_applicability_agreement_count\",\"candidate_kappa_pooling\":\"forbidden\",\"candidate_profile_result_key\":[\"candidate\",\"profile\",\"split\",\"stratum\",\"dimension\"],\"categories\":[0,1,2,3,4],\"contingency_estimator\":\"uniform_source_then_uniform_applicable_paired_row\",\"contingency_matrix\":\"O_ij=sum_s(D_sij)\",\"decision_grade_admission\":\"full_live_admission_owned_scope\",\"decision_grade_helper\":\"agreement_gate_full_admission_holdout_only\",\"diagnostic_helper\":\"agreement_diagnostic_split_scoped\",\"eligible_row_universe\":\"all_validator_linked_distinct_frozen_initial_pairs_in_scope\",\"exact_arithmetic\":\"rational\",\"formula\":\"(n*sum(q_ij*O_ij)-sum(q_ij*r_i*c_j))/(16*n*n-sum(q_ij*r_i*c_j))\",\"independent_unit_count\":\"source_generations_with_at_least_one_ordinal_applicable_pair\",\"input_fields\":[\"applicability_adjudication\",\"candidate\",\"dimension\",\"first\",\"initial_record_ids\",\"profile\",\"result_id\",\"reviewer_pair\",\"second\",\"source_generation_id\",\"split\",\"stratum\"],\"logical_row_key\":[\"result_id\",\"dimension\"],\"minimum_n\":46,\"mixed_bilateral_not_applicable\":\"exclude_na_rows_and_weight_actual_ordinal_pairs_to_source_mass_one\",\"point_and_every_delete_one_minimum\":[3,5],\"quadratic_weight_denominator\":16,\"quadratic_weight_formula\":\"q_ij=16-(i-j)^2\",\"ratings_input\":\"validator_linked_frozen_initial_ground_truth_records\",\"ratings_materializer\":\"inside_human_ground_truth_validator_no_report_supplied_scores\",\"raw_decision_grade_eligible\":false,\"raw_row_helper_scope\":\"public_synthetic_math_vectors_only_not_decision_evidence\",\"record_order\":\"ascending_raw_reviewer_uuid_then_linked_record\",\"robustness\":\"minimum_delete_one_whole_source_generation_kappa\",\"robustness_interpretation\":\"influence_check_not_sampling_confidence_interval\",\"source_generation_pair_mass\":\"each_actual_pair_contributes_1/applicable_pair_count_for_source\",\"source_matrix\":\"D_sij=count_sij/applicable_pair_count_for_source\",\"split_scope\":\"single_closed_split_no_pooling\",\"stable_pair_key\":[\"stratum\",\"dimension\"],\"statuses\":[\"AGREEMENT_APPLICABILITY_DISAGREEMENT\",\"AGREEMENT_INSUFFICIENT_UNITS\",\"AGREEMENT_UNDEFINED_ZERO_EXPECTED_DISAGREEMENT\",\"AGREEMENT_POINT_BELOW_FLOOR\",\"AGREEMENT_UNCERTAINTY_UNDEFINED\",\"AGREEMENT_ROBUSTNESS_BELOW_FLOOR\",\"AGREEMENT_PASS\"],\"synthetic_scope_decision_grade_eligible\":false,\"synthetic_scope_helper\":\"synthetic_scope_agreement_diagnostic\",\"threshold_denominator\":5,\"threshold_numerator\":3,\"undefined\":\"fail_closed\",\"unilateral_not_applicable\":\"linked_adjudication_then_source_excluded_and_agreement_gate_blocked\"},\"candidate_claims_reported_separately\":true,\"candidate_family_alpha\":[1,60],\"candidate_family_count\":3,\"cluster_aware\":true,\"critical_false_accept_ceiling\":[1,50],\"critical_false_accept_decision_grade_admission\":\"full_live_admission_owned_scope\",\"critical_false_accept_decision_grade_split\":\"holdout\",\"critical_false_accept_estimator\":\"event_if_any_confirmed_cfa_in_source_generation_class\",\"critical_false_accept_input_fields\":[\"candidate\",\"event\",\"profile\",\"risk_class\",\"source_generation_id\",\"split\"],\"critical_false_accept_minimum_n\":203,\"critical_false_accept_no_output\":\"excluded_from_cfa_denominator_but_quality_gate_failure\",\"critical_false_accept_raw_minimum\":false,\"critical_false_accept_statistical_unit\":[\"candidate\",\"profile\",\"split\",\"risk_class\",\"source_generation_id\"],\"critical_false_accept_synthetic_scope_helper\":\"synthetic_scope_critical_false_accept_summary_ineligible\",\"critical_false_accept_zero_event_upper_bound\":\"1-(1/60)^(1/n)\",\"decision_method\":\"bonferroni_candidates_conjunctive_strata\",\"dimension_confidence_floors\":{\"context_voice_style\":[4,5],\"literary_russian\":[4,5],\"meaning_accuracy\":[9,10],\"terminology_lore\":[17,20]},\"family_wise_alpha\":[1,20],\"marginal_95_interval\":\"descriptive_only_not_selection_evidence\",\"minimum_n_per_dimension_floor\":{\"context_voice_style\":22,\"literary_russian\":22,\"meaning_accuracy\":46,\"terminology_lore\":30},\"naive_pooled_overall_interval\":\"forbidden\",\"overall_summary\":\"descriptive_unique_sources_only\",\"owner_decision_required\":true,\"per_stratum_all_success_planning_rule\":\"floor^n<=1/120\",\"per_stratum_boundary_vectors\":{\"lower_successes_0\":[0,1],\"upper_successes_n\":[1,1]},\"per_stratum_interval\":\"two_sided_exact_clopper_pearson\",\"per_stratum_lower_bound\":\"0_if_successes=0_else_beta_quantile(1/120;successes,n-successes+1)\",\"per_stratum_statistical_unit\":[\"candidate\",\"profile\",\"split\",\"dimension_or_gate\",\"stratum\",\"source_generation_id\"],\"per_stratum_upper_bound\":\"1_if_successes=n_else_beta_quantile(119/120;successes+1,n-successes)\",\"stable_reviewer_pairs\":true,\"statistical_dimension_or_gate_values\":[\"context_voice_style\",\"critical_false_accept\",\"editorial_approval\",\"literary_russian\",\"meaning_accuracy\",\"schema_atom_stability\",\"terminology_lore\"],\"statistical_outcome\":{\"decision_grade_admission\":\"full_live_admission_owned_scope\",\"decision_grade_helper\":\"decision_grade_statistical_unit_summary_full_admission_holdout_only\",\"diagnostic_decision_grade_eligible\":false,\"diagnostic_scope\":\"single_split_explicitly_marked\",\"input_fields\":[\"applicable\",\"candidate\",\"dimension_or_gate\",\"profile\",\"source_generation_id\",\"split\",\"stratum\",\"success\"],\"no_applicable_outcome\":\"STATISTICAL_UNIT_NO_APPLICABLE_OUTCOME\",\"no_output\":\"applicable_failure_in_every_dimension_and_gate\",\"not_applicable\":\"excluded_from_denominator\",\"overall_gate\":\"forbidden\",\"overall_source_outcome\":\"all_applicable_rows_across_strata_success\",\"source_stratum_outcome\":\"all_applicable_rows_success\",\"synthetic_scope_helper\":\"synthetic_scope_statistical_unit_summary_ineligible\"},\"strata\":[\"dialogue\",\"gender_case\",\"humor_wordplay\",\"lore\",\"mechanics\",\"narrative\",\"typed_atoms\",\"ui\"],\"stratum_gate\":\"intersection_union_all_required_strata\",\"two_sided_candidate_tail_alpha\":[1,120]}",
-          "generation": 107,
+          "generation": 108,
           "kind": "analysis_policy",
           "sha256": "53fc6ba8bebeb7a872c937b2e5096b9bbee04ff01d2a66d1815ac38365a6ac74",
           "version": "m1b-analysis-policy-v6"
@@ -135,20 +135,20 @@
         {
           "acceptance_state": "proposed",
           "definition": "{\"acceptance_record_fields\":[\"acceptance_state\",\"implementation_generation\",\"manifest_schema\",\"manifest_sha256\",\"protocol_generation\"],\"admission\":{\"blocker\":\"EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN\",\"implementation_generation\":null,\"manifest_schema\":\"m1b-executable-implementation-manifest-v1\",\"manifest_sha256\":null,\"status\":\"unproven\",\"trust_root\":\"external_owner_accepted_manifest_required\"},\"canonical_manifest\":\"ascii_sorted_keys_compact_json_plus_lf\",\"digest_domain\":\"stellaris-m1b-executable-manifest-v1\",\"digest_formula\":\"sha256(domain_nul||u64be(canonical_manifest_length)||canonical_manifest)\",\"digest_framing\":[\"ascii_domain\",\"nul\",\"u64be_canonical_manifest_length\",\"canonical_manifest_bytes\"],\"exact_file_hash\":\"sha256_exact_bytes\",\"file_fields\":[\"path\",\"role\",\"sha256\"],\"file_object_policy\":\"regular_non_symlink_repository_file\",\"file_rows\":\"exactly_one_per_required_role\",\"manifest_digest_location\":\"external_owner_acceptance_record\",\"manifest_root_fields\":[\"files\",\"implementation_generation\",\"manifest_schema\"],\"manifest_schema\":\"m1b-executable-implementation-manifest-v1\",\"manifest_self_entry\":\"forbidden\",\"path_order\":\"unique_raw_ascii_ascending\",\"path_policy\":\"relative_posix_ascii_no_empty_dot_dotdot_backslash_or_nul\",\"report_self_assertion\":\"forbidden\",\"required_roles\":[\"analysis_engine\",\"contract_validator\",\"provider_request_harness\",\"synthetic_fixture_materializer\"],\"run_generation_changes_on_implementation_drift\":true,\"same_process_capability_boundary\":\"not_security_against_reflection_monkeypatch_import_hooks_debugger_or_tracing\",\"same_process_tcb\":[\"exact_manifest_bound_analysis_engine\",\"exact_manifest_bound_contract_validator\",\"exact_manifest_bound_provider_request_harness\",\"exact_manifest_bound_synthetic_fixture_materializer\",\"used_python_runtime_import_and_invocation_state\"],\"self_digest_field\":\"forbidden\",\"separate_process_authority_boundary\":\"required_for_hostile_same_process_code_out_of_scope_m1b0\",\"trust_root\":\"external_owner_accepted_manifest_plus_runtime_invocation_admission\",\"v1_manifest_limit\":\"file_bytes_only_does_not_bind_interpreter_import_or_invocation_state\"}",
-          "generation": 107,
+          "generation": 108,
           "kind": "implementation_identity_policy",
           "sha256": "826d976613f44657c5a2ae9299d3cc80ad21751eb7298989a24653d0849de784",
           "version": "m1b-implementation-identity-policy-v2"
         }
       ],
       "framing": "m1b-length-framed-sha256-v1",
-      "sha256": "7f1e417a843a0f3d0658e1e2abeb794c5c21a1dcb6f6482cd5f561c986ae00a9"
+      "sha256": "50f51b3cf9be042ebc310d1a6c57791dd31a43362778798455d7ea9678c31e06"
     },
     "protocol": {
-      "generation": 107,
+      "generation": 108,
       "output_schema_version": "m1b-synthetic-output-v4",
       "prompt_version": "m1b-synthetic-prompt-policy-v1",
-      "protocol_version": "m1b-benchmark-contract-v6"
+      "protocol_version": "m1b-benchmark-contract-v7"
     },
     "provider_policy": {
       "auto_pull": false,
@@ -337,7 +337,7 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 107,
+        "protocol_generation": 108,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
@@ -394,7 +394,7 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 107,
+        "protocol_generation": 108,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
@@ -451,7 +451,7 @@
         "profile_version": "m1b-primary-common-profile-v1",
         "profile_generation": 202,
         "corpus_generation": 304,
-        "protocol_generation": 107,
+        "protocol_generation": 108,
         "experiment_lane": "primary",
         "attempt_stage": "initial",
         "attempt_index": 0,
@@ -882,7 +882,7 @@
             "provider_policy",
             "endpoint"
           ],
-          "value": " http://127.0.0.1:11434/api"
+          "value": "\u00a0http://127.0.0.1:11434/api"
         }
       ]
     },
@@ -1512,7 +1512,7 @@
             0,
             "sha256"
           ],
-          "value": "2db4bbca4c448cd5deb4364c920c9c1a67e1cee1b85715c807ff08f31b2fabfa"
+          "value": "6ae3dcd2870f5e3ec020fd1363645017902453a9d44f2d0438aae61aece8a364"
         }
       ]
     },
@@ -1533,7 +1533,7 @@
             0,
             "generation"
           ],
-          "value": 108
+          "value": 109
         }
       ]
     },
@@ -1744,7 +1744,7 @@
             "protocol",
             "generation"
           ],
-          "value": 108
+          "value": 109
         }
       ]
     },
