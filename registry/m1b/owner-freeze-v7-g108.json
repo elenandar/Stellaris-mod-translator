@@ -1,0 +1,112 @@
+{
+  "acceptance_state": "owner_accepted",
+  "components": [
+    {
+      "component_sha256": "53fc6ba8bebeb7a872c937b2e5096b9bbee04ff01d2a66d1815ac38365a6ac74",
+      "generation": 108,
+      "kind": "analysis_policy",
+      "version": "m1b-analysis-policy-v6"
+    },
+    {
+      "component_sha256": "4d5a1d1b343cbed19bac4f9d6e58101975a62c2e30d9f6eaa2730b37e8a59532",
+      "generation": 108,
+      "kind": "benchmark_contract",
+      "version": "m1b-benchmark-contract-v7"
+    },
+    {
+      "component_sha256": "0a9aecddf4fb4dc4a090434c1b5b7f66cfe69b64392a527bf3c5f5d95b24c3a3",
+      "generation": 202,
+      "kind": "candidate_profile.deepseek_r1_32b",
+      "version": "m1b-primary-common-profile-v1"
+    },
+    {
+      "component_sha256": "1ac428581d95f9862e956da9def260ac6b0de12d960bfb80cf0c4df38d63ad8e",
+      "generation": 202,
+      "kind": "candidate_profile.glm_4_7_flash",
+      "version": "m1b-primary-common-profile-v1"
+    },
+    {
+      "component_sha256": "2651960755cd898064f48cf5f948c4b00976104b5bcfe54a62fe5bea3ac53933",
+      "generation": 202,
+      "kind": "candidate_profile.gpt_oss_20b",
+      "version": "m1b-primary-common-profile-v1"
+    },
+    {
+      "component_sha256": "c5e60400a7783c0635d34019d0cb32a3506080297e6f7bae82ce21e4457cc0e5",
+      "generation": 105,
+      "kind": "context_limit_policy",
+      "version": "m1b-context-limit-policy-v2"
+    },
+    {
+      "component_sha256": "83943902f422a4ebc00e4e3abb150f7f27496ff71a63b76c33b96eaa84a30ee4",
+      "generation": 105,
+      "kind": "corpus_policy",
+      "version": "m1b-corpus-policy-v3"
+    },
+    {
+      "component_sha256": "a9fc7d94a890491945e141fb1e5eefd591d29200220d410991cc9fa4c955b7ce",
+      "generation": 105,
+      "kind": "generation_policy",
+      "version": "m1b-generation-policy-v2"
+    },
+    {
+      "component_sha256": "826d976613f44657c5a2ae9299d3cc80ad21751eb7298989a24653d0849de784",
+      "generation": 108,
+      "kind": "implementation_identity_policy",
+      "version": "m1b-implementation-identity-policy-v2"
+    },
+    {
+      "component_sha256": "194d87ef56600b13d7171ed8cd54f89acabdf42e1fc51eb3bdecf80b2c53b549",
+      "generation": 106,
+      "kind": "measurement_policy",
+      "version": "m1b-measurement-policy-v4"
+    },
+    {
+      "component_sha256": "1be06166d50a33934c40f20916e28db70ce161cb7689defba924a826cb79afd7",
+      "generation": 105,
+      "kind": "output_schema",
+      "version": "m1b-synthetic-output-v4"
+    },
+    {
+      "component_sha256": "54e929fd64cab6e20683f2f18ac4408ff30909b7ecff38674fd59395c523859d",
+      "generation": 101,
+      "kind": "prompt_policy",
+      "version": "m1b-synthetic-prompt-policy-v1"
+    },
+    {
+      "component_sha256": "220a56232b672ffbe215ee18d067a5a279bbacf2596d3993aac1d2a71eb6f978",
+      "generation": 106,
+      "kind": "quality_rubric",
+      "version": "m1b-quality-rubric-v6"
+    },
+    {
+      "component_sha256": "ce8ea00e77c5650d7e6dc4f105f55c084a90dda6e8f366ecfffd18a336781f34",
+      "generation": 105,
+      "kind": "randomization_blinding_policy",
+      "version": "m1b-randomization-blinding-policy-v3"
+    },
+    {
+      "component_sha256": "a13f2b1c342a60dff0c341715708432a77b2fc34354d630b6e50807e4aacb13b",
+      "generation": 101,
+      "kind": "retention_leakage_policy",
+      "version": "m1b-retention-leakage-policy-v1"
+    },
+    {
+      "component_sha256": "16fe20df047eed035507f62f2887ad39746da218babf12c23d4219b0fd8c3ef6",
+      "generation": 108,
+      "kind": "split_policy",
+      "version": "m1b-split-policy-v5"
+    },
+    {
+      "component_sha256": "a3f6399c76d49a31eb9cf542c2850185d23e5f4d53b48ebc010f580b38804201",
+      "generation": 108,
+      "kind": "validator_policy",
+      "version": "m1b-validator-policy-v7"
+    }
+  ],
+  "definition_bundle_sha256": "50f51b3cf9be042ebc310d1a6c57791dd31a43362778798455d7ea9678c31e06",
+  "framing": "m1b-owner-freeze-registry-snapshot-sha256-v1",
+  "protocol_generation": 108,
+  "protocol_version": "m1b-benchmark-contract-v7",
+  "schema_version": "m1b-owner-freeze-registry-snapshot-v1"
+}

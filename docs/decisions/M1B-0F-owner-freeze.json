@@ -1,0 +1,35 @@
+{
+  "acceptance_scope": "m1b_1a_preparation_basis_only",
+  "acceptance_state": "owner_accepted",
+  "blockers": [
+    "EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN",
+    "CONTEXT_LIMIT_BINDING_UNPROVEN",
+    "PROVIDER_PERSISTENCE_UNPROVEN",
+    "RESIDENCY_UNPROVEN",
+    "OUTPUT_LIMIT_BINDING_UNPROVEN",
+    "LIFECYCLE_STATE_UNPROVEN"
+  ],
+  "complete_benchmark_authorized": false,
+  "complete_benchmark_schema_v4": "PARTIAL_REPORT_CANNOT_BE_COMPLETE",
+  "component_count": 17,
+  "definition_bundle_sha256": "50f51b3cf9be042ebc310d1a6c57791dd31a43362778798455d7ea9678c31e06",
+  "effect": "after_review_and_merge_to_main",
+  "m1a_state": "blocked",
+  "m1b_state": "not_evaluated",
+  "m2_state": "forbidden",
+  "missing_freeze_inputs": [
+    "frozen_prompt_bytes",
+    "frozen_template_bytes",
+    "real_candidate_identities"
+  ],
+  "model_calls_authorized": false,
+  "next_stage_after_merge": "m1b_1a_local_synthetic_provider_preflight",
+  "owner_decision_schema": "m1b-owner-freeze-decision-v1",
+  "owner_delegation": "explicit",
+  "private_corpus_authorized": false,
+  "protocol_generation": 108,
+  "protocol_version": "m1b-benchmark-contract-v7",
+  "registry_snapshot_framing": "m1b-owner-freeze-registry-snapshot-sha256-v1",
+  "registry_snapshot_schema": "m1b-owner-freeze-registry-snapshot-v1",
+  "registry_snapshot_sha256": "df84871be332ee52c315d0c0cc1a7a0046251352a2a0131382b5cb994cffcb58"
+}
