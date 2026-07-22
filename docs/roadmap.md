@@ -37,9 +37,26 @@ snapshot, bundle identities, acceptance scope или authorization booleans.
 
 [Offline executable/TCB contract](specs/m1b-offline-executable-tcb-admission-contract.md)
 и [review record](decisions/M1B-1A0-contract-review.md) задают отдельные
-contract schema/version/generation, manifest v1 verifier и execution envelope для
-будущего exact executable/runtime admission. External contract digest —
-`589cf895c659b57c2f44268acfa0bf33b3c98d6cd5e6b4fea1f2f9b2500d1a5f`.
+contract v3/version v3/generation 3, manifest v1 verifier, execution envelope
+v3 и runtime acceptance v1 для будущего exact executable/runtime admission.
+External contract digest —
+`c346fdd761ea477a85930c041858e7444a576263f3fb5ca568cc1ab005ef9744`.
+
+Generation 3 использует `m1b-execution-envelope-v3`, closed
+`m1b-execution-plan-v2` и отдельный
+`m1b-runtime-execution-envelope-acceptance-v1`. Typed repository locators
+отделены от OS exec target, `argv[0]`, cwd и `sys_path`; exact argv принимает
+provider harness только как cached admitted bytes через `/dev/fd/3` и bounded
+atomic pipe preload. Ordered role imports покрывают остальные три manifest
+roles, а global lexical/physical identity index запрещает case aliases и
+pathname reopen на всех record/executable surfaces.
+Provider harness entrypoint дополнительно требует raw relative path, первый
+ASCII byte которого не `-`; coherent option-like paths (`-c`, `-m`, `-`, `--`,
+`-E`) не могут обойти script argv grammar.
+Caller-supplied runtime record остаётся только linkage evidence: external
+owner-controlled decision — отдельный trust root. Interpreter path exec,
+launcher opened-byte handoff и role-import transport остаются explicit
+blockers, поэтому operational admission не выдан.
 
 Это contract-only state: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`,
 `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`,

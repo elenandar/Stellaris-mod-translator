@@ -1,7 +1,9 @@
 """Public synthetic tests for the M1B executable/TCB admission contract.
 
-The four role payloads in this module are materialized only below a temporary
-repository root.  They are opaque bytes and are never imported or executed.
+The five explicit records and four role payloads in this module are
+materialized only below a temporary repository root.  Source-role surfaces
+are minimal inert synthetic Python text; opaque interpreter/extension bytes
+remain non-executable.  No materialized surface is imported or executed.
 """
 
 from __future__ import annotations
@@ -30,29 +32,48 @@ CONTRACT = (
     REPOSITORY_ROOT
     / "registry"
     / "m1b"
-    / "offline-executable-tcb-contract-v1.json"
+    / "offline-executable-tcb-contract-v3.json"
 )
 CASES = REPOSITORY_ROOT / "fixtures" / "m1b" / "tcb-admission" / "cases.json"
 VERIFIER = REPOSITORY_ROOT / "tools" / "research" / "m1b_tcb_contract.py"
 
-IMPLEMENTATION_GENERATION = 1
+IMPLEMENTATION_GENERATION = 2
 PROTOCOL_GENERATION = 108
 MANIFEST_SCHEMA = "m1b-executable-implementation-manifest-v1"
 MANIFEST_DOMAIN = b"stellaris-m1b-executable-manifest-v1"
-CONTRACT_SCHEMA = "m1b-offline-executable-tcb-contract-v1"
-CONTRACT_VERSION = "m1b-offline-executable-tcb-admission-v1"
-CONTRACT_DOMAIN = b"stellaris-m1b-offline-executable-tcb-contract-v1"
-EXECUTION_ENVELOPE_SCHEMA = "m1b-execution-envelope-v1"
-EXPECTED_CONTRACT_BYTES = 4848
+CONTRACT_SCHEMA = "m1b-offline-executable-tcb-contract-v3"
+CONTRACT_VERSION = "m1b-offline-executable-tcb-admission-v3"
+CONTRACT_GENERATION = 3
+CONTRACT_DOMAIN = b"stellaris-m1b-offline-executable-tcb-contract-v3"
+EXECUTION_ENVELOPE_SCHEMA = "m1b-execution-envelope-v3"
+EXECUTION_ENVELOPE_GENERATION = 3
+EXECUTION_ENVELOPE_DOMAIN = b"stellaris-m1b-execution-envelope-v3"
+EXECUTION_ENVELOPE_DIGEST_FRAMING = (
+    "sha256_domain_nul_u64be_length_canonical_envelope"
+)
+RUNTIME_ACCEPTANCE_SCHEMA = "m1b-runtime-execution-envelope-acceptance-v1"
+RUNTIME_ACCEPTANCE_GENERATION = 1
+RUNTIME_ACCEPTANCE_DOMAIN = (
+    b"stellaris-m1b-runtime-execution-envelope-acceptance-v1"
+)
+EXECUTION_PLAN_SCHEMA = "m1b-execution-plan-v2"
+EXECUTION_PLAN_GENERATION = 2
+
+# Independently recomputed from canonical registry v3 bytes.
+EXPECTED_CONTRACT_BYTES = 8438
 EXPECTED_CONTRACT_FILE_SHA256 = (
-    "7af6471986e194fd11a9e8cf003e92a8f534c1328b3b15ab00a043067e82a3dc"
+    "cf91f64e8fa85dde15e85702199860f62974d86e54163b080a95fe2ac9c7a75d"
 )
 EXPECTED_CONTRACT_DIGEST = (
-    "589cf895c659b57c2f44268acfa0bf33b3c98d6cd5e6b4fea1f2f9b2500d1a5f"
+    "c346fdd761ea477a85930c041858e7444a576263f3fb5ca568cc1ab005ef9744"
 )
-EXPECTED_CASE_COUNT = 127
+EXPECTED_CASE_COUNT = 218
+EXPECTED_CASE_BYTES = 61682
 EXPECTED_CASES_SHA256 = (
-    "99f8c109f5967b1b1f7bb11e12617788b001b63c805626def0642200a901a082"
+    "0f14d9b28ee41095a2373b02409b288c30959013840d7d1c891538266a84eeaa"
+)
+EXPECTED_VERIFIER_SHA256 = (
+    "0df39292b306afdfd2187ffb554b5ad2714bbe0353ca176f6fe49cf7eb162c10"
 )
 REQUIRED_MATRIX_IDS = frozenset(
     """
@@ -62,6 +83,7 @@ REQUIRED_MATRIX_IDS = frozenset(
     contract-semantic-json-noncanonical
     manifest-missing-role manifest-extra-role manifest-duplicate-role
     manifest-unknown-role manifest-one-path-multiple-roles manifest-role-swap
+    manifest-path-swap manifest-digest-swap
     manifest-raw-ascii-order-wrong manifest-absolute-path manifest-empty-path
     manifest-empty-final-component manifest-dot-component
     manifest-dotdot-component manifest-repeated-separator
@@ -108,25 +130,87 @@ REQUIRED_MATRIX_IDS = frozenset(
     bytecode-pycache-prefix-present native-dependency-silent-bound-empty
     native-dependency-unproven-with-row native-dependency-blocker-removed
     reopened-path-instead-of-admitted-bytes
+    runtime-acceptance-malformed runtime-acceptance-duplicate-key
+    runtime-acceptance-noncanonical runtime-acceptance-missing-field
+    runtime-acceptance-extra-field runtime-acceptance-schema-drift
+    runtime-acceptance-generation-drift runtime-acceptance-proposed-state
+    runtime-acceptance-retired-state runtime-acceptance-self-proven-state
+    runtime-acceptance-contract-schema-drift
+    runtime-acceptance-contract-version-drift
+    runtime-acceptance-contract-generation-drift
+    runtime-acceptance-contract-digest-drift
+    runtime-acceptance-manifest-schema-drift
+    runtime-acceptance-implementation-generation-drift
+    runtime-acceptance-manifest-digest-drift
+    runtime-acceptance-envelope-schema-drift
+    runtime-acceptance-envelope-generation-drift
+    runtime-acceptance-envelope-domain-drift
+    runtime-acceptance-envelope-framing-drift
+    runtime-acceptance-envelope-raw-sha
+    runtime-acceptance-envelope-digest-drift
+    runtime-acceptance-envelope-wrong-domain-digest
+    runtime-acceptance-envelope-wrong-length-digest
+    runtime-acceptance-protocol-generation-drift
+    runtime-acceptance-stale-after-coherent-state-change
+    runtime-acceptance-record-alias runtime-acceptance-cli-missing
+    runtime-acceptance-cli-extra
+    execution-plan-missing execution-plan-extra-field
+    execution-plan-schema-drift execution-plan-generation-drift
+    execution-plan-interpreter-path-drift
+    execution-plan-interpreter-digest-drift
+    execution-plan-entrypoint-missing execution-plan-entrypoint-wrong-role
+    execution-plan-entrypoint-unlisted
+    execution-plan-role-import-missing execution-plan-role-import-extra
+    execution-plan-role-import-path-drift
+    execution-plan-role-import-digest-drift
+    execution-plan-role-import-order-swap
+    execution-plan-import-binding-missing
+    invocation-wrong-argv0 invocation-other-interpreter-same-bytes
+    invocation-entrypoint-missing invocation-entrypoint-wrong
+    invocation-inline-code invocation-module-mode invocation-stdin-mode
+    invocation-double-dash-bypass invocation-unknown-flag
+    invocation-reordered-flags invocation-extra-positional
+    invocation-absolute-entrypoint invocation-case-alias-entrypoint
+    invocation-flags-bytecode-contradiction
+    invocation-xoptions-contradiction
+    invocation-coherent-unsafe-inline-code
+    invocation-empty-imports invocation-empty-sys-path
+    coherent-harness-inline-option coherent-harness-module-option
+    coherent-harness-stdin-marker coherent-harness-double-dash
+    coherent-harness-unknown-option
+    execution-plan-launcher-missing execution-plan-launcher-proven
+    invocation-os-exec-target-wrong-base invocation-argv0-wrong-base
+    invocation-cwd-wrong-base invocation-sys-path-wrong-base
+    invocation-path-only-script
+    entrypoint-transport-missing entrypoint-transport-extra
+    entrypoint-transport-wrong-fd entrypoint-transport-stdio-collision
+    entrypoint-transport-noncanonical-process-path
+    entrypoint-transport-wrong-mode entrypoint-transport-wrong-kind
+    entrypoint-transport-wrong-role entrypoint-transport-wrong-path
+    entrypoint-transport-wrong-digest
+    entrypoint-transport-wrong-byte-count
+    entrypoint-transport-zero-byte-count
+    entrypoint-transport-extra-field
+    runtime-acceptance-stale-after-coherent-transport-change
     """.split()
 )
 
 ROLE_PAYLOADS = {
     "synthetic/analysis-engine.opaque": (
         "analysis_engine",
-        b"SYNTHETIC-OPAQUE-ANALYSIS-ENGINE\x00NOT-PYTHON\n",
+        b'SYNTHETIC_ROLE = "analysis_engine"\n',
     ),
     "synthetic/contract-validator.opaque": (
         "contract_validator",
-        b"SYNTHETIC-OPAQUE-CONTRACT-VALIDATOR\x00NOT-PYTHON\n",
+        b'SYNTHETIC_ROLE = "contract_validator"\n',
     ),
     "synthetic/provider-request-harness.opaque": (
         "provider_request_harness",
-        b"SYNTHETIC-OPAQUE-PROVIDER-HARNESS\x00NOT-PYTHON\n",
+        b'SYNTHETIC_ROLE = "provider_request_harness"\n',
     ),
     "synthetic/synthetic-fixture-materializer.opaque": (
         "synthetic_fixture_materializer",
-        b"SYNTHETIC-OPAQUE-FIXTURE-MATERIALIZER\x00NOT-PYTHON\n",
+        b'SYNTHETIC_ROLE = "synthetic_fixture_materializer"\n',
     ),
 }
 
@@ -135,7 +219,7 @@ SOURCE_IMPORT_PATH = "synthetic/imports/source-module.opaque"
 EXTENSION_IMPORT_PATH = "synthetic/imports/extension-module.opaque"
 AUXILIARY_PAYLOADS = {
     INTERPRETER_PATH: b"SYNTHETIC-OPAQUE-CPYTHON-INTERPRETER\x00NOT-EXECUTABLE\n",
-    SOURCE_IMPORT_PATH: b"SYNTHETIC-OPAQUE-SOURCE-MODULE\x00NOT-PYTHON\n",
+    SOURCE_IMPORT_PATH: b'SYNTHETIC_ROLE = "source_import"\n',
     EXTENSION_IMPORT_PATH: b"SYNTHETIC-OPAQUE-EXTENSION-MODULE\x00NOT-A-BINARY\n",
 }
 
@@ -178,6 +262,28 @@ def _independent_contract_digest(contract_bytes):
     ).hexdigest()
 
 
+def _independent_execution_envelope_digest(envelope_bytes):
+    """Recompute canonical envelope framing without production code."""
+
+    return hashlib.sha256(
+        EXECUTION_ENVELOPE_DOMAIN
+        + b"\x00"
+        + len(envelope_bytes).to_bytes(8, "big")
+        + envelope_bytes
+    ).hexdigest()
+
+
+def _independent_runtime_acceptance_digest(runtime_acceptance_bytes):
+    """Recompute the diagnostic external runtime-record identity."""
+
+    return hashlib.sha256(
+        RUNTIME_ACCEPTANCE_DOMAIN
+        + b"\x00"
+        + len(runtime_acceptance_bytes).to_bytes(8, "big")
+        + runtime_acceptance_bytes
+    ).hexdigest()
+
+
 def _manifest_for_payloads(payloads):
     files = []
     for path in sorted(payloads, key=lambda item: item.encode("ascii")):
@@ -196,7 +302,7 @@ def _manifest_for_payloads(payloads):
     }
 
 
-def _execution_state(auxiliary_payloads):
+def _execution_state(manifest, auxiliary_payloads, role_payloads=ROLE_PAYLOADS):
     interpreter_sha256 = hashlib.sha256(
         auxiliary_payloads[INTERPRETER_PATH]
     ).hexdigest()
@@ -206,6 +312,87 @@ def _execution_state(auxiliary_payloads):
     extension_sha256 = hashlib.sha256(
         auxiliary_payloads[EXTENSION_IMPORT_PATH]
     ).hexdigest()
+    roles = {row["role"]: row for row in manifest["files"]}
+    role_imports = []
+    for role, module in (
+        ("analysis_engine", "synthetic_analysis_engine"),
+        ("contract_validator", "synthetic_contract_validator"),
+        (
+            "synthetic_fixture_materializer",
+            "synthetic_fixture_materializer",
+        ),
+    ):
+        row = roles[role]
+        role_imports.append(
+            {
+                "kind": "source",
+                "module": module,
+                "path": row["path"],
+                "role": role,
+                "sha256": row["sha256"],
+            }
+        )
+    harness = roles["provider_request_harness"]
+    execution_plan = {
+        "entrypoint": {
+            "mode": "descriptor_script_file",
+            "repository_locator": harness["path"],
+            "role": "provider_request_harness",
+            "sha256": harness["sha256"],
+        },
+        "interpreter": {
+            "repository_locator": INTERPRETER_PATH,
+            "sha256": interpreter_sha256,
+        },
+        "launcher": {
+            "blockers": [
+                "INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN",
+                "LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN",
+                "ROLE_IMPORT_TRANSPORT_UNPROVEN",
+            ],
+            "status": "unproven",
+        },
+        "plan_generation": EXECUTION_PLAN_GENERATION,
+        "plan_schema": EXECUTION_PLAN_SCHEMA,
+        "role_imports": role_imports,
+    }
+    imports = [
+        {
+            "kind": "frozen",
+            "module": "importlib._bootstrap",
+            "path": None,
+            "sha256": interpreter_sha256,
+        },
+        {
+            "kind": "extension",
+            "module": "synthetic_extension",
+            "path": EXTENSION_IMPORT_PATH,
+            "sha256": extension_sha256,
+        },
+        {
+            "kind": "source",
+            "module": "synthetic_source",
+            "path": SOURCE_IMPORT_PATH,
+            "sha256": source_sha256,
+        },
+    ]
+    imports.extend(
+        {
+            "kind": row["kind"],
+            "module": row["module"],
+            "path": row["path"],
+            "sha256": row["sha256"],
+        }
+        for row in role_imports
+    )
+    imports.append(
+        {
+            "kind": "builtin",
+            "module": "sys",
+            "path": None,
+            "sha256": interpreter_sha256,
+        }
+    )
     return {
         "bytecode": {
             "cache_mode": "sealed_empty",
@@ -218,37 +405,12 @@ def _execution_state(auxiliary_payloads):
             "policy": "empty",
             "variables": [],
         },
-        "imports": [
-            {
-                "kind": "frozen",
-                "module": "importlib._bootstrap",
-                "path": None,
-                "sha256": interpreter_sha256,
-            },
-            {
-                "kind": "extension",
-                "module": "synthetic_extension",
-                "path": EXTENSION_IMPORT_PATH,
-                "sha256": extension_sha256,
-            },
-            {
-                "kind": "source",
-                "module": "synthetic_source",
-                "path": SOURCE_IMPORT_PATH,
-                "sha256": source_sha256,
-            },
-            {
-                "kind": "builtin",
-                "module": "sys",
-                "path": None,
-                "sha256": interpreter_sha256,
-            },
-        ],
+        "execution_plan": execution_plan,
+        "imports": imports,
         "interpreter": {
             "abi_flags": "",
             "byteorder": "little",
             "cache_tag": "cpython-39",
-            "executable_path": INTERPRETER_PATH,
             "executable_sha256": interpreter_sha256,
             "extension_suffix": ".cpython-39-darwin.so",
             "implementation": "cpython",
@@ -256,20 +418,45 @@ def _execution_state(auxiliary_payloads):
             "max_unicode": 1114111,
             "platform": "darwin",
             "pointer_bits": 64,
+            "repository_locator": INTERPRETER_PATH,
             "soabi": "cpython-39-darwin",
             "version_tuple": [3, 9, 6, "final", 0],
         },
         "invocation": {
-            "argv": [
-                INTERPRETER_PATH,
+            "argv0": {
+                "base": "repository_root",
+                "path": INTERPRETER_PATH,
+            },
+            "argv_tail": [
                 "-I",
                 "-S",
                 "-B",
-                "synthetic/contract-validator.opaque",
+                "-X",
+                "utf8",
+                "/dev/fd/3",
             ],
-            "cwd": "synthetic/work",
-            "inherited_fds": [],
-            "mode": "verified_open_descriptors_no_reopen",
+            "cwd": {
+                "base": "repository_root",
+                "path": "synthetic/work",
+            },
+            "inherited_fds": [
+                {
+                    "byte_count": len(role_payloads[harness["path"]][1]),
+                    "child_fd": 3,
+                    "mode": "read",
+                    "process_path": "/dev/fd/3",
+                    "purpose": "provider_request_harness",
+                    "repository_locator": harness["path"],
+                    "role": "provider_request_harness",
+                    "sha256": harness["sha256"],
+                    "transport": "darwin_pipe_atomic_preload_v1",
+                }
+            ],
+            "mode": "typed_entrypoint_fd_no_repository_reopen",
+            "os_exec_target": {
+                "base": "repository_root",
+                "path": INTERPRETER_PATH,
+            },
             "python_flags": {
                 "bytes_warning": 0,
                 "debug": 0,
@@ -300,9 +487,11 @@ def _execution_state(auxiliary_payloads):
                     "target": "captured_pipe",
                 },
             },
-            "sys_path": ["synthetic/imports"],
+            "sys_path": [
+                {"base": "repository_root", "path": "synthetic"}
+            ],
             "warnoptions": [],
-            "xoptions": [],
+            "xoptions": ["utf8"],
         },
         "native_dependencies": {
             "blocker": "NATIVE_DEPENDENCY_CLOSURE_UNPROVEN",
@@ -330,15 +519,51 @@ def _acceptance_for_manifest(manifest_sha256):
     }
 
 
-def _envelope_for_manifest(manifest_sha256, auxiliary_payloads):
-    state = _execution_state(auxiliary_payloads)
+def _coherently_bind_harness_path(documents, harness_path):
+    """Rebind every authority/linkage surface to one harness lexical path."""
+
+    provider_rows = [
+        row
+        for row in documents["manifest"]["files"]
+        if row["role"] == "provider_request_harness"
+    ]
+    if len(provider_rows) != 1:
+        raise AssertionError("positive manifest must contain one provider harness")
+    provider = provider_rows[0]
+    provider["path"] = harness_path
+    documents["manifest"]["files"].sort(
+        key=lambda row: row["path"].encode("ascii")
+    )
+    manifest_sha256 = _independent_manifest_digest(
+        _independent_manifest_bytes(documents["manifest"])
+    )
+    documents["acceptance"]["manifest_sha256"] = manifest_sha256
+    documents["envelope"]["manifest_sha256"] = manifest_sha256
+    for state_name in ("admitted_state", "observed_state"):
+        state = documents["envelope"][state_name]
+        entrypoint = state["execution_plan"]["entrypoint"]
+        if (
+            entrypoint["role"] != "provider_request_harness"
+            or entrypoint["sha256"] != provider["sha256"]
+        ):
+            raise AssertionError("positive plan must bind the provider harness")
+        entrypoint["repository_locator"] = harness_path
+        fd_row = state["invocation"]["inherited_fds"][0]
+        fd_row["repository_locator"] = harness_path
+    documents["runtime_acceptance"]["manifest_sha256"] = manifest_sha256
+
+
+def _envelope_for_manifest(
+    manifest, manifest_sha256, auxiliary_payloads, role_payloads=ROLE_PAYLOADS
+):
+    state = _execution_state(manifest, auxiliary_payloads, role_payloads)
     return {
         "admitted_state": copy.deepcopy(state),
-        "contract_generation": 1,
+        "contract_generation": CONTRACT_GENERATION,
         "contract_schema": CONTRACT_SCHEMA,
         "contract_sha256": EXPECTED_CONTRACT_DIGEST,
         "contract_version": CONTRACT_VERSION,
-        "envelope_generation": 1,
+        "envelope_generation": EXECUTION_ENVELOPE_GENERATION,
         "envelope_schema": EXECUTION_ENVELOPE_SCHEMA,
         "implementation_generation": IMPLEMENTATION_GENERATION,
         "manifest_schema": MANIFEST_SCHEMA,
@@ -348,25 +573,82 @@ def _envelope_for_manifest(manifest_sha256, auxiliary_payloads):
     }
 
 
+def _runtime_acceptance_for_envelope(envelope, manifest_sha256):
+    envelope_bytes = _encode(envelope)
+    return {
+        "contract_generation": CONTRACT_GENERATION,
+        "contract_schema": CONTRACT_SCHEMA,
+        "contract_sha256": EXPECTED_CONTRACT_DIGEST,
+        "contract_version": CONTRACT_VERSION,
+        "envelope_digest_domain": EXECUTION_ENVELOPE_DOMAIN.decode("ascii"),
+        "envelope_digest_framing": EXECUTION_ENVELOPE_DIGEST_FRAMING,
+        "envelope_generation": EXECUTION_ENVELOPE_GENERATION,
+        "envelope_schema": EXECUTION_ENVELOPE_SCHEMA,
+        "envelope_sha256": _independent_execution_envelope_digest(
+            envelope_bytes
+        ),
+        "implementation_generation": IMPLEMENTATION_GENERATION,
+        "manifest_schema": MANIFEST_SCHEMA,
+        "manifest_sha256": manifest_sha256,
+        "protocol_generation": PROTOCOL_GENERATION,
+        "runtime_acceptance_generation": RUNTIME_ACCEPTANCE_GENERATION,
+        "runtime_acceptance_schema": RUNTIME_ACCEPTANCE_SCHEMA,
+        "runtime_acceptance_state": "owner_accepted",
+    }
+
+
 def _positive_documents():
     manifest = _manifest_for_payloads(ROLE_PAYLOADS)
     manifest_bytes = _independent_manifest_bytes(manifest)
     manifest_sha256 = _independent_manifest_digest(manifest_bytes)
+    envelope = _envelope_for_manifest(
+        manifest, manifest_sha256, AUXILIARY_PAYLOADS
+    )
     return {
         "acceptance": _acceptance_for_manifest(manifest_sha256),
         "contract": json.loads(CONTRACT.read_text("ascii")),
-        "envelope": _envelope_for_manifest(manifest_sha256, AUXILIARY_PAYLOADS),
+        "envelope": envelope,
         "manifest": manifest,
+        "runtime_acceptance": _runtime_acceptance_for_envelope(
+            envelope, manifest_sha256
+        ),
     }
 
 
-def _materialize_documents(root, documents, *, encodings=None, payloads=None):
+def _materialize_documents(
+    root,
+    documents,
+    *,
+    encodings=None,
+    payloads=None,
+    path_overrides=None,
+    refresh_runtime_acceptance=True,
+    coherent_harness_path=None,
+):
     encodings = {} if encodings is None else encodings
+    path_overrides = {} if path_overrides is None else path_overrides
+    if refresh_runtime_acceptance and "runtime_acceptance" in documents:
+        documents["runtime_acceptance"]["envelope_sha256"] = (
+            _independent_execution_envelope_digest(
+                _encode(documents["envelope"])
+            )
+        )
     all_payloads = dict(ROLE_PAYLOADS)
     auxiliary_payloads = dict(AUXILIARY_PAYLOADS)
     if payloads:
         all_payloads.update(payloads.get("roles", {}))
         auxiliary_payloads.update(payloads.get("auxiliary", {}))
+    if coherent_harness_path is not None:
+        old_harness_path = next(
+            path
+            for path, (role, _data) in ROLE_PAYLOADS.items()
+            if role == "provider_request_harness"
+        )
+        if coherent_harness_path in all_payloads:
+            raise AssertionError("coherent harness path collides with payload")
+        all_payloads[coherent_harness_path] = all_payloads.pop(
+            old_harness_path
+        )
     for path, (_role, data) in all_payloads.items():
         _write_relative(root, path, data)
     for path, data in auxiliary_payloads.items():
@@ -378,8 +660,16 @@ def _materialize_documents(root, documents, *, encodings=None, payloads=None):
         "manifest": "records/manifest.json",
         "acceptance": "records/acceptance.json",
         "envelope": "records/envelope.json",
+        "runtime_acceptance": "records/runtime-acceptance.json",
     }
+    paths.update(path_overrides)
+    written_paths = set()
     for target, relative in paths.items():
+        # Exact record aliases deliberately reuse the first admitted bytes.
+        # This lets production admission reject the second purpose before it
+        # attempts to parse or reopen that path.
+        if relative in written_paths:
+            continue
         if target == "contract" and documents[target] == json.loads(
             CONTRACT.read_text("ascii")
         ):
@@ -391,7 +681,17 @@ def _materialize_documents(root, documents, *, encodings=None, payloads=None):
                 json.dumps(documents[target], ensure_ascii=True, sort_keys=True, indent=2)
                 + "\n"
             ).encode("ascii")
+        elif encodings.get(target) == "duplicate-key":
+            if target != "runtime_acceptance":
+                raise AssertionError("duplicate-key encoding is record-specific")
+            encoded = (
+                b'{"contract_generation":2,'
+                + encoded[1:]
+            )
+        elif encodings.get(target) == "malformed":
+            encoded = b'{"runtime_acceptance_schema":'
         _write_relative(root, relative, encoded)
+        written_paths.add(relative)
     return paths
 
 
@@ -425,13 +725,36 @@ def _fixture_value(value, documents):
             + (len(manifest_bytes) + 1).to_bytes(8, "big")
             + manifest_bytes
         ).hexdigest()
+    if value in (
+        "@raw-envelope-sha",
+        "@wrong-envelope-domain",
+        "@wrong-envelope-length",
+    ):
+        envelope_bytes = _encode(documents["envelope"])
+        if value == "@raw-envelope-sha":
+            return hashlib.sha256(envelope_bytes).hexdigest()
+        domain = EXECUTION_ENVELOPE_DOMAIN
+        length = len(envelope_bytes)
+        if value == "@wrong-envelope-domain":
+            domain = b"stellaris-m1b-execution-envelope-v1"
+        else:
+            length += 1
+        return hashlib.sha256(
+            domain
+            + b"\x00"
+            + length.to_bytes(8, "big")
+            + envelope_bytes
+        ).hexdigest()
     return copy.deepcopy(value)
 
 
 def _apply_case(base_documents, case):
     documents = copy.deepcopy(base_documents)
+    envelope_changed = False
     for patch in case["patches"]:
         target = documents[patch["target"]]
+        if patch["target"] == "envelope":
+            envelope_changed = True
         operation = patch["operation"]
         path = patch["path"]
         if operation == "reverse":
@@ -461,6 +784,18 @@ def _apply_case(base_documents, case):
             )
         else:
             raise AssertionError("unknown fixture operation")
+    coherent_harness_path = case.get("coherent_harness_path")
+    if coherent_harness_path is not None:
+        _coherently_bind_harness_path(documents, coherent_harness_path)
+        envelope_changed = True
+    if envelope_changed and not case.get(
+        "preserve_runtime_envelope_digest", False
+    ):
+        documents["runtime_acceptance"]["envelope_sha256"] = (
+            _independent_execution_envelope_digest(
+                _encode(documents["envelope"])
+            )
+        )
     return documents
 
 
@@ -480,8 +815,33 @@ def _apply_filesystem_mutations(root, case):
         elif mutation["operation"] == "cwd-symlink":
             path.rmdir()
             path.symlink_to(root / mutation["target"], target_is_directory=True)
+        elif mutation["operation"] == "copy-file":
+            source = root / mutation["source"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(source.read_bytes())
         else:
             raise AssertionError("unknown filesystem mutation")
+
+
+def _case_cli_arguments(paths, root, case, *, include_command):
+    arguments = [
+        paths["contract"],
+        paths["manifest"],
+        paths["acceptance"],
+        paths["envelope"],
+        paths["runtime_acceptance"],
+        str(root),
+    ]
+    variant = case.get("cli_variant")
+    if variant == "missing-runtime-acceptance":
+        del arguments[4]
+    elif variant == "extra-argument":
+        arguments.append("SYNTHETIC_EXTRA_CLI_ARGUMENT_MUST_NOT_ESCAPE")
+    elif variant is not None:
+        raise AssertionError("unknown CLI fixture variant")
+    if include_command:
+        arguments.insert(0, "verify")
+    return arguments
 
 
 def _write_relative(root, relative_path, data):
@@ -624,105 +984,329 @@ class IndependentManifestIdentityTests(unittest.TestCase):
             {"manifest_sha256", "sha256", "self_hash"}.isdisjoint(self.manifest)
         )
         self.assertNotIn(
-            "registry/m1b/offline-executable-tcb-contract-v1.json",
+            "registry/m1b/offline-executable-tcb-contract-v3.json",
             {row["path"] for row in self.manifest["files"]},
         )
 
 
 class PhysicalIdentityAliasTests(unittest.TestCase):
-    RECORD_PATHS = (
-        "records/contract.json",
-        "records/manifest.json",
-        "records/acceptance.json",
-        "records/envelope.json",
-    )
-
-    def _case_variant_manifest(self):
-        manifest = _manifest_for_payloads(ROLE_PAYLOADS)
-        manifest["files"][0]["path"] = "synthetic/CaseAlias.opaque"
-        manifest["files"][1]["path"] = "synthetic/casealias.opaque"
-        manifest["files"].sort(key=lambda row: row["path"].encode("ascii"))
-        return manifest
-
-    def test_lexically_distinct_case_variant_roles_cannot_share_physical_identity(self):
-        manifest = self._case_variant_manifest()
-        aliases = {
-            "synthetic/CaseAlias.opaque": (101, 201),
-            "synthetic/casealias.opaque": (101, 201),
+    @staticmethod
+    def _forced_identity_patch(*paths):
+        native_identities = {
+            (path.stat().st_dev, path.stat().st_ino) for path in paths
         }
-        next_inode = 300
+        native_physical_identity = tcb._physical_identity
 
-        def injected_identity(
-            _root_descriptor,
-            relative_path,
-            _expected_sha256,
-            _verified,
-            total_bytes,
-        ):
-            nonlocal next_inode
-            identity = aliases.get(relative_path)
-            if identity is None:
-                identity = (101, next_inode)
-                next_inode += 1
-            return total_bytes + 1, True, identity
+        def injected_identity(stat_result):
+            native = (stat_result.st_dev, stat_result.st_ino)
+            if native in native_identities:
+                return (101, 201)
+            return native_physical_identity(stat_result)
 
-        with mock.patch.object(
-            tcb,
-            "_verify_executable_identity",
-            side_effect=injected_identity,
-        ):
-            with self.assertRaises(tcb.TCBContractError) as raised:
-                tcb._validate_manifest_bytes(
-                    _independent_manifest_bytes(manifest),
-                    -1,
-                    self.RECORD_PATHS,
-                    set(),
-                    {},
-                    0,
+        return mock.patch.object(
+            tcb, "_physical_identity", side_effect=injected_identity
+        )
+
+    @staticmethod
+    def _admit_executable(index, path, payload, purpose):
+        return index.admit_executable(
+            path,
+            hashlib.sha256(payload).hexdigest(),
+            len(payload),
+            purpose=purpose,
+            size_code="EXECUTABLE_FILE_SIZE_LIMIT",
+        )
+
+    def test_exact_path_same_digest_reuses_bytes_and_mismatch_never_reopens(self):
+        payload = b"synthetic-exact-cache-entry"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            _write_relative(root, "cache/value.opaque", payload)
+            with _root_descriptor(root) as root_fd:
+                index = tcb.AdmittedFileIndex(root_fd)
+                first, added = self._admit_executable(
+                    index, "cache/value.opaque", payload, "manifest_role"
                 )
-        _assert_controlled_error(self, raised, "MANIFEST_PATH_INVALID")
-
-    def test_role_identity_aliasing_each_input_record_is_forbidden(self):
-        manifest = _manifest_for_payloads(ROLE_PAYLOADS)
-        manifest_bytes = _independent_manifest_bytes(manifest)
-        first_path = manifest["files"][0]["path"]
-        for record_index, record_path in enumerate(self.RECORD_PATHS):
-            with self.subTest(record=record_path):
-                record_identity = (401, 500 + record_index)
-                next_inode = 600
-
-                def injected_identity(
-                    _root_descriptor,
-                    relative_path,
-                    _expected_sha256,
-                    _verified,
-                    total_bytes,
-                ):
-                    nonlocal next_inode
-                    if relative_path == first_path:
-                        identity = record_identity
-                    else:
-                        identity = (401, next_inode)
-                        next_inode += 1
-                    return total_bytes + 1, True, identity
-
-                with mock.patch.object(
-                    tcb,
-                    "_verify_executable_identity",
-                    side_effect=injected_identity,
-                ):
+                self.assertTrue(added)
+                with mock.patch.object(tcb.os, "open") as injected_open, mock.patch.object(
+                    tcb.os, "read"
+                ) as injected_read:
+                    second, added = self._admit_executable(
+                        index, "cache/value.opaque", payload, "source_import"
+                    )
+                    self.assertIs(second, first)
+                    self.assertFalse(added)
                     with self.assertRaises(tcb.TCBContractError) as raised:
-                        tcb._validate_manifest_bytes(
-                            manifest_bytes,
-                            -1,
-                            self.RECORD_PATHS,
-                            {record_identity},
-                            {},
-                            0,
+                        index.admit_executable(
+                            "cache/value.opaque",
+                            "f" * 64,
+                            len(payload),
+                            purpose="native_dependency",
+                            size_code="EXECUTABLE_FILE_SIZE_LIMIT",
                         )
                 _assert_controlled_error(
-                    self, raised, "MANIFEST_SELF_ENTRY_FORBIDDEN"
+                    self, raised, "EXECUTION_FILE_HASH_MISMATCH"
                 )
+                injected_open.assert_not_called()
+                injected_read.assert_not_called()
+                self.assertEqual(len(index.by_path), 1)
+                self.assertEqual(len(index.by_identity), 1)
+
+    def test_case_alias_same_and_different_digest_fail_before_content_read(self):
+        scenarios = (
+            (b"same-bytes", b"same-bytes"),
+            (b"first-bytes", b"different-second-bytes"),
+        )
+        for first_payload, second_payload in scenarios:
+            with self.subTest(same=first_payload == second_payload), tempfile.TemporaryDirectory() as raw_root:
+                root = Path(raw_root)
+                first_path = _write_relative(
+                    root, "left/CaseAlias", first_payload
+                )
+                second_path = _write_relative(
+                    root, "right/casealias", second_payload
+                )
+                with self._forced_identity_patch(
+                    first_path, second_path
+                ), _root_descriptor(root) as root_fd:
+                    index = tcb.AdmittedFileIndex(root_fd)
+                    self._admit_executable(
+                        index,
+                        "left/CaseAlias",
+                        first_payload,
+                        "manifest_role:analysis_engine",
+                    )
+                    with mock.patch.object(tcb.os, "read") as injected_read:
+                        with self.assertRaises(tcb.TCBContractError) as raised:
+                            self._admit_executable(
+                                index,
+                                "right/casealias",
+                                second_payload,
+                                "source_import:synthetic_alias",
+                            )
+                    _assert_controlled_error(
+                        self, raised, "PHYSICAL_IDENTITY_ALIAS"
+                    )
+                    injected_read.assert_not_called()
+                    self.assertNotIn("right/casealias", index.by_path)
+
+    def test_all_required_cross_surface_aliases_fail_before_second_read(self):
+        native_path = "synthetic/native/libsynthetic.dylib"
+        native_payload = b"SYNTHETIC-OPAQUE-NATIVE-DEPENDENCY\x00"
+        pairs = (
+            (
+                "input-record-input-record",
+                "contract",
+                "manifest",
+                "INPUT_RECORD_ALIAS_FORBIDDEN",
+            ),
+            (
+                "input-record-runtime-acceptance",
+                "envelope",
+                "runtime_acceptance",
+                "RUNTIME_ACCEPTANCE_ALIAS_FORBIDDEN",
+            ),
+            (
+                "input-record-manifest-role",
+                "contract",
+                "analysis_engine",
+                "PHYSICAL_IDENTITY_ALIAS",
+            ),
+            (
+                "runtime-acceptance-manifest-role",
+                "runtime_acceptance",
+                "analysis_engine",
+                "PHYSICAL_IDENTITY_ALIAS",
+            ),
+            (
+                "two-manifest-roles",
+                "analysis_engine",
+                "contract_validator",
+                "PHYSICAL_IDENTITY_ALIAS",
+            ),
+            (
+                "role-interpreter",
+                "analysis_engine",
+                "interpreter",
+                "PHYSICAL_IDENTITY_ALIAS",
+            ),
+            (
+                "role-source-import",
+                "analysis_engine",
+                "source_import",
+                "PHYSICAL_IDENTITY_ALIAS",
+            ),
+            (
+                "role-extension-import",
+                "analysis_engine",
+                "extension_import",
+                "PHYSICAL_IDENTITY_ALIAS",
+            ),
+            (
+                "interpreter-import",
+                "interpreter",
+                "source_import",
+                "PHYSICAL_IDENTITY_ALIAS",
+            ),
+            (
+                "import-native-dependency",
+                "source_import",
+                "native_dependency",
+                "PHYSICAL_IDENTITY_ALIAS",
+            ),
+        )
+        for label, first_key, second_key, expected in pairs:
+            with self.subTest(pair=label), tempfile.TemporaryDirectory() as raw_root:
+                documents = _positive_documents()
+                for state_name in ("admitted_state", "observed_state"):
+                    documents["envelope"][state_name]["native_dependencies"] = {
+                        "blocker": None,
+                        "dependencies": [
+                            {
+                                "install_name": "libsynthetic.dylib",
+                                "path": native_path,
+                                "sha256": hashlib.sha256(
+                                    native_payload
+                                ).hexdigest(),
+                            }
+                        ],
+                        "status": "bound",
+                    }
+                root = Path(raw_root).resolve()
+                paths = _materialize_documents(
+                    root,
+                    documents,
+                    payloads={
+                        "auxiliary": {native_path: native_payload}
+                    },
+                )
+                role_paths = {
+                    row["role"]: row["path"]
+                    for row in documents["manifest"]["files"]
+                }
+                surfaces = {
+                    "contract": paths["contract"],
+                    "manifest": paths["manifest"],
+                    "envelope": paths["envelope"],
+                    "runtime_acceptance": paths["runtime_acceptance"],
+                    "analysis_engine": role_paths["analysis_engine"],
+                    "contract_validator": role_paths["contract_validator"],
+                    "interpreter": INTERPRETER_PATH,
+                    "source_import": SOURCE_IMPORT_PATH,
+                    "extension_import": EXTENSION_IMPORT_PATH,
+                    "native_dependency": native_path,
+                }
+                first_path = root / surfaces[first_key]
+                second_path = root / surfaces[second_key]
+                second_native = (
+                    second_path.stat().st_dev,
+                    second_path.stat().st_ino,
+                )
+                native_read = os.read
+                second_reads = []
+
+                def tracked_read(descriptor, count):
+                    observed = os.fstat(descriptor)
+                    if (observed.st_dev, observed.st_ino) == second_native:
+                        second_reads.append(count)
+                    return native_read(descriptor, count)
+
+                with self._forced_identity_patch(
+                    first_path, second_path
+                ), mock.patch.object(
+                    tcb.os, "read", side_effect=tracked_read
+                ):
+                    result = tcb.verify_paths(
+                        paths["contract"],
+                        paths["manifest"],
+                        paths["acceptance"],
+                        paths["envelope"],
+                        paths["runtime_acceptance"],
+                        str(root),
+                    )
+                self.assertEqual(result["status"], "error")
+                self.assertEqual(result["codes"], [expected])
+                self.assertEqual(second_reads, [])
+
+    def test_changed_inode_bytes_are_not_read_and_alias_cannot_succeed(self):
+        first_payload = b"synthetic-admitted-before-mutation"
+        second_payload = b"synthetic-alias-never-read"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            first_path = _write_relative(
+                root, "left/CaseAlias", first_payload
+            )
+            second_path = _write_relative(
+                root, "right/casealias", second_payload
+            )
+            with self._forced_identity_patch(
+                first_path, second_path
+            ), _root_descriptor(root) as root_fd:
+                index = tcb.AdmittedFileIndex(root_fd)
+                first, _ = self._admit_executable(
+                    index, "left/CaseAlias", first_payload, "interpreter"
+                )
+                first_path.write_bytes(b"changed-after-admission-same-inode")
+                with mock.patch.object(tcb.os, "read") as injected_read:
+                    with self.assertRaises(tcb.TCBContractError) as raised:
+                        self._admit_executable(
+                            index,
+                            "right/casealias",
+                            second_payload,
+                            "source_import",
+                        )
+                _assert_controlled_error(
+                    self, raised, "PHYSICAL_IDENTITY_ALIAS"
+                )
+                injected_read.assert_not_called()
+                self.assertEqual(first.data, first_payload)
+                self.assertNotIn("right/casealias", index.by_path)
+
+    def test_alias_primary_survives_close_failure_and_each_fd_is_attempted_once(self):
+        first_payload = b"synthetic-first-close-precedence"
+        second_payload = b"synthetic-alias-close-precedence"
+        marker = "SYNTHETIC_ALIAS_CLOSE_FAILURE_MUST_NOT_ESCAPE"
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            first_path = _write_relative(
+                root, "left/CaseAlias", first_payload
+            )
+            second_path = _write_relative(
+                root, "right/casealias", second_payload
+            )
+            with self._forced_identity_patch(
+                first_path, second_path
+            ), _root_descriptor(root) as root_fd:
+                index = tcb.AdmittedFileIndex(root_fd)
+                self._admit_executable(
+                    index, "left/CaseAlias", first_payload, "manifest_role"
+                )
+                with _injected_close_failure(marker) as (
+                    _injected_open,
+                    injected_close,
+                    opened,
+                ), mock.patch.object(tcb.os, "read") as injected_read:
+                    with self.assertRaises(tcb.TCBContractError) as raised:
+                        self._admit_executable(
+                            index,
+                            "right/casealias",
+                            second_payload,
+                            "extension_import",
+                        )
+                _assert_controlled_error(
+                    self, raised, "PHYSICAL_IDENTITY_ALIAS"
+                )
+                injected_read.assert_not_called()
+                self.assertEqual(injected_close.call_count, len(opened))
+                self.assertEqual(
+                    Counter(
+                        call.args[0]
+                        for call in injected_close.call_args_list
+                    ),
+                    Counter(opened),
+                )
+                self.assertNotIn(marker, str(raised.exception))
+                self.assertNotIn("right/casealias", index.by_path)
 
     def test_reader_publishes_identity_only_after_successful_close(self):
         payload = b"synthetic-identity-after-close"
@@ -774,7 +1358,7 @@ class IndependentContractIdentityTests(unittest.TestCase):
         self.assertEqual(contract_bytes, _encode(contract))
         self.assertEqual(contract["contract_schema"], CONTRACT_SCHEMA)
         self.assertEqual(contract["contract_version"], CONTRACT_VERSION)
-        self.assertEqual(contract["contract_generation"], 1)
+        self.assertEqual(contract["contract_generation"], CONTRACT_GENERATION)
         self.assertEqual(contract["protocol_generation"], PROTOCOL_GENERATION)
         self.assertTrue(
             {"contract_sha256", "sha256", "self_hash"}.isdisjoint(contract)
@@ -802,6 +1386,76 @@ class IndependentContractIdentityTests(unittest.TestCase):
         self.assertNotEqual(expected, _independent_contract_digest(bytes(changed)))
 
 
+class IndependentEnvelopeAndRuntimeAcceptanceIdentityTests(unittest.TestCase):
+    def setUp(self):
+        self.documents = _positive_documents()
+        self.envelope_bytes = _encode(self.documents["envelope"])
+        self.runtime_bytes = _encode(self.documents["runtime_acceptance"])
+
+    def test_envelope_digest_binds_domain_nul_length_and_canonical_lf(self):
+        expected = _independent_execution_envelope_digest(
+            self.envelope_bytes
+        )
+        self.assertEqual(
+            self.documents["runtime_acceptance"]["envelope_sha256"],
+            expected,
+        )
+        if hasattr(tcb, "execution_envelope_digest"):
+            self.assertEqual(
+                tcb.execution_envelope_digest(self.envelope_bytes), expected
+            )
+        raw = hashlib.sha256(self.envelope_bytes).hexdigest()
+        wrong_domain = hashlib.sha256(
+            b"stellaris-m1b-execution-envelope-v1"
+            + b"\x00"
+            + len(self.envelope_bytes).to_bytes(8, "big")
+            + self.envelope_bytes
+        ).hexdigest()
+        wrong_length = hashlib.sha256(
+            EXECUTION_ENVELOPE_DOMAIN
+            + b"\x00"
+            + (len(self.envelope_bytes) + 1).to_bytes(8, "big")
+            + self.envelope_bytes
+        ).hexdigest()
+        self.assertNotEqual(expected, raw)
+        self.assertNotEqual(expected, wrong_domain)
+        self.assertNotEqual(expected, wrong_length)
+        self.assertEqual(self.envelope_bytes, _encode(self.documents["envelope"]))
+
+    def test_runtime_acceptance_has_exact_sixteen_fields_and_external_identity(self):
+        record = self.documents["runtime_acceptance"]
+        self.assertEqual(
+            tuple(sorted(record)),
+            (
+                "contract_generation",
+                "contract_schema",
+                "contract_sha256",
+                "contract_version",
+                "envelope_digest_domain",
+                "envelope_digest_framing",
+                "envelope_generation",
+                "envelope_schema",
+                "envelope_sha256",
+                "implementation_generation",
+                "manifest_schema",
+                "manifest_sha256",
+                "protocol_generation",
+                "runtime_acceptance_generation",
+                "runtime_acceptance_schema",
+                "runtime_acceptance_state",
+            ),
+        )
+        self.assertEqual(record["runtime_acceptance_schema"], RUNTIME_ACCEPTANCE_SCHEMA)
+        self.assertEqual(record["runtime_acceptance_generation"], 1)
+        self.assertEqual(record["runtime_acceptance_state"], "owner_accepted")
+        expected = _independent_runtime_acceptance_digest(self.runtime_bytes)
+        if hasattr(tcb, "runtime_acceptance_digest"):
+            self.assertEqual(tcb.runtime_acceptance_digest(self.runtime_bytes), expected)
+        self.assertNotEqual(
+            expected, hashlib.sha256(self.runtime_bytes).hexdigest()
+        )
+
+
 class TCBAdmissionFixtureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -810,12 +1464,13 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
         cls.base_documents = _positive_documents()
 
     def test_fixture_identity_count_and_required_adversarial_matrix(self):
+        self.assertEqual(len(self.cases_bytes), EXPECTED_CASE_BYTES)
         self.assertEqual(
             hashlib.sha256(self.cases_bytes).hexdigest(),
             EXPECTED_CASES_SHA256,
         )
         self.assertEqual(
-            self.fixture["fixture_schema"], "m1b-tcb-admission-cases-v1"
+            self.fixture["fixture_schema"], "m1b-tcb-admission-cases-v4"
         )
         self.assertEqual(len(self.fixture["cases"]), EXPECTED_CASE_COUNT)
         ids = [case["id"] for case in self.fixture["cases"]]
@@ -829,6 +1484,108 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
             sum(case["expected"]["status"] == "ok" for case in self.fixture["cases"]),
             1,
         )
+        self.assertEqual(
+            hashlib.sha256(VERIFIER.read_bytes()).hexdigest(),
+            EXPECTED_VERIFIER_SHA256,
+        )
+
+    def test_coherent_harness_cases_rebind_every_authority_surface_and_payload(self):
+        coherent_cases = [
+            case
+            for case in self.fixture["cases"]
+            if "coherent_harness_path" in case
+        ]
+        self.assertEqual(len(coherent_cases), 5)
+        old_harness_path, (_role, harness_payload) = next(
+            (path, row)
+            for path, row in ROLE_PAYLOADS.items()
+            if row[0] == "provider_request_harness"
+        )
+        for case in coherent_cases:
+            with self.subTest(case=case["id"]), tempfile.TemporaryDirectory() as raw_root:
+                harness_path = case["coherent_harness_path"]
+                documents = _apply_case(self.base_documents, case)
+                provider = next(
+                    row
+                    for row in documents["manifest"]["files"]
+                    if row["role"] == "provider_request_harness"
+                )
+                manifest_sha256 = _independent_manifest_digest(
+                    _independent_manifest_bytes(documents["manifest"])
+                )
+                self.assertEqual(provider["path"], harness_path)
+                self.assertEqual(
+                    provider["sha256"],
+                    hashlib.sha256(harness_payload).hexdigest(),
+                )
+                self.assertEqual(
+                    [row["path"] for row in documents["manifest"]["files"]],
+                    sorted(
+                        (row["path"] for row in documents["manifest"]["files"]),
+                        key=lambda value: value.encode("ascii"),
+                    ),
+                )
+                self.assertEqual(
+                    set(documents["acceptance"]),
+                    {
+                        "acceptance_state",
+                        "implementation_generation",
+                        "manifest_schema",
+                        "manifest_sha256",
+                        "protocol_generation",
+                    },
+                )
+                self.assertEqual(
+                    documents["acceptance"]["manifest_sha256"],
+                    manifest_sha256,
+                )
+                self.assertEqual(
+                    documents["envelope"]["manifest_sha256"],
+                    manifest_sha256,
+                )
+                self.assertEqual(
+                    documents["runtime_acceptance"]["manifest_sha256"],
+                    manifest_sha256,
+                )
+                self.assertEqual(
+                    documents["runtime_acceptance"]["envelope_sha256"],
+                    _independent_execution_envelope_digest(
+                        _encode(documents["envelope"])
+                    ),
+                )
+                self.assertEqual(
+                    documents["envelope"]["admitted_state"],
+                    documents["envelope"]["observed_state"],
+                )
+                for state_name in ("admitted_state", "observed_state"):
+                    state = documents["envelope"][state_name]
+                    self.assertEqual(
+                        state["execution_plan"]["entrypoint"],
+                        {
+                            "mode": "descriptor_script_file",
+                            "repository_locator": harness_path,
+                            "role": "provider_request_harness",
+                            "sha256": provider["sha256"],
+                        },
+                    )
+                    self.assertEqual(
+                        state["invocation"]["argv_tail"][-1], "/dev/fd/3"
+                    )
+                    self.assertEqual(
+                        state["invocation"]["inherited_fds"][0][
+                            "repository_locator"
+                        ],
+                        harness_path,
+                    )
+                root = Path(raw_root).resolve()
+                _materialize_documents(
+                    root,
+                    documents,
+                    refresh_runtime_acceptance=False,
+                    coherent_harness_path=harness_path,
+                )
+                self.assertEqual((root / harness_path).read_bytes(), harness_payload)
+                self.assertFalse((root / old_harness_path).exists())
 
     def test_all_table_cases_return_exact_controlled_result(self):
         for case in self.fixture["cases"]:
@@ -839,14 +1596,19 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
                     root,
                     documents,
                     encodings=case.get("encoding"),
+                    path_overrides=case.get("paths"),
+                    refresh_runtime_acceptance=False,
+                    coherent_harness_path=case.get(
+                        "coherent_harness_path"
+                    ),
                 )
                 _apply_filesystem_mutations(root, case)
-                result = tcb.verify_paths(
-                    paths["contract"],
-                    paths["manifest"],
-                    paths["acceptance"],
-                    paths["envelope"],
-                    str(root),
+                result = tcb._execute(
+                    tuple(
+                        _case_cli_arguments(
+                            paths, root, case, include_command=True
+                        )
+                    )
                 )
 
                 self.assertEqual(result["status"], case["expected"]["status"])
@@ -867,8 +1629,8 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
                         {
                             "contract_records": 1,
                             "executable_files": 7,
-                            "import_entries": 4,
-                            "linkage_records": 2,
+                            "import_entries": 7,
+                            "linkage_records": 3,
                         },
                     )
                 else:
@@ -887,19 +1649,18 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
                     root,
                     documents,
                     encodings=case.get("encoding"),
+                    path_overrides=case.get("paths"),
+                    refresh_runtime_acceptance=False,
+                    coherent_harness_path=case.get(
+                        "coherent_harness_path"
+                    ),
                 )
                 _apply_filesystem_mutations(root, case)
                 completed = subprocess.run(
-                    [
-                        sys.executable,
-                        str(VERIFIER),
-                        "verify",
-                        paths["contract"],
-                        paths["manifest"],
-                        paths["acceptance"],
-                        paths["envelope"],
-                        str(root),
-                    ],
+                    [sys.executable, str(VERIFIER)]
+                    + _case_cli_arguments(
+                        paths, root, case, include_command=True
+                    ),
                     cwd=REPOSITORY_ROOT,
                     check=False,
                     stdout=subprocess.PIPE,
@@ -932,6 +1693,10 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
                     mutation["marker"].encode("ascii")
                     for mutation in case.get("filesystem", ())
                     if "marker" in mutation
+                ) + tuple(
+                    [case["coherent_harness_path"].encode("ascii")]
+                    if "coherent_harness_path" in case
+                    else []
                 ):
                     self.assertNotIn(forbidden, combined)
 
@@ -964,6 +1729,7 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
                     paths["manifest"],
                     paths["acceptance"],
                     paths["envelope"],
+                    paths["runtime_acceptance"],
                     str(root),
                 )
             after_modules = set(sys.modules)
@@ -1001,6 +1767,7 @@ class TCBAdmissionFixtureTests(unittest.TestCase):
                 paths["manifest"],
                 paths["acceptance"],
                 paths["envelope"],
+                paths["runtime_acceptance"],
                 str(root),
             )
         serialized = json.dumps(result, sort_keys=True)
@@ -1146,13 +1913,14 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
                 paths["manifest"],
                 paths["acceptance"],
                 paths["envelope"],
+                paths["runtime_acceptance"],
                 str(root),
             )
 
     def test_declared_import_order_is_exact_not_silently_alphabetized(self):
         documents = copy.deepcopy(self.base_documents)
         imports = documents["envelope"]["admitted_state"]["imports"]
-        reordered = [imports[index] for index in (3, 0, 2, 1)]
+        reordered = [imports[index] for index in (2, 0, 1, 3, 4, 5, 6)]
         modules = [row["module"] for row in reordered]
         self.assertNotEqual(modules, sorted(modules, key=lambda value: value.encode("ascii")))
         documents["envelope"]["admitted_state"]["imports"] = copy.deepcopy(
@@ -1163,33 +1931,63 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
         )
         result = self._verify(documents)
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["counts"]["import_entries"], 4)
+        self.assertEqual(result["counts"]["import_entries"], 7)
 
     def test_sys_path_declared_order_is_not_silently_alphabetized(self):
         invocation = copy.deepcopy(
             self.base_documents["envelope"]["admitted_state"]["invocation"]
         )
-        invocation["sys_path"] = ["synthetic/a", "synthetic/A"]
-        validated, paths = tcb._validate_invocation(invocation)
+        invocation["sys_path"] = [
+            {"base": "repository_root", "path": "synthetic/a"},
+            {"base": "repository_root", "path": "synthetic/A"},
+        ]
+        state = self.base_documents["envelope"]["admitted_state"]
+        harness_path, (_role, harness_bytes) = next(
+            (path, row)
+            for path, row in ROLE_PAYLOADS.items()
+            if row[0] == "provider_request_harness"
+        )
+        provider_entry = tcb.AdmittedFile(
+            harness_path,
+            harness_bytes,
+            hashlib.sha256(harness_bytes).hexdigest(),
+            (1, 1),
+            is_record=False,
+            purpose="test_provider_harness",
+        )
+        manifest_bindings = {
+            "provider_request_harness": provider_entry
+        }
+        validated, paths = tcb._validate_invocation(
+            invocation,
+            state["interpreter"],
+            state["execution_plan"],
+            manifest_bindings,
+            state["bytecode"],
+            state["environment"],
+        )
         self.assertEqual(paths, ("synthetic/a", "synthetic/A"))
-        self.assertEqual(validated["sys_path"], ["synthetic/a", "synthetic/A"])
+        self.assertEqual(validated["sys_path"], invocation["sys_path"])
         self.assertNotEqual(
             list(paths), sorted(paths, key=lambda value: value.encode("ascii"))
         )
-        invocation["sys_path"] = ["synthetic/a", "synthetic/a"]
+        invocation["sys_path"] = [
+            {"base": "repository_root", "path": "synthetic/a"},
+            {"base": "repository_root", "path": "synthetic/a"},
+        ]
         with self.assertRaises(tcb.TCBContractError) as raised:
-            tcb._validate_invocation(invocation)
+            tcb._validate_invocation(
+                invocation,
+                state["interpreter"],
+                state["execution_plan"],
+                manifest_bindings,
+                state["bytecode"],
+                state["environment"],
+            )
         _assert_controlled_error(self, raised, "INVOCATION_POLICY_INVALID")
 
-    def test_repeated_manifest_import_path_reuses_admitted_bytes_without_reopen(self):
+    def test_manifest_roles_interpreter_and_imports_reuse_admitted_bytes_without_reopen(self):
         documents = copy.deepcopy(self.base_documents)
-        manifest_row = documents["manifest"]["files"][1]
-        for state_name in ("admitted_state", "observed_state"):
-            state = documents["envelope"][state_name]
-            state["imports"][2]["path"] = manifest_row["path"]
-            state["imports"][2]["sha256"] = manifest_row["sha256"]
-            state["invocation"]["sys_path"] = ["synthetic"]
-
         native_open = os.open
         opened_leaf_names = []
 
@@ -1206,20 +2004,27 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
                     paths["manifest"],
                     paths["acceptance"],
                     paths["envelope"],
+                    paths["runtime_acceptance"],
                     str(root),
                 )
 
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["counts"]["executable_files"], 6)
-        self.assertEqual(
-            opened_leaf_names.count("contract-validator.opaque"), 1
-        )
+        self.assertEqual(result["counts"]["executable_files"], 7)
+        for relative_path in tuple(ROLE_PAYLOADS) + tuple(AUXILIARY_PAYLOADS):
+            self.assertEqual(
+                opened_leaf_names.count(relative_path.rsplit("/", 1)[-1]),
+                1,
+                relative_path,
+            )
 
     def test_executable_total_exact_boundary_and_one_unique_byte_over_fail_closed(self):
         role_payloads = {}
         for index, (path, (role, _payload)) in enumerate(ROLE_PAYLOADS.items()):
             role_payloads[path] = (role, bytes((65 + index,)) * 16)
-
+        auxiliary_payloads = {
+            path: bytes((75 + index,)) * 16
+            for index, path in enumerate(AUXILIARY_PAYLOADS)
+        }
         manifest = _manifest_for_payloads(role_payloads)
         manifest_bytes = _independent_manifest_bytes(manifest)
         manifest_sha256 = _independent_manifest_digest(manifest_bytes)
@@ -1228,47 +2033,47 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
             "manifest": manifest,
             "acceptance": _acceptance_for_manifest(manifest_sha256),
             "envelope": _envelope_for_manifest(
-                manifest_sha256, AUXILIARY_PAYLOADS
+                manifest,
+                manifest_sha256,
+                auxiliary_payloads,
+                role_payloads,
             ),
         }
-        manifest_rows = documents["manifest"]["files"]
-        for state_name in ("admitted_state", "observed_state"):
-            state = documents["envelope"][state_name]
-            state["interpreter"]["executable_path"] = manifest_rows[0]["path"]
-            state["interpreter"]["executable_sha256"] = manifest_rows[0]["sha256"]
-            for import_index, manifest_index in ((1, 2), (2, 1)):
-                state["imports"][import_index]["path"] = manifest_rows[manifest_index]["path"]
-                state["imports"][import_index]["sha256"] = manifest_rows[manifest_index]["sha256"]
-            for import_index in (0, 3):
-                state["imports"][import_index]["sha256"] = manifest_rows[0]["sha256"]
-            state["invocation"]["sys_path"] = ["synthetic"]
-
+        documents["runtime_acceptance"] = _runtime_acceptance_for_envelope(
+            documents["envelope"], manifest_sha256
+        )
         with mock.patch.object(
-            tcb, "MAX_EXECUTABLE_FILE_BYTES", 16
-        ), mock.patch.object(tcb, "MAX_EXECUTABLE_TOTAL_BYTES", 64):
+            tcb, "MAX_EXECUTABLE_FILE_BYTES", 17
+        ), mock.patch.object(tcb, "MAX_EXECUTABLE_TOTAL_BYTES", 112):
             result = self._verify(
-                documents, payloads={"roles": role_payloads}
+                documents,
+                payloads={
+                    "roles": role_payloads,
+                    "auxiliary": auxiliary_payloads,
+                },
             )
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["counts"]["executable_files"], 4)
+        self.assertEqual(result["counts"]["executable_files"], 7)
 
         over_documents = copy.deepcopy(documents)
-        interpreter_sha256 = hashlib.sha256(
-            AUXILIARY_PAYLOADS[INTERPRETER_PATH]
+        over_auxiliary_payloads = dict(auxiliary_payloads)
+        over_auxiliary_payloads[EXTENSION_IMPORT_PATH] = b"Z" * 17
+        extension_sha256 = hashlib.sha256(
+            over_auxiliary_payloads[EXTENSION_IMPORT_PATH]
         ).hexdigest()
         for state_name in ("admitted_state", "observed_state"):
-            interpreter = over_documents["envelope"][state_name]["interpreter"]
-            interpreter["executable_path"] = INTERPRETER_PATH
-            interpreter["executable_sha256"] = interpreter_sha256
-            for import_index in (0, 3):
-                over_documents["envelope"][state_name]["imports"][import_index][
-                    "sha256"
-                ] = interpreter_sha256
+            over_documents["envelope"][state_name]["imports"][1][
+                "sha256"
+            ] = extension_sha256
         with mock.patch.object(
-            tcb, "MAX_EXECUTABLE_FILE_BYTES", 16
-        ), mock.patch.object(tcb, "MAX_EXECUTABLE_TOTAL_BYTES", 64):
+            tcb, "MAX_EXECUTABLE_FILE_BYTES", 17
+        ), mock.patch.object(tcb, "MAX_EXECUTABLE_TOTAL_BYTES", 112):
             result = self._verify(
-                over_documents, payloads={"roles": role_payloads}
+                over_documents,
+                payloads={
+                    "roles": role_payloads,
+                    "auxiliary": over_auxiliary_payloads,
+                },
             )
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["codes"], ["EXECUTABLE_TOTAL_SIZE_LIMIT"])
@@ -1285,7 +2090,7 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
                 "path": None,
                 "sha256": interpreter_sha256,
             }
-            for index in range(tcb.MAX_IMPORT_ENTRIES - 4)
+            for index in range(tcb.MAX_IMPORT_ENTRIES - 7)
         ]
         for state_name in ("admitted_state", "observed_state"):
             documents["envelope"][state_name]["imports"].extend(
@@ -1324,11 +2129,349 @@ class ExecutionPolicyBoundaryTests(unittest.TestCase):
             tcb, "_verify_executable_identity"
         ) as verify_identity:
             with self.assertRaises(tcb.TCBContractError) as raised:
-                tcb._validate_native_dependencies(value, -1, {}, 0)
+                tcb._validate_native_dependencies(value, None, 0)
         _assert_controlled_error(
             self, raised, "NATIVE_DEPENDENCY_POLICY_INVALID"
         )
         verify_identity.assert_not_called()
+
+
+class AtomicEntrypointTransportBoundaryTests(unittest.TestCase):
+    def test_snapshot_is_one_atomic_write_and_writer_closes_before_read(self):
+        payload = b'SYNTHETIC_ROLE = "provider_request_harness"\n'
+        native_pipe = os.pipe
+        native_write = os.write
+        native_read = os.read
+        native_close = os.close
+        pair = []
+        events = []
+
+        def tracked_pipe():
+            descriptors = native_pipe()
+            pair.extend(descriptors)
+            events.append(("pipe", descriptors))
+            return descriptors
+
+        def tracked_write(descriptor, data):
+            events.append(("write", descriptor, bytes(data)))
+            return native_write(descriptor, data)
+
+        def tracked_read(descriptor, size):
+            events.append(("read", descriptor, size))
+            return native_read(descriptor, size)
+
+        def tracked_close(descriptor):
+            events.append(("close", descriptor))
+            native_close(descriptor)
+
+        with mock.patch.object(
+            tcb.os, "pipe", side_effect=tracked_pipe
+        ), mock.patch.object(
+            tcb.os, "write", side_effect=tracked_write
+        ), mock.patch.object(
+            tcb.os, "read", side_effect=tracked_read
+        ), mock.patch.object(
+            tcb.os, "close", side_effect=tracked_close
+        ):
+            tcb._verify_atomic_entrypoint_snapshot(payload)
+
+        self.assertEqual(len(pair), 2)
+        read_descriptor, write_descriptor = pair
+        writes = [event for event in events if event[0] == "write"]
+        self.assertEqual(writes, [("write", write_descriptor, payload)])
+        writer_close = events.index(("close", write_descriptor))
+        first_read = next(
+            index for index, event in enumerate(events) if event[0] == "read"
+        )
+        self.assertLess(writer_close, first_read)
+        self.assertEqual(
+            Counter(
+                event[1] for event in events if event[0] == "close"
+            ),
+            Counter((read_descriptor, write_descriptor)),
+        )
+
+    def test_empty_and_over_atomic_bound_fail_before_pipe_creation(self):
+        for payload in (b"", b"x" * (tcb.MAX_ATOMIC_ENTRYPOINT_BYTES + 1)):
+            with self.subTest(size=len(payload)), mock.patch.object(
+                tcb.os, "pipe"
+            ) as injected_pipe:
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._verify_atomic_entrypoint_snapshot(payload)
+                _assert_controlled_error(
+                    self, raised, "ENTRYPOINT_TRANSPORT_SIZE_LIMIT"
+                )
+                injected_pipe.assert_not_called()
+
+    def test_short_and_zero_atomic_write_fail_and_close_each_end_once(self):
+        for returned in (0, 1):
+            native_pipe = os.pipe
+            native_close = os.close
+            pair = []
+            close_attempts = []
+
+            def tracked_pipe():
+                descriptors = native_pipe()
+                pair.extend(descriptors)
+                return descriptors
+
+            def tracked_close(descriptor):
+                close_attempts.append(descriptor)
+                native_close(descriptor)
+
+            with self.subTest(returned=returned), mock.patch.object(
+                tcb.os, "pipe", side_effect=tracked_pipe
+            ), mock.patch.object(
+                tcb.os, "write", return_value=returned
+            ), mock.patch.object(
+                tcb.os, "close", side_effect=tracked_close
+            ):
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._verify_atomic_entrypoint_snapshot(b"synthetic")
+            _assert_controlled_error(
+                self, raised, "ENTRYPOINT_TRANSPORT_IO_FAILED"
+            )
+            self.assertEqual(Counter(close_attempts), Counter(pair))
+
+    def test_early_eof_extra_and_wrong_transport_bytes_fail_closed(self):
+        payload = b"synthetic"
+        scenarios = (
+            ("early_eof", [b""], "ENTRYPOINT_TRANSPORT_IO_FAILED"),
+            (
+                "extra",
+                [payload, b"x"],
+                "ENTRYPOINT_TRANSPORT_IO_FAILED",
+            ),
+            (
+                "wrong",
+                [b"synthetiX", b""],
+                "ENTRYPOINT_TRANSPORT_BINDING_MISMATCH",
+            ),
+        )
+        for scenario, reads, code in scenarios:
+            with self.subTest(scenario=scenario), mock.patch.object(
+                tcb.os, "read", side_effect=reads
+            ):
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._verify_atomic_entrypoint_snapshot(payload)
+            _assert_controlled_error(self, raised, code)
+
+    def test_write_exception_primary_survives_reader_close_failure(self):
+        marker = "SYNTHETIC_TRANSPORT_FAILURE_MUST_NOT_ESCAPE"
+        native_pipe = os.pipe
+        native_close = os.close
+        pair = []
+        close_attempts = []
+
+        def tracked_pipe():
+            descriptors = native_pipe()
+            pair.extend(descriptors)
+            return descriptors
+
+        def fail_close(descriptor):
+            close_attempts.append(descriptor)
+            raise OSError(marker)
+
+        try:
+            with mock.patch.object(
+                tcb.os, "pipe", side_effect=tracked_pipe
+            ), mock.patch.object(
+                tcb.os, "write", side_effect=OSError(marker)
+            ), mock.patch.object(
+                tcb.os, "close", side_effect=fail_close
+            ):
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._verify_atomic_entrypoint_snapshot(b"synthetic")
+        finally:
+            for descriptor in pair:
+                try:
+                    native_close(descriptor)
+                except OSError:
+                    pass
+
+        _assert_controlled_error(
+            self, raised, "ENTRYPOINT_TRANSPORT_IO_FAILED"
+        )
+        self.assertNotIn(marker, str(raised.exception))
+        self.assertEqual(Counter(close_attempts), Counter(pair))
+
+    def test_writer_close_failure_is_not_retried_and_blocks_success(self):
+        marker = "SYNTHETIC_TRANSPORT_CLOSE_FAILURE_MUST_NOT_ESCAPE"
+        native_pipe = os.pipe
+        native_close = os.close
+        pair = []
+        close_attempts = []
+
+        def tracked_pipe():
+            descriptors = native_pipe()
+            pair.extend(descriptors)
+            return descriptors
+
+        def fail_writer_close(descriptor):
+            close_attempts.append(descriptor)
+            if pair and descriptor == pair[1]:
+                raise OSError(marker)
+            native_close(descriptor)
+
+        try:
+            with mock.patch.object(
+                tcb.os, "pipe", side_effect=tracked_pipe
+            ), mock.patch.object(
+                tcb.os, "close", side_effect=fail_writer_close
+            ):
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._verify_atomic_entrypoint_snapshot(b"synthetic")
+        finally:
+            if pair:
+                try:
+                    native_close(pair[1])
+                except OSError:
+                    pass
+
+        _assert_controlled_error(
+            self, raised, "ENTRYPOINT_TRANSPORT_CLOSE_FAILED"
+        )
+        self.assertNotIn(marker, str(raised.exception))
+        self.assertEqual(Counter(close_attempts), Counter(pair))
+
+    def test_pipe_buf_below_pinned_bound_fails_without_write(self):
+        with mock.patch.object(
+            tcb.os, "fpathconf", return_value=tcb.MAX_ATOMIC_ENTRYPOINT_BYTES - 1
+        ), mock.patch.object(tcb.os, "write") as injected_write:
+            with self.assertRaises(tcb.TCBContractError) as raised:
+                tcb._verify_atomic_entrypoint_snapshot(b"synthetic")
+        _assert_controlled_error(
+            self, raised, "ENTRYPOINT_TRANSPORT_SIZE_LIMIT"
+        )
+        injected_write.assert_not_called()
+
+    def test_wrong_pipe_end_type_access_and_inheritability_fail_closed(self):
+        native_pipe = os.pipe
+        scenarios = ("regular", "swapped", "inheritable")
+        for scenario in scenarios:
+            descriptors = []
+            if scenario == "regular":
+                first_raw = tempfile.TemporaryFile()
+                second_raw = tempfile.TemporaryFile()
+                first = os.dup(first_raw.fileno())
+                second = os.dup(second_raw.fileno())
+                first_raw.close()
+                second_raw.close()
+                supplied = (first, second)
+            else:
+                read_descriptor, write_descriptor = native_pipe()
+                if scenario == "inheritable":
+                    os.set_inheritable(read_descriptor, True)
+                    supplied = (read_descriptor, write_descriptor)
+                else:
+                    supplied = (write_descriptor, read_descriptor)
+            descriptors.extend(supplied)
+            with self.subTest(scenario=scenario), mock.patch.object(
+                tcb.os, "pipe", return_value=supplied
+            ):
+                with self.assertRaises(tcb.TCBContractError) as raised:
+                    tcb._verify_atomic_entrypoint_snapshot(b"synthetic")
+            _assert_controlled_error(
+                self, raised, "ENTRYPOINT_TRANSPORT_IO_FAILED"
+            )
+            for descriptor in set(descriptors):
+                with self.assertRaises(OSError):
+                    os.fstat(descriptor)
+
+    def test_duplicate_or_closed_reused_pipe_fd_never_succeeds(self):
+        native_pipe = os.pipe
+        read_descriptor, write_descriptor = native_pipe()
+        try:
+            with mock.patch.object(
+                tcb.os,
+                "pipe",
+                return_value=(read_descriptor, read_descriptor),
+            ):
+                with self.assertRaises(tcb.TCBContractError) as duplicate:
+                    tcb._verify_atomic_entrypoint_snapshot(b"synthetic")
+            _assert_controlled_error(
+                self, duplicate, "ENTRYPOINT_TRANSPORT_IO_FAILED"
+            )
+        finally:
+            try:
+                os.close(write_descriptor)
+            except OSError:
+                pass
+
+        closed_descriptor, live_descriptor = native_pipe()
+        os.close(closed_descriptor)
+        try:
+            with mock.patch.object(
+                tcb.os,
+                "pipe",
+                return_value=(closed_descriptor, live_descriptor),
+            ):
+                with self.assertRaises(tcb.TCBContractError) as reused:
+                    tcb._verify_atomic_entrypoint_snapshot(b"synthetic")
+            _assert_controlled_error(
+                self, reused, "ENTRYPOINT_TRANSPORT_IO_FAILED"
+            )
+        finally:
+            try:
+                os.close(live_descriptor)
+            except OSError:
+                pass
+
+    def test_snapshot_uses_cached_bytes_after_source_path_mutation(self):
+        admitted = b'SYNTHETIC_ROLE = "provider_request_harness"\n'
+        mutated = b'SYNTHETIC_ROLE = "mutated_path"\n'
+        native_write = os.write
+        observed_writes = []
+        with tempfile.TemporaryDirectory() as raw_root:
+            source = Path(raw_root) / "provider.py"
+            source.write_bytes(admitted)
+            cached = source.read_bytes()
+            source.write_bytes(mutated)
+
+            def capture_write(descriptor, data):
+                observed_writes.append(bytes(data))
+                return native_write(descriptor, data)
+
+            with mock.patch.object(
+                tcb.os, "write", side_effect=capture_write
+            ):
+                tcb._verify_atomic_entrypoint_snapshot(cached)
+
+            self.assertEqual(observed_writes, [admitted])
+            self.assertEqual(source.read_bytes(), mutated)
+
+    def test_transport_failure_cli_output_is_controlled_and_stderr_free(self):
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root).resolve()
+            paths = _materialize_documents(root, _positive_documents())
+            arguments = (
+                "verify",
+                paths["contract"],
+                paths["manifest"],
+                paths["acceptance"],
+                paths["envelope"],
+                paths["runtime_acceptance"],
+                str(root),
+            )
+            stdout_bytes = io.BytesIO()
+            stderr_bytes = io.BytesIO()
+            stdout = io.TextIOWrapper(stdout_bytes, encoding="utf-8")
+            stderr = io.TextIOWrapper(stderr_bytes, encoding="utf-8")
+            with mock.patch.object(
+                tcb.os, "write", return_value=0
+            ), mock.patch.object(sys, "stdout", stdout), mock.patch.object(
+                sys, "stderr", stderr
+            ):
+                exit_code = tcb.main(arguments)
+                stdout.flush()
+                stderr.flush()
+            result = json.loads(stdout_bytes.getvalue())
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stderr_bytes.getvalue(), b"")
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["codes"], ["ENTRYPOINT_TRANSPORT_IO_FAILED"])
+        self.assertEqual(result["counts"], tcb._empty_counts())
 
 
 class RootedStableReadBoundaryTests(unittest.TestCase):
@@ -1645,6 +2788,7 @@ class RootedStableReadBoundaryTests(unittest.TestCase):
                     "manifest.json",
                     "acceptance.json",
                     "envelope.json",
+                    "runtime-acceptance.json",
                     str(root),
                 )
 
@@ -1661,7 +2805,12 @@ class RootedStableReadBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw_root:
             root = Path(raw_root).resolve()
             _write_relative(root, "contract.json", b"{}")
-            for name in ("manifest.json", "acceptance.json", "envelope.json"):
+            for name in (
+                "manifest.json",
+                "acceptance.json",
+                "envelope.json",
+                "runtime-acceptance.json",
+            ):
                 _write_relative(root, name, b"{}")
             with _injected_close_failure(marker) as (
                 injected_open,
@@ -1673,6 +2822,7 @@ class RootedStableReadBoundaryTests(unittest.TestCase):
                     "manifest.json",
                     "acceptance.json",
                     "envelope.json",
+                    "runtime-acceptance.json",
                     str(root),
                 )
 
@@ -1720,6 +2870,7 @@ class RootedStableReadBoundaryTests(unittest.TestCase):
                         paths["manifest"],
                         paths["acceptance"],
                         paths["envelope"],
+                        paths["runtime_acceptance"],
                         str(root),
                     )
             finally:
@@ -1750,6 +2901,7 @@ class CwdAdmissionBoundaryTests(unittest.TestCase):
             paths["manifest"],
             paths["acceptance"],
             paths["envelope"],
+            paths["runtime_acceptance"],
             str(root),
         )
 
@@ -1846,6 +2998,10 @@ class CwdAdmissionBoundaryTests(unittest.TestCase):
                     tcb.os, "fstat", side_effect=mutate_after_first_cwd_fstat
                 ), mock.patch.object(
                     tcb.os, "close", side_effect=tracked_close
+                ), mock.patch.object(
+                    tcb,
+                    "_verify_atomic_entrypoint_snapshot",
+                    return_value=None,
                 ):
                     exit_code, output, errors = self._captured_main(
                         self._main_arguments(paths, root)
@@ -1900,6 +3056,10 @@ class CwdAdmissionBoundaryTests(unittest.TestCase):
                     tcb.os, "open", side_effect=tracked_open
                 ), mock.patch.object(
                     tcb.os, "close", side_effect=fail_cwd_close
+                ), mock.patch.object(
+                    tcb,
+                    "_verify_atomic_entrypoint_snapshot",
+                    return_value=None,
                 ):
                     exit_code, output, errors = self._captured_main(
                         self._main_arguments(paths, root)
@@ -1960,6 +3120,25 @@ class CwdAdmissionBoundaryTests(unittest.TestCase):
 
 
 class StaticOfflineSurfaceTests(unittest.TestCase):
+    def test_raw_reader_is_reachable_only_through_global_admission_index(self):
+        tree = ast.parse(VERIFIER.read_text("utf-8"))
+        callers = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if any(
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Name)
+                and call.func.id == "_read_rooted_regular_file"
+                for call in ast.walk(node)
+            ):
+                callers.add(node.name)
+        self.assertEqual(callers, {"admit_record", "admit_executable"})
+
+        source = VERIFIER.read_text("utf-8")
+        for forbidden in (".casefold(", ".lower(", "realpath("):
+            self.assertNotIn(forbidden, source)
+
     def test_verifier_imports_no_existing_m1b_validator_network_or_process_client(self):
         tree = ast.parse(VERIFIER.read_text("utf-8"))
         imported = set()
@@ -2021,7 +3200,7 @@ class StaticOfflineSurfaceTests(unittest.TestCase):
 
     def test_public_api_has_no_fixture_report_or_default_path_mode(self):
         self.assertFalse(hasattr(tcb, "verify_bytes"))
-        signature_names = tuple(tcb.verify_paths.__code__.co_varnames[:5])
+        signature_names = tuple(tcb.verify_paths.__code__.co_varnames[:6])
         self.assertEqual(
             signature_names,
             (
@@ -2029,6 +3208,7 @@ class StaticOfflineSurfaceTests(unittest.TestCase):
                 "manifest_path",
                 "acceptance_path",
                 "envelope_path",
+                "runtime_acceptance_path",
                 "repository_root",
             ),
         )
@@ -2084,20 +3264,35 @@ class OfflineCliFailureBoundaryTests(unittest.TestCase):
     def test_bad_arguments_and_forbidden_modes_are_compact_and_stderr_free(self):
         marker = "SYNTHETIC_BAD_ARGUMENT_PATH_MUST_NOT_ESCAPE"
         argument_sets = (
-            (),
-            ("fixture",),
-            ("materialize",),
-            ("report",),
-            ("verify",),
-            ("verify", marker, marker, marker, marker),
-            ("verify", marker, marker, marker, marker, marker, marker),
+            ((), "CLI_ARGUMENT_MISSING"),
+            (("verify",), "CLI_ARGUMENT_MISSING"),
+            (
+                ("verify", marker, marker, marker, marker, marker),
+                "CLI_ARGUMENT_MISSING",
+            ),
+            (
+                ("verify", marker, marker, marker, marker, marker, marker, marker),
+                "CLI_ARGUMENT_EXTRA",
+            ),
+            (
+                ("fixture", marker, marker, marker, marker, marker, marker),
+                "CLI_ARGUMENTS_INVALID",
+            ),
+            (
+                ("materialize", marker, marker, marker, marker, marker, marker),
+                "CLI_ARGUMENTS_INVALID",
+            ),
+            (
+                ("report", marker, marker, marker, marker, marker, marker),
+                "CLI_ARGUMENTS_INVALID",
+            ),
         )
-        for arguments in argument_sets:
+        for arguments, expected in argument_sets:
             with self.subTest(arguments=arguments[:1], count=len(arguments)):
                 result = self._assert_closed_failure(
                     self._run(*arguments), marker
                 )
-                self.assertEqual(result["codes"], ["CLI_ARGUMENTS_INVALID"])
+                self.assertEqual(result["codes"], [expected])
 
     def test_missing_explicit_record_never_echoes_path_or_exception(self):
         marker = "SYNTHETIC_MISSING_CONTRACT_PATH_MUST_NOT_ESCAPE"
@@ -2109,6 +3304,7 @@ class OfflineCliFailureBoundaryTests(unittest.TestCase):
                 "manifest.json",
                 "acceptance.json",
                 "envelope.json",
+                "runtime-acceptance.json",
                 repository_root,
             )
         result = self._assert_closed_failure(completed, marker, repository_root)
@@ -2129,7 +3325,12 @@ class OfflineCliFailureBoundaryTests(unittest.TestCase):
             with self.subTest(expected=expected), tempfile.TemporaryDirectory() as raw_root:
                 root = Path(raw_root).resolve()
                 _write_relative(root, "contract.json", payload)
-                for name in ("manifest.json", "acceptance.json", "envelope.json"):
+                for name in (
+                    "manifest.json",
+                    "acceptance.json",
+                    "envelope.json",
+                    "runtime-acceptance.json",
+                ):
                     _write_relative(root, name, b"{}")
                 completed = self._run(
                     "verify",
@@ -2137,6 +3338,7 @@ class OfflineCliFailureBoundaryTests(unittest.TestCase):
                     "manifest.json",
                     "acceptance.json",
                     "envelope.json",
+                    "runtime-acceptance.json",
                     str(root),
                 )
                 result = self._assert_closed_failure(
@@ -2164,6 +3366,7 @@ class OfflineCliFailureBoundaryTests(unittest.TestCase):
                         "manifest.json",
                         "acceptance.json",
                         "envelope.json",
+                        "runtime-acceptance.json",
                         root_value,
                     )
                     self._assert_closed_failure(completed, marker, str(real_root))
@@ -2182,6 +3385,7 @@ class OfflineCliFailureBoundaryTests(unittest.TestCase):
                     "manifest.json",
                     "acceptance.json",
                     "envelope.json",
+                    "runtime-acceptance.json",
                     "/synthetic/root",
                 )
             )

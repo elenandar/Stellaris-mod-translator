@@ -1,65 +1,71 @@
 # Offline executable/TCB admission contract M1B-1A0
 
 - Milestone: `M1B-1A0 — Offline executable/TCB admission contract`
-- Contract schema: `m1b-offline-executable-tcb-contract-v1`
-- Contract version: `m1b-offline-executable-tcb-admission-v1`
-- Contract generation: `1`
-- Execution-envelope schema/generation: `m1b-execution-envelope-v1` / `1`
+- Contract schema: `m1b-offline-executable-tcb-contract-v3`
+- Contract version: `m1b-offline-executable-tcb-admission-v3`
+- Contract generation: `3`
+- Execution-envelope schema/generation: `m1b-execution-envelope-v3` / `3`
+- Runtime-acceptance schema/generation: `m1b-runtime-execution-envelope-acceptance-v1` / `1`
+- Execution-plan schema/generation: `m1b-execution-plan-v2` / `2`
 - Preserved benchmark protocol: `m1b-benchmark-contract-v7`, generation `108`
 - Review state: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`
 - Admission state: `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`
 - Identity blocker: `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`
 
 Этот contract определяет fail-closed форму будущего доказательства exact
-executable bytes, CPython runtime, import closure и invocation state. Он не
-принимает текущий `m1b_contract.py`, не создаёт four-role implementation, не
-разрешает provider execution и не снимает ни один live blocker.
+executable bytes, CPython runtime, import closure, execution plan и invocation
+state. Он не принимает текущий `m1b_contract.py`, не создаёт реальную four-role
+implementation, не разрешает provider execution и не снимает ни один live
+blocker. Successful offline verification означает только
+`SYNTHETIC_CONFORMANCE_ONLY`.
 
-Текущий repository нельзя считать four-role TCB: один исторический module
-совмещает несколько логических ролей, отдельный `provider_request_harness`
-отсутствует, а manifest v1 сам по себе не связывает runtime, imports и
-invocation. Поэтому successful offline verification ниже означает только
-synthetic contract conformance.
+Generation 2 исправила три связанные ambiguity generation 1: exact envelope
+не был связан с external runtime acceptance, invocation не связывала
+interpreter и manifest roles, а lexical cache не предотвращал повторное чтение
+одного physical inode через case alias. Generation 3 заменяет невыполнимый
+pathname script plan на typed descriptor-backed provider transport и отделяет
+repository locator, OS exec target, `argv[0]`, process cwd и `sys_path`.
+Generation 1 и 2 не являются допустимой identity для generation-3 semantics.
 
 ## Contract identity
 
 Normative machine-readable bytes находятся в
-[`registry/m1b/offline-executable-tcb-contract-v1.json`](../../registry/m1b/offline-executable-tcb-contract-v1.json).
-Файл — compact sorted-key ASCII JSON плюс ровно один LF; root closed schema имеет
-поля `contract_generation`, `contract_schema`, `contract_version`, `digest_framing`,
-`execution_envelope`, `implementation_acceptance`, `implementation_manifest`,
-`limits`, `offline_verifier`, `protocol_generation`, `status_policy`.
+[`registry/m1b/offline-executable-tcb-contract-v3.json`](../../registry/m1b/offline-executable-tcb-contract-v3.json).
+Файл — compact sorted-key ASCII JSON плюс ровно один LF. Root closed schema
+имеет поля `contract_generation`, `contract_schema`, `contract_version`,
+`digest_framing`, `execution_envelope`, `implementation_acceptance`,
+`implementation_manifest`, `limits`, `offline_verifier`,
+`protocol_generation`, `runtime_acceptance`, `status_policy`.
 
-Contract не содержит собственного digest. Его external review identity:
+Contract не содержит self-hash. Его external review identity:
 
 ```text
 SHA-256(
-  ASCII("stellaris-m1b-offline-executable-tcb-contract-v1") || NUL ||
+  ASCII("stellaris-m1b-offline-executable-tcb-contract-v3") || NUL ||
   u64be(len(canonical_contract)) || canonical_contract
 )
-= 589cf895c659b57c2f44268acfa0bf33b3c98d6cd5e6b4fea1f2f9b2500d1a5f
+= c346fdd761ea477a85930c041858e7444a576263f3fb5ca568cc1ab005ef9744
 ```
 
-Этот digest фиксируется во внешнем review document и в предъявляемом execution
-envelope. Он не является owner-accepted operational admission. После фиксации
-этой review identity любое изменение normative contract bytes требует нового
-contract generation и нового external review; protocol v7/generation 108 этим
-contract-only этапом не изменяется.
+Length включает завершающий LF. Digest фиксируется внешним review document и
+не является operational admission. Любое дальнейшее изменение normative bytes
+требует новой identity и review; protocol v7/generation 108 не меняется.
 
 ## Trust boundary и запрещённые доказательства
 
-Будущий admission требует внешнего owner-controlled решения над exact manifest,
-exact envelope и launcher/opened-byte chain. Caller-supplied records, даже
-внутренне согласованные и успешно проверенные, не создают authority. Fixture,
-expected hash, Git SHA, clean tree, merge, `status=ok`, report self-assertion,
-`sys.version`, `sys.executable`, `__file__`, mtime/size, `pip freeze` и
-same-process token также не являются trust root.
+Будущий admission требует owner-controlled решения над exact implementation
+acceptance, runtime acceptance, manifest, envelope и launcher/opened-byte
+chain. Caller-supplied records, даже полностью согласованные и содержащие
+`owner_accepted`, подтверждают только closed shape и linkage. Они не становятся
+trust root. Реальный owner-controlled expected record identity должен поступать
+из канала, не контролируемого caller; M1B-1A0 такой operational канал не создаёт.
 
-Runtime snapshot, заявленный тем же процессом, не доказывает отсутствие hostile
-reflection, monkeypatching, import hooks, debugger или tracing. Отдельная
-hostile-process authority boundary остаётся вне M1B-1A0. Verifier не экспортирует
-`_FullDecisionAdmission`, live capability, `proven` implementation identity или
-benchmark admission.
+Fixture, expected hash, Git SHA, clean tree, merge, `status=ok`, report
+self-assertion, `sys.version`, `sys.executable`, `__file__`, mtime/size,
+`pip freeze` и same-process token не являются authority. Runtime snapshot того
+же процесса не доказывает отсутствие hostile reflection, monkeypatching,
+import hooks, debugger или tracing. Verifier не экспортирует admission
+capability, live token, `proven` identity или benchmark permission.
 
 ## Layer 1: executable manifest v1
 
@@ -71,28 +77,21 @@ byte-identical. Manifest имеет ровно поля:
 | root | `files`, `implementation_generation`, `manifest_schema` |
 | file row | `path`, `role`, `sha256` |
 
-`manifest_schema` равен `m1b-executable-implementation-manifest-v1`, а
+`manifest_schema=m1b-executable-implementation-manifest-v1`.
 `implementation_generation` — positive exact JSON integer, не `bool`.
-
-Manifest содержит ровно по одному file row для каждой роли:
+Manifest содержит ровно по одному unique file для ролей:
 
 1. `analysis_engine`;
 2. `contract_validator`;
 3. `provider_request_harness`;
 4. `synthetic_fixture_materializer`.
 
-Каждая роль назначается отдельному unique repository file. Paths — unique
-relative POSIX raw-ASCII strings в raw-ASCII order. Lexical uniqueness
-недостаточна: четыре уже открытых role files обязаны иметь четыре разные
-physical identities `(st_dev, st_ino)`, включая case-insensitive filesystem.
-Ни один role file не может физически alias-ить contract, manifest, acceptance
-или envelope input record. Absolute path, empty component, `.`, `..`, repeated
-separator, backslash, NUL, control character и non-ASCII запрещены. Leaf обязан
-быть regular non-symlink file с `st_nlink == 1`. Manifest не включает себя,
-contract registry или собственный digest.
+Paths — unique relative POSIX raw-ASCII strings в raw-ASCII order. Absolute,
+empty component, `.`, `..`, repeated separator, backslash, NUL, control и
+non-ASCII запрещены. Manifest не включает себя, любой input record, contract
+registry или собственный digest. Leaf — regular non-symlink single-link file.
 
-Canonical manifest — compact sorted-key ASCII JSON плюс ровно один LF. External
-manifest digest вычисляется только из этих exact bytes:
+Canonical manifest — compact sorted-key ASCII JSON плюс LF. External digest:
 
 ```text
 SHA-256(
@@ -101,12 +100,12 @@ SHA-256(
 )
 ```
 
-Каждый `sha256` bind-ит exact bytes фактически прочитанного уже открытого file
-descriptor. Проверка pathname с последующим reopen запрещена.
+Каждый row digest сравнивается с raw SHA-256 exact bytes уже открытого file
+descriptor. Pathname check с последующим reopen запрещён.
 
-### External implementation acceptance record
+### Existing external implementation acceptance
 
-Будущий external record имеет ровно пять полей:
+Существующий record остаётся ровно пяти-field и не расширяется:
 
 ```text
 acceptance_state
@@ -116,42 +115,44 @@ manifest_sha256
 protocol_generation
 ```
 
-Для формы будущего acceptance требуется `acceptance_state=owner_accepted` и
-exact linkage к manifest/generation/protocol `108`. M1B-1A0 не создаёт реальный
-operational record: synthetic fixture проверяет только closed shape и linkage.
-`proposed`, `retired`, mismatched либо self-asserted `proven` отклоняются.
+Synthetic shape требует `acceptance_state=owner_accepted` и exact linkage к
+manifest/generation/protocol 108. `proposed`, `retired`, mismatched либо
+self-asserted `proven` отклоняются. Этот record связывает implementation
+manifest; он не заменяет новый runtime acceptance.
 
-## Descriptor-rooted stable bytes
+## Descriptor-rooted stable bytes и global identity
 
-Repository root открывается один раз component-wise с `O_NOFOLLOW`,
-`O_DIRECTORY` и `O_CLOEXEC`; root symlink, relative root, path ambiguity и
-platform без нужных no-follow primitives fail closed. Все input records,
-manifest files, interpreter bytes, source/extension import bytes и declared
-invocation `cwd` открываются относительно уже открытых directory descriptors.
-`cwd` обязан быть stable directory identity, открытой component-wise с
-`O_NOFOLLOW`, `O_DIRECTORY` и `O_CLOEXEC`; missing, regular file, symlink,
-replacement или metadata drift fail closed. Containment проверяется на каждом
-component.
+Verifier принимает ровно пять explicit repository-relative record paths:
+contract, manifest, implementation acceptance, execution envelope и runtime
+acceptance. Repository root открывается component-wise с `O_NOFOLLOW`,
+`O_DIRECTORY`, `O_CLOEXEC`; root symlink, relative root, ambiguity или platform
+без primitives fail closed.
 
-Reader:
+Единый verifier-wide index содержит:
 
-- принимает только regular single-link leaf;
-- фиксирует descriptor metadata и physical `(st_dev, st_ino)` до чтения;
-- накапливает short positive reads до exact declared size;
-- выполняет bounded extra read и post-read `fstat`/directory-entry identity
-  checks;
-- отклоняет premature EOF, growth, shrink, replacement и metadata drift;
-- читает и хеширует bytes уже открытого descriptor;
-- выполняет ровно одну production close attempt для каждого открытого FD;
-- не возвращает bytes или success после close failure.
+- exact lexical relative path;
+- physical identity `(st_dev, st_ino)`;
+- admitted raw digest, bytes и surface kind.
 
-Если уже существует controlled primary error, close failure не заменяет его и
-не вызывает retry. Intentionally-open descriptors fault-injection tests очищают
-сохранённым native close только вне production path.
+Политика применяется к пяти records, четырём manifest roles, interpreter,
+source/extension imports и native dependencies. Exact повтор уже принятого
+executable path с тем же expected digest переиспользует admitted bytes и
+identity без open/read. Exact повтор с другим digest отклоняется без reopen.
+Другой lexical path, чей открытый descriptor имеет уже известный physical
+identity, отклоняется после `fstat`, но до чтения content. `.lower()` и
+`casefold()` не являются identity evidence. Input record никогда не
+переиспользуется как executable surface.
 
-## Layer 2: execution envelope v1
+Reader принимает только regular single-link leaf, фиксирует descriptor
+metadata до чтения, накапливает short positive reads, выполняет bounded extra
+read и post-read `fstat`/directory-entry checks, отклоняет EOF/growth/shrink,
+replacement и metadata drift. Каждый успешно открытый descriptor получает
+ровно одну production close attempt. Alias primary error сохраняется при
+injected close failure; retry отсутствует.
 
-Envelope — canonical closed JSON с exact root fields:
+## Layer 2: execution envelope v3
+
+Envelope — closed canonical JSON с exact root fields:
 
 ```text
 admitted_state
@@ -168,150 +169,232 @@ observed_state
 protocol_generation
 ```
 
-Все identity fields atomically совпадают с canonical contract, manifest,
-acceptance record и protocol generation `108`. `admitted_state` и
-`observed_state` имеют одинаковую closed shape и должны быть semantically
-byte-for-byte equivalent после canonical encoding. Это обнаруживает drift между
-принятым profile и observation, но caller, согласованно подменивший обе стороны,
-не становится authority.
+Identity fields совпадают с actual canonical contract, actual manifest,
+implementation acceptance и protocol 108. `admitted_state` и `observed_state`
+имеют одинаковую closed shape и exact semantic canonical equality. Это
+обнаруживает drift, но caller, согласованно изменивший обе стороны, не
+становится authority.
 
-Каждый state имеет ровно поля `bytecode`, `environment`, `imports`,
-`interpreter`, `invocation`, `native_dependencies`, `runtime_hooks`.
-
-### Interpreter identity
-
-Interpreter object имеет ровно:
+Canonical envelope — compact sorted-key ASCII JSON плюс ровно один LF. Его
+external digest охватывает весь envelope, включая оба state:
 
 ```text
-abi_flags
-byteorder
-cache_tag
-executable_path
-executable_sha256
-extension_suffix
-implementation
-machine
-max_unicode
-platform
-pointer_bits
-soabi
-version_tuple
+SHA-256(
+  ASCII("stellaris-m1b-execution-envelope-v3") || NUL ||
+  u64be(len(canonical_envelope)) || canonical_envelope
+)
 ```
 
-`implementation` равен `cpython`; v1 фиксирует CPython 3.9 runtime family.
-`version_tuple` закрыто bind-ит exact `major`, `minor`, `micro`, `releaselevel`,
-`serial` через five-element tuple с exact integer/string types; `cache_tag`
-обязан соответствовать major/minor. `abi_flags`, `byteorder`, `machine`,
-`platform`, `pointer_bits`, `max_unicode`, `soabi` и `extension_suffix` bind-ят
-остальную ABI-relevant runtime state. Upgrade runtime family либо изменение
-набора ABI fields требует новой contract generation. `executable_path` — только
-repository-root-relative locator: verifier обязан открыть его descriptor-rooted
-и сравнить SHA-256 exact executable bytes. Path, version string или digest без
-opened bytes недостаточны.
+Verifier сначала доказывает exact canonical input bytes, затем хеширует именно
+их. Raw SHA-256, другой domain, пропущенный NUL, другая length encoding или
+length без LF не эквивалентны framed digest.
 
-Фактический future launcher дополнительно обязан bind-ить platform/loader ABI и
-использовать именно admitted opened bytes либо доказанный immutable equivalent.
-Текущий contract-only verifier ничего не запускает.
+### External runtime/execution-envelope acceptance v1
 
-### Exact import closure
+Отдельный runtime acceptance record имеет ровно 16 fields:
 
-Import row имеет ровно `kind`, `module`, `path`, `sha256`. `kind` — один из
-`source`, `extension`, `builtin`, `frozen`; module names unique, а rows идут в
-exact declared execution order.
+```text
+contract_generation
+contract_schema
+contract_sha256
+contract_version
+envelope_digest_domain
+envelope_digest_framing
+envelope_generation
+envelope_schema
+envelope_sha256
+implementation_generation
+manifest_schema
+manifest_sha256
+protocol_generation
+runtime_acceptance_generation
+runtime_acceptance_schema
+runtime_acceptance_state
+```
 
-- `source`: relative path открывается один раз; `sha256` bind-ит exact source
-  bytes, которые будущий launcher обязан исполнить без path reopen;
-- `extension`: relative path открывается один раз; `sha256` bind-ит exact native
-  binary bytes;
-- `builtin` и `frozen`: `path=null`, а `sha256` равен exact interpreter digest;
-  их code identity тем самым связана с interpreter bytes.
+Exact constants:
 
-Повторный path использует уже admitted in-memory bytes/digest и не открывается
-заново. Missing, extra, reordered или duplicate module, source/extension hash
-drift, builtin/frozen interpreter mismatch и path shadowing fail closed.
-Фактический import order остаётся внешним launcher evidence; равенство двух
-caller fields не доказывает, что Python исполнил именно их.
+- `runtime_acceptance_schema=m1b-runtime-execution-envelope-acceptance-v1`;
+- `runtime_acceptance_generation=1`;
+- `runtime_acceptance_state=owner_accepted` для synthetic closed-shape case;
+- `envelope_digest_domain=stellaris-m1b-execution-envelope-v3`;
+- `envelope_digest_framing=sha256_domain_nul_u64be_length_canonical_envelope`.
 
-### Bytecode policy
+Record atomically связывает actual contract schema/version/generation/framed
+digest, actual manifest schema/implementation generation/framed digest, exact
+envelope schema/generation/framed digest и protocol 108. Coherent изменение
+обоих envelope states при неизменном record даёт digest mismatch.
+
+Record canonicalization — compact sorted-key ASCII JSON плюс LF. Он не содержит
+self-hash. Его отдельная external identity domain:
+
+```text
+SHA-256(
+  ASCII("stellaris-m1b-runtime-execution-envelope-acceptance-v1") || NUL ||
+  u64be(len(canonical_runtime_acceptance)) ||
+  canonical_runtime_acceptance
+)
+```
+
+Synthetic verifier не получает owner-controlled expected value этого digest и
+поэтому не может выдать admission. `proposed`, `retired`, self-asserted
+`proven`, missing/extra/noncanonical/duplicate records и identity drift
+отклоняются.
+
+### Execution state
+
+Каждый state имеет ровно поля `bytecode`, `environment`, `execution_plan`,
+`imports`, `interpreter`, `invocation`, `native_dependencies`, `runtime_hooks`.
+
+Interpreter object имеет ровно `abi_flags`, `byteorder`, `cache_tag`,
+`executable_sha256`, `extension_suffix`, `implementation`, `machine`,
+`max_unicode`, `platform`, `pointer_bits`, `repository_locator`, `soabi`,
+`version_tuple`. V3 фиксирует exact CPython 3.9 ABI
+profile. `repository_locator` — repository-root-relative locator; digest
+проверяется по exact opened bytes. Это не доказывает, что macOS pathname-based
+OS exec использует те же bytes: такой handoff остаётся явным blocker.
+
+Import row имеет ровно `kind`, `module`, `path`, `sha256`; kind — `source`,
+`extension`, `builtin` или `frozen`. Rows unique и ordered. Source/extension
+bytes открываются один раз. Builtin/frozen имеют `path=null` и bind-ятся к
+exact interpreter digest. Missing, extra, reordered, shadowed или empty import
+closure fail closed.
 
 Bytecode object имеет `cache_mode`, `dont_write_bytecode`,
-`executed_bytecode`, `pycache_prefix`. V1 выбирает только fail-closed policy:
+`executed_bytecode`, `pycache_prefix`. Единственная policy:
+`sealed_empty`, `true`, `[]`, `null`. Stale bytecode запрещён.
 
-- `cache_mode=sealed_empty`;
-- `dont_write_bytecode=true`;
-- `executed_bytecode=[]`;
-- `pycache_prefix=null`.
+### Closed execution plan v2
 
-`-B` запрещает запись `.pyc`, но не доказывает, что stale bytecode не читался.
-Поэтому non-empty cache, `.pyc` import или caller-claimed `-B` без sealed empty
-cache отклоняются. Поддержка bind-инга фактически исполненного bytecode потребует
-новой contract generation.
+Execution plan root имеет ровно:
 
-### Invocation, environment и hooks
+```text
+entrypoint
+interpreter
+launcher
+plan_generation
+plan_schema
+role_imports
+```
 
-Invocation object имеет ровно `argv`, `cwd`, `inherited_fds`, `mode`,
-`python_flags`, `stdio`, `sys_path`, `warnoptions`, `xoptions`.
+`plan_schema=m1b-execution-plan-v2`, `plan_generation=2`.
 
-- `mode=verified_open_descriptors_no_reopen`;
-- `argv`, `cwd` и ordered `sys_path` exact, closed и одинаковы в admitted и
-  observed states; relative `cwd` дополнительно открывается descriptor-rooted
-  как stable no-follow directory identity и не переоткрывается по pathname;
-- `sys_path` содержит только declared rooted runtime/repository entries;
-  ambient cwd, user site, system site и unknown entry запрещены;
-- `python_flags` закрыто bind-ит exact CPython 3.9 `sys.flags` fields:
-  `bytes_warning`, `debug`, `dev_mode`, `dont_write_bytecode`,
-  `hash_randomization`, `ignore_environment`, `inspect`, `interactive`,
-  `isolated`, `no_site`, `no_user_site`, `optimize`, `quiet`, `utf8_mode`,
-  `verbose`; integer fields требуют exact `int`, а единственный boolean
-  `dev_mode` — exact `bool`;
-- `warnoptions` empty; `xoptions` содержит только frozen allowlist;
-- каждый `stdio` stream закрыто bind-ит exact `fd`, access `mode` и target
-  (`devnull` либо captured pipe); v1 требует `inherited_fds=[]`, поэтому любой
-  дополнительный inherited FD запрещён.
+- plan interpreter имеет ровно `repository_locator`, `sha256` и exact
+  совпадает с envelope interpreter locator/digest и уже admitted opened bytes;
+- entrypoint имеет `mode`, `repository_locator`, `role`, `sha256`; mode равен
+  `descriptor_script_file`, role — только `provider_request_harness`, а
+  locator/digest/physical identity exact совпадают с manifest row. Первый
+  ASCII byte raw relative repository locator не может быть `-`;
+- launcher имеет `status=unproven` и exact blockers
+  `INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN`,
+  `LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN`,
+  `ROLE_IMPORT_TRANSPORT_UNPROVEN`. Caller не может удалить их либо объявить
+  launcher `proven`;
+- каждый ordered `role_imports` row имеет `kind`, `module`, `path`, `role`,
+  `sha256`; `kind=source`, а unique rows идут строго в порядке
+  `analysis_engine`, `contract_validator`, `synthetic_fixture_materializer`.
+  Каждый row соответствует ровно одному ordered source import row, exact
+  manifest path/digest и уже admitted cache object. Provider harness не может
+  одновременно быть import. Каждый role path разрешается ровно под одним
+  declared `sys_path`.
 
-Environment object имеет `ambient_inheritance=false`, `policy=empty`,
-`variables=[]`. `PYTHONPATH`, `PYTHONHOME`, user/site/startup configuration и
-любая неизвестная ambient variable не наследуются.
+Таким образом все четыре manifest roles связаны с declarative execution
+surface. Role, path, digest или physical-identity swap, missing role,
+unmanifested entrypoint, case alias и попытка repository reopen отклоняются.
+Descriptor loader остальных трёх source roles ещё не доказан, поэтому linkage
+не выдаёт operational admission.
 
-Runtime-hooks object имеет `debugger_attached`, `meta_path`, `path_hooks`,
-`profile_hook`, `startup_hooks`, `trace_hook`. Debugger/trace/profile должны быть
-false, startup hooks empty, а import hooks — exact frozen builtin allowlist,
-связанный с interpreter identity. Любой extra/missing/reordered hook fail closed.
+### Closed invocation
 
-### Native/dyld closure
+Invocation object имеет ровно `argv0`, `argv_tail`, `cwd`, `inherited_fds`,
+`mode`, `os_exec_target`, `python_flags`, `stdio`, `sys_path`, `warnoptions`,
+`xoptions`.
+
+`argv0`, `os_exec_target`, `cwd` и каждый `sys_path` row — typed locator с
+ровно `base`, `path`. Единственный base — `repository_root`; child cwd никогда
+не является неявным base. `argv0.path` и `os_exec_target.path` exact совпадают
+с interpreter repository locator, но остаются разными semantic fields.
+
+Единственный `argv_tail`:
+
+```text
+[
+  "-I",
+  "-S",
+  "-B",
+  "-X",
+  "utf8",
+  "/dev/fd/3"
+]
+```
+
+Последний argument — только canonical `/dev/fd/3`; repository locator никогда
+не используется как cwd-relative script pathname. `/dev/fd/03`,
+`/proc/self/fd`, обычный manifest path, `-c`, `-m`, `-`, `--`, unknown или
+reordered flags и extra positionals запрещены. Запрет первого byte `-`
+применяется к manifest-bound repository locator до invocation acceptance,
+поэтому coherent option-like manifest/plan values не становятся mode switch.
+`xoptions=["utf8"]`, `warnoptions=[]`.
+`-I`, `-S`, `-B`, `-X utf8`
+семантически совпадают с exact `python_flags`, empty environment и sealed
+bytecode policy. `sys_path` non-empty и содержит только explicit
+repository-root locators.
+
+`mode=typed_entrypoint_fd_no_repository_reopen`. `inherited_fds` содержит
+ровно один closed typed row с полями `byte_count`, `child_fd`, `mode`,
+`process_path`, `purpose`, `repository_locator`, `role`, `sha256`, `transport`.
+Он требует `child_fd=3`, `mode=read`, `process_path=/dev/fd/3`,
+`purpose=role=provider_request_harness`,
+`transport=darwin_pipe_atomic_preload_v1` и exact manifest/plan/cache object.
+`byte_count` равен длине cached admitted provider bytes и лежит в `1..512`.
+
+Verifier materializes только synthetic transport primitive: fresh anonymous
+pipe, non-inheritable read/write ends с правильными access modes, observed
+`PC_PIPE_BUF >= 512`, один полный atomic write cached bytes, затем successful
+writer close до любого возможного child и exact readback/EOF. Short/zero write,
+wrong end/type/access/inheritability, reused/duplicate descriptor, wrong bytes,
+extra/early EOF и любой close failure fail closed. Source pathname после
+admission не читается повторно и его mutation не меняет snapshot bytes.
+
+Это доказывает primitive, но JSON `child_fd=3` не доказывает будущий live
+launcher handoff. macOS interpreter exec остаётся
+`INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN`, полный opened-byte handoff —
+`LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN`, а descriptor loader остальных roles —
+`ROLE_IMPORT_TRANSPORT_UNPROVEN`.
+`cwd.path` всё равно открывается descriptor-rooted как stable directory. Stdio
+exact bind-ит fd/mode/target: stdin — devnull, stdout/stderr — captured pipes.
+
+Environment имеет `ambient_inheritance=false`, `policy=empty`, `variables=[]`.
+Runtime hooks запрещают debugger/trace/profile/startup и требуют exact builtin
+import-hook allowlist.
+
+### Native dependency closure
 
 Native dependency object имеет `blocker`, `dependencies`, `status`; row —
-`install_name`, `path`, `sha256`.
-
-V1 различает:
-
-- `bound`: every exact dependency byte externally admitted и использован без
-  reopen;
-- `unproven`: `dependencies=[]` и blocker
-  `NATIVE_DEPENDENCY_CLOSURE_UNPROVEN` обязательно сохраняется.
-
-Текущий synthetic positive case использует `unproven`. Поэтому даже valid
-envelope не является operational success. Silent empty/bound claim, unbound
-extension dependency или удаление blocker отклоняются.
+`install_name`, `path`, `sha256`. `bound` требует every exact admitted
+dependency byte без reopen. `unproven` требует `dependencies=[]` и blocker
+`NATIVE_DEPENDENCY_CLOSURE_UNPROVEN`. Synthetic positive сохраняет `unproven`,
+поэтому operational success невозможен.
 
 ## Independent offline verifier
 
 [`tools/research/m1b_tcb_contract.py`](../../tools/research/m1b_tcb_contract.py)
-поддерживает Python 3.9 standard library only и имеет единственный CLI:
+использует только Python 3.9 stdlib и имеет единственный CLI:
 
 ```sh
 python3 tools/research/m1b_tcb_contract.py verify \
   EXPLICIT_CONTRACT_RELATIVE_PATH \
   EXPLICIT_MANIFEST_RELATIVE_PATH \
-  EXPLICIT_ACCEPTANCE_RELATIVE_PATH \
-  EXPLICIT_ENVELOPE_RELATIVE_PATH \
+  EXPLICIT_IMPLEMENTATION_ACCEPTANCE_RELATIVE_PATH \
+  EXPLICIT_EXECUTION_ENVELOPE_RELATIVE_PATH \
+  EXPLICIT_RUNTIME_ACCEPTANCE_RELATIVE_PATH \
   EXPLICIT_ABSOLUTE_REPOSITORY_ROOT
 ```
 
-Default paths, stdin, fixture/materialize/report mode, cwd/home/environment
-discovery отсутствуют. Verifier не импортирует historical M1B validators, не
-импортирует и не исполняет manifest/import files, не вызывает subprocess,
-network, provider, Ollama, corpus, game или Workshop.
+Аргументов всегда ровно шесть после `verify`; missing/extra fail closed.
+Defaults, stdin, fixture/materialize/report, cwd/home/environment discovery
+отсутствуют. Verifier не импортирует/исполняет manifest/import files, не
+вызывает subprocess, network, provider, Ollama, corpus, game или Workshop.
 
 Finite limits из registry:
 
@@ -320,35 +403,43 @@ Finite limits из registry:
 | each JSON input | `262144` bytes |
 | each executable/import file | `8388608` bytes |
 | total unique executable/import bytes | `33554432` bytes |
+| atomic cached provider entrypoint | `512` bytes |
 | import rows | `512` |
 | native dependency rows | `256` |
 | JSON sequence entries | `1024` |
 | one JSON string | `4096` UTF-8 bytes |
 
-JSON parser принимает только strict UTF-8 single value, отклоняет BOM,
-duplicate keys, trailing data, float, NaN/Infinity, lone surrogate, oversized
-integer и integer outside signed 64-bit lexical range. Closed integer fields
-требуют exact `int`; `bool` не принимается.
+JSON strict: one UTF-8 value, no BOM, duplicate key, trailing data, float,
+NaN/Infinity, lone surrogate, oversized integer или out-of-range signed 64-bit
+integer. Closed integers require exact `int`, не `bool`.
 
-Stdout — один compact ASCII JSON object с allowlisted `status`, `codes`,
-`counts`; stderr всегда empty. Failure возвращает non-zero и не выводит path,
-hash, input bytes, marker, numeric token, exception или traceback. Success
-возвращает controlled code `SYNTHETIC_CONFORMANCE_ONLY`, а не admission token.
+Stdout — один compact ASCII JSON object с fixed allowlisted `status`, `codes`,
+`counts`; unknown uppercase internal code нормализуется в
+`UNEXPECTED_FAILURE`. Stderr empty. Controlled failure non-zero и не выводит
+path, hash, bytes, marker, numeric token, exception или traceback. Success
+возвращает только `SYNTHETIC_CONFORMANCE_ONLY`, не capability или admission.
 
 ## Public synthetic fixture
 
 [`fixtures/m1b/tcb-admission/cases.json`](../../fixtures/m1b/tcb-admission/cases.json)
 и его [README](../../fixtures/m1b/tcb-admission/README.md) содержат только
-вымышленные metadata и mutations. Four role files, interpreter placeholder и
-source/extension bytes материализуются тестом только во временном repository
-root и никогда не импортируются или исполняются. Production verifier не имеет
-fixture materializer.
+synthetic mutations. Four role files, interpreter и imports материализуются
+тестом во временном root и не исполняются.
 
-Matrix покрывает strict input, manifest roles/paths/canonical bytes/digest,
-external linkage, runtime/import/invocation drift, stale bytecode,
-native-closure blocker, descriptor replacement, lifecycle/fault injection и
-no-leak output. Case ID, expected result, fixture digest и Git provenance —
-test evidence, не trust root.
+Final fixture identity: `218` unique cases, `61682` bytes, SHA-256
+`0f14d9b28ee41095a2373b02409b288c30959013840d7d1c891538266a84eeaa`.
+Verifier identity: `86594` bytes, SHA-256
+`0df39292b306afdfd2187ffb554b5ad2714bbe0353ca176f6fe49cf7eb162c10`.
+Обе identity независимо пересчитаны; generation-1 и generation-2 values не
+являются evidence v3.
+
+Matrix обязана покрыть runtime acceptance binding, closed execution plan,
+typed repository locators, exact `/dev/fd/3` argv, atomic cached-byte pipe
+transport, FD type/access/inheritability/reuse и close lifecycle, explicit
+launcher blockers, all-role linkage, global lexical/physical aliasing,
+no-reopen, stable-read lifecycle и controlled no-leak output. Deep envelope
+mutations explicitly обновляют runtime acceptance digest, чтобы проверять deep
+validator; отдельный stale-binding case оставляет record неизменным.
 
 ## Preserved identities, blockers и gate
 
@@ -359,20 +450,12 @@ v7/generation 108, 17 component identities, bundle
 и owner-freeze snapshot
 `df84871be332ee52c315d0c0cc1a7a0046251352a2a0131382b5cb994cffcb58`.
 
-Независимо остаются:
-
-- `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN`;
-- `NATIVE_DEPENDENCY_CLOSURE_UNPROVEN`;
-- `CONTEXT_LIMIT_BINDING_UNPROVEN`;
-- `PROVIDER_PERSISTENCE_UNPROVEN`;
-- `RESIDENCY_UNPROVEN`;
-- `OUTPUT_LIMIT_BINDING_UNPROVEN`;
-- `LIFECYCLE_STATE_UNPROVEN`;
-- missing frozen prompt/template bytes;
-- missing real candidate identities;
-- `PARTIAL_REPORT_CANNOT_BE_COMPLETE`.
-
-Gate после review этого contract-only change:
+Независимо остаются blockers: executable implementation identity,
+`INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN`,
+`LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN`, `ROLE_IMPORT_TRANSPORT_UNPROVEN`, native
+dependency closure, context/output binding, persistence, residency, lifecycle,
+missing frozen prompt/template bytes, real candidate identities и
+`PARTIAL_REPORT_CANNOT_BE_COMPLETE`.
 
 ```text
 M1B-1A0 CONTRACT: READY_FOR_REVIEW
@@ -387,5 +470,5 @@ M2: FORBIDDEN
 ```
 
 После review и merge разрешено только отдельное задание на реальные four-role
-surfaces и external implementation/runtime admission. Даже merge этого contract
-не разрешает Ollama probe или model call.
+surfaces и external owner-controlled implementation/runtime admission. Даже
+merge не разрешает Ollama probe, model call, private corpus или benchmark.

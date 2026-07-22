@@ -29,10 +29,14 @@ Same-process Python runtime, imports, globals/closures и analysis code вход
 TCB; capability предотвращает случайное смешение raw rows, но не является
 security boundary против reflection или monkeypatching внутри TCB. Existing
 reviewer/HGT/no-output invariants сохранены. Synthetic corpus bytes не менялись:
-corpus v3/generation 304 остаётся тем же. Новый M1B-1A0 contract имеет
-отдельные schema/version/generation и external digest, но не принимает текущие
-executable bytes, runtime или invocation state. Это contract evidence, а не
-model call или quality verdict.
+corpus v3/generation 304 остаётся тем же. M1B-1A0 contract generation 3 имеет
+отдельные contract/envelope/runtime-acceptance identities, closed execution
+plan, typed repository locators, cached provider bytes через exact `/dev/fd/3`
+pipe transport и global lexical/physical no-reopen policy. Interpreter exec,
+launcher opened-byte handoff и descriptor imports остальных roles остаются
+explicit blockers. Caller-supplied runtime record не заменяет external owner-controlled
+trust root; contract не принимает текущие executable bytes, runtime или
+invocation state. Это contract evidence, а не model call или quality verdict.
 
 ## Контракт MVP
 
@@ -104,7 +108,10 @@ Hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) 
 
 External owner-freeze PR #6 и stable-read hardening PR #7 слиты;
 `OWNER_FREEZE: ACCEPTED`, `STABLE_READ_HARDENING: ACCEPTED`. M1B-1A0 создаёт
-только reviewable offline contract и synthetic conformance gate. Следующий
+только reviewable generation-3 offline contract и synthetic conformance gate.
+Existing five-field implementation acceptance остаётся неизменным, а отдельный
+runtime acceptance exact bind-ит canonical envelope без выдачи authority.
+Следующий
 разрешённый шаг после review и merge этого contract PR — отдельное задание на
 реальные four-role executable surfaces и external implementation/runtime
 admission. Даже тогда model call, private corpus и complete benchmark не

@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import errno
+import fcntl
 import os
 import re
 import stat
@@ -23,6 +24,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 MAX_JSON_INPUT_BYTES = 256 * 1024
 MAX_EXECUTABLE_FILE_BYTES = 8 * 1024 * 1024
 MAX_EXECUTABLE_TOTAL_BYTES = 32 * 1024 * 1024
+MAX_ATOMIC_ENTRYPOINT_BYTES = 512
 MAX_IMPORT_ENTRIES = 512
 MAX_NATIVE_DEPENDENCY_ENTRIES = 256
 MAX_STRING_BYTES = 4096
@@ -30,23 +32,28 @@ MAX_SEQUENCE_ENTRIES = 1024
 MAX_JSON_INTEGER = (1 << 63) - 1
 MIN_JSON_INTEGER = -(1 << 63)
 
-CONTRACT_SCHEMA = "m1b-offline-executable-tcb-contract-v1"
-CONTRACT_VERSION = "m1b-offline-executable-tcb-admission-v1"
-CONTRACT_GENERATION = 1
+CONTRACT_SCHEMA = "m1b-offline-executable-tcb-contract-v3"
+CONTRACT_VERSION = "m1b-offline-executable-tcb-admission-v3"
+CONTRACT_GENERATION = 3
 MANIFEST_SCHEMA = "m1b-executable-implementation-manifest-v1"
 ACCEPTANCE_STATE = "owner_accepted"
-EXECUTION_ENVELOPE_SCHEMA = "m1b-execution-envelope-v1"
-EXECUTION_ENVELOPE_GENERATION = 1
+EXECUTION_ENVELOPE_SCHEMA = "m1b-execution-envelope-v3"
+EXECUTION_ENVELOPE_GENERATION = 3
+EXECUTION_PLAN_SCHEMA = "m1b-execution-plan-v2"
+EXECUTION_PLAN_GENERATION = 2
+RUNTIME_ACCEPTANCE_SCHEMA = (
+    "m1b-runtime-execution-envelope-acceptance-v1"
+)
+RUNTIME_ACCEPTANCE_GENERATION = 1
 PROTOCOL_GENERATION = 108
 
 # Filled from the canonical normative registry record.  It is deliberately
 # external to that record; the record contains no self hash.
 EXPECTED_CONTRACT_SHA256 = (
-    "589cf895c659b57c2f44268acfa0bf33b3c98d6cd5e6b4fea1f2f9b2500d1a5f"
+    "c346fdd761ea477a85930c041858e7444a576263f3fb5ca568cc1ab005ef9744"
 )
 
 FileIdentity = Tuple[int, int]
-VerifiedFiles = Dict[str, Tuple[str, FileIdentity]]
 
 REQUIRED_ROLES = (
     "analysis_engine",
@@ -56,10 +63,122 @@ REQUIRED_ROLES = (
 )
 
 _MANIFEST_DOMAIN = b"stellaris-m1b-executable-manifest-v1"
-_CONTRACT_DOMAIN = b"stellaris-m1b-offline-executable-tcb-contract-v1"
+_CONTRACT_DOMAIN = b"stellaris-m1b-offline-executable-tcb-contract-v3"
+_ENVELOPE_DOMAIN = b"stellaris-m1b-execution-envelope-v3"
+_RUNTIME_ACCEPTANCE_DOMAIN = (
+    b"stellaris-m1b-runtime-execution-envelope-acceptance-v1"
+)
+_ENVELOPE_DIGEST_FRAMING = (
+    "sha256_domain_nul_u64be_length_canonical_envelope"
+)
 _DIGEST = re.compile(r"[0-9a-f]{64}", re.ASCII)
 _MODULE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*", re.ASCII)
 _CODE = re.compile(r"[A-Z][A-Z0-9_]+", re.ASCII)
+
+_ALLOWED_CODES = frozenset(
+    {
+        "ACCEPTANCE_LINKAGE_MISMATCH",
+        "ACCEPTANCE_RECORD_INVALID",
+        "ACCEPTANCE_STATE_INVALID",
+        "BYTECODE_POLICY_INVALID",
+        "CLI_ARGUMENT_EXTRA",
+        "CLI_ARGUMENT_MISSING",
+        "CLI_ARGUMENTS_INVALID",
+        "CONTRACT_IDENTITY_MISMATCH",
+        "CONTRACT_INVALID",
+        "ENVIRONMENT_POLICY_INVALID",
+        "ENTRYPOINT_TRANSPORT_BINDING_MISMATCH",
+        "ENTRYPOINT_TRANSPORT_CLOSE_FAILED",
+        "ENTRYPOINT_TRANSPORT_FD_MISMATCH",
+        "ENTRYPOINT_TRANSPORT_INVALID",
+        "ENTRYPOINT_TRANSPORT_IO_FAILED",
+        "ENTRYPOINT_TRANSPORT_REQUIRED",
+        "ENTRYPOINT_TRANSPORT_SIZE_LIMIT",
+        "EXECUTABLE_CHANGED",
+        "EXECUTABLE_FILE_INVALID",
+        "EXECUTABLE_FILE_SIZE_LIMIT",
+        "EXECUTABLE_READ_FAILED",
+        "EXECUTABLE_TOTAL_SIZE_LIMIT",
+        "EXECUTION_ENVELOPE_INVALID",
+        "EXECUTION_ENVELOPE_NONCANONICAL",
+        "EXECUTION_FILE_HASH_MISMATCH",
+        "EXECUTION_LINKAGE_MISMATCH",
+        "EXECUTION_PLAN_ENTRYPOINT_MISMATCH",
+        "EXECUTION_PLAN_IMPORT_BINDING_MISMATCH",
+        "EXECUTION_PLAN_INTERPRETER_MISMATCH",
+        "EXECUTION_PLAN_INVALID",
+        "EXECUTION_PLAN_ROLE_BINDING_MISMATCH",
+        "EXECUTION_STATE_MISMATCH",
+        "IMPORT_CLOSURE_INVALID",
+        "IMPORT_PATH_SHADOWING",
+        "INPUT_CHANGED",
+        "INPUT_FILE_INVALID",
+        "INPUT_READ_FAILED",
+        "INPUT_RECORD_ALIAS_FORBIDDEN",
+        "INPUT_SIZE_LIMIT",
+        "INVALID_TYPE",
+        "INVOCATION_ARGV_GRAMMAR_INVALID",
+        "INVOCATION_CWD_INVALID",
+        "INVOCATION_ENTRYPOINT_MISMATCH",
+        "INVOCATION_FLAGS_MISMATCH",
+        "INVOCATION_INTERPRETER_MISMATCH",
+        "INVOCATION_LOCATOR_INVALID",
+        "INVOCATION_POLICY_INVALID",
+        "JSON_DUPLICATE_KEY",
+        "JSON_FLOAT_FORBIDDEN",
+        "JSON_INTEGER_OUT_OF_RANGE",
+        "JSON_MALFORMED",
+        "JSON_NESTING_LIMIT",
+        "JSON_SEQUENCE_SIZE_LIMIT",
+        "JSON_STRING_SIZE_LIMIT",
+        "JSON_UNICODE_INVALID",
+        "LAUNCHER_POLICY_INVALID",
+        "MANIFEST_FILE_HASH_INVALID",
+        "MANIFEST_FILE_HASH_MISMATCH",
+        "MANIFEST_INVALID",
+        "MANIFEST_NONCANONICAL",
+        "MANIFEST_PATH_INVALID",
+        "MANIFEST_ROLE_SET_INVALID",
+        "MANIFEST_SELF_ENTRY_FORBIDDEN",
+        "NATIVE_DEPENDENCY_CLOSURE_UNPROVEN",
+        "NATIVE_DEPENDENCY_POLICY_INVALID",
+        "PHYSICAL_IDENTITY_ALIAS",
+        "PLATFORM_UNSUPPORTED",
+        "REPOSITORY_ROOT_CHANGED",
+        "REPOSITORY_ROOT_INVALID",
+        "RUNTIME_ACCEPTANCE_ALIAS_FORBIDDEN",
+        "RUNTIME_ACCEPTANCE_CONTRACT_DIGEST_MISMATCH",
+        "RUNTIME_ACCEPTANCE_CONTRACT_GENERATION_MISMATCH",
+        "RUNTIME_ACCEPTANCE_CONTRACT_SCHEMA_MISMATCH",
+        "RUNTIME_ACCEPTANCE_CONTRACT_VERSION_MISMATCH",
+        "RUNTIME_ACCEPTANCE_DUPLICATE_KEY",
+        "RUNTIME_ACCEPTANCE_ENVELOPE_DIGEST_MISMATCH",
+        "RUNTIME_ACCEPTANCE_ENVELOPE_DOMAIN_MISMATCH",
+        "RUNTIME_ACCEPTANCE_ENVELOPE_FRAMING_MISMATCH",
+        "RUNTIME_ACCEPTANCE_ENVELOPE_GENERATION_MISMATCH",
+        "RUNTIME_ACCEPTANCE_ENVELOPE_RAW_SHA_FORBIDDEN",
+        "RUNTIME_ACCEPTANCE_ENVELOPE_SCHEMA_MISMATCH",
+        "RUNTIME_ACCEPTANCE_FIELD_EXTRA",
+        "RUNTIME_ACCEPTANCE_FIELD_MISSING",
+        "RUNTIME_ACCEPTANCE_GENERATION_MISMATCH",
+        "RUNTIME_ACCEPTANCE_IMPLEMENTATION_GENERATION_MISMATCH",
+        "RUNTIME_ACCEPTANCE_MALFORMED",
+        "RUNTIME_ACCEPTANCE_MANIFEST_DIGEST_MISMATCH",
+        "RUNTIME_ACCEPTANCE_MANIFEST_SCHEMA_MISMATCH",
+        "RUNTIME_ACCEPTANCE_NONCANONICAL",
+        "RUNTIME_ACCEPTANCE_PROTOCOL_GENERATION_MISMATCH",
+        "RUNTIME_ACCEPTANCE_SCHEMA_MISMATCH",
+        "RUNTIME_ACCEPTANCE_SELF_ASSERTED_PROVEN",
+        "RUNTIME_ACCEPTANCE_STATE_INVALID",
+        "RUNTIME_ACCEPTANCE_STATE_PROPOSED",
+        "RUNTIME_ACCEPTANCE_STATE_RETIRED",
+        "RUNTIME_HOOK_POLICY_INVALID",
+        "RUNTIME_IDENTITY_INVALID",
+        "SYNTHETIC_CONFORMANCE_ONLY",
+        "UNEXPECTED_FAILURE",
+        "UTF8_INVALID",
+    }
+)
 
 _MANIFEST_FIELDS = ("files", "implementation_generation", "manifest_schema")
 _MANIFEST_FILE_FIELDS = ("path", "role", "sha256")
@@ -81,6 +200,7 @@ _CONTRACT_FIELDS = (
     "limits",
     "offline_verifier",
     "protocol_generation",
+    "runtime_acceptance",
     "status_policy",
 )
 _ENVELOPE_FIELDS = (
@@ -100,17 +220,44 @@ _ENVELOPE_FIELDS = (
 _STATE_FIELDS = (
     "bytecode",
     "environment",
+    "execution_plan",
     "imports",
     "interpreter",
     "invocation",
     "native_dependencies",
     "runtime_hooks",
 )
+_EXECUTION_PLAN_FIELDS = (
+    "entrypoint",
+    "interpreter",
+    "launcher",
+    "plan_generation",
+    "plan_schema",
+    "role_imports",
+)
+_PLAN_INTERPRETER_FIELDS = ("repository_locator", "sha256")
+_PLAN_ENTRYPOINT_FIELDS = (
+    "mode",
+    "repository_locator",
+    "role",
+    "sha256",
+)
+_PLAN_ROLE_IMPORT_FIELDS = ("kind", "module", "path", "role", "sha256")
+_PLAN_LAUNCHER_FIELDS = ("blockers", "status")
+_PLAN_LAUNCHER_BLOCKERS = (
+    "INTERPRETER_PATH_EXEC_IDENTITY_UNPROVEN",
+    "LAUNCHER_OPENED_BYTE_CHAIN_UNPROVEN",
+    "ROLE_IMPORT_TRANSPORT_UNPROVEN",
+)
+_REQUIRED_IMPORTED_ROLES = (
+    "analysis_engine",
+    "contract_validator",
+    "synthetic_fixture_materializer",
+)
 _INTERPRETER_FIELDS = (
     "abi_flags",
     "byteorder",
     "cache_tag",
-    "executable_path",
     "executable_sha256",
     "extension_suffix",
     "implementation",
@@ -118,6 +265,7 @@ _INTERPRETER_FIELDS = (
     "max_unicode",
     "platform",
     "pointer_bits",
+    "repository_locator",
     "soabi",
     "version_tuple",
 )
@@ -130,15 +278,29 @@ _BYTECODE_FIELDS = (
 )
 _ENVIRONMENT_FIELDS = ("ambient_inheritance", "policy", "variables")
 _INVOCATION_FIELDS = (
-    "argv",
+    "argv0",
+    "argv_tail",
     "cwd",
     "inherited_fds",
     "mode",
+    "os_exec_target",
     "python_flags",
     "stdio",
     "sys_path",
     "warnoptions",
     "xoptions",
+)
+_LOCATOR_FIELDS = ("base", "path")
+_INHERITED_FD_FIELDS = (
+    "byte_count",
+    "child_fd",
+    "mode",
+    "process_path",
+    "purpose",
+    "repository_locator",
+    "role",
+    "sha256",
+    "transport",
 )
 _PYTHON_FLAG_FIELDS = (
     "bytes_warning",
@@ -169,16 +331,177 @@ _HOOK_FIELDS = (
     "startup_hooks",
     "trace_hook",
 )
+_RUNTIME_ACCEPTANCE_FIELDS = (
+    "contract_generation",
+    "contract_schema",
+    "contract_sha256",
+    "contract_version",
+    "envelope_digest_domain",
+    "envelope_digest_framing",
+    "envelope_generation",
+    "envelope_schema",
+    "envelope_sha256",
+    "implementation_generation",
+    "manifest_schema",
+    "manifest_sha256",
+    "protocol_generation",
+    "runtime_acceptance_generation",
+    "runtime_acceptance_schema",
+    "runtime_acceptance_state",
+)
 
 
 class TCBContractError(RuntimeError):
     """A controlled verifier failure carrying only an allowlisted code."""
 
     def __init__(self, code: str) -> None:
-        if type(code) is not str or _CODE.fullmatch(code) is None:
+        if (
+            type(code) is not str
+            or _CODE.fullmatch(code) is None
+            or code not in _ALLOWED_CODES
+        ):
             code = "UNEXPECTED_FAILURE"
         self.code = code
         super().__init__(code)
+
+
+class AdmittedFile:
+    """One stable file admission retained for exact no-reopen reuse."""
+
+    __slots__ = ("data", "identity", "is_record", "path", "purposes", "sha256")
+
+    def __init__(
+        self,
+        path: str,
+        data: bytes,
+        sha256: str,
+        identity: FileIdentity,
+        *,
+        is_record: bool,
+        purpose: str,
+    ) -> None:
+        self.path = path
+        self.data = data
+        self.sha256 = sha256
+        self.identity = identity
+        self.is_record = is_record
+        self.purposes = {purpose}
+
+
+class AdmittedFileIndex:
+    """Verification-wide lexical and physical identity admission index."""
+
+    def __init__(self, root_descriptor: int) -> None:
+        if type(root_descriptor) is not int or root_descriptor < 0:
+            raise TCBContractError("INPUT_READ_FAILED")
+        self.root_descriptor = root_descriptor
+        self.by_path: Dict[str, AdmittedFile] = {}
+        self.by_identity: Dict[FileIdentity, AdmittedFile] = {}
+
+    def _publish(self, entry: AdmittedFile) -> AdmittedFile:
+        if entry.path in self.by_path or entry.identity in self.by_identity:
+            raise TCBContractError("PHYSICAL_IDENTITY_ALIAS")
+        self.by_path[entry.path] = entry
+        self.by_identity[entry.identity] = entry
+        return entry
+
+    def admit_record(
+        self,
+        relative_path: str,
+        purpose: str,
+        *,
+        alias_code: str = "INPUT_RECORD_ALIAS_FORBIDDEN",
+    ) -> AdmittedFile:
+        _relative_components(relative_path, "INPUT_FILE_INVALID")
+        if relative_path in self.by_path:
+            raise TCBContractError(alias_code)
+        identities: List[FileIdentity] = []
+        data = _read_rooted_regular_file(
+            self.root_descriptor,
+            relative_path,
+            MAX_JSON_INPUT_BYTES,
+            identity_out=identities,
+            known_identities=self.by_identity,
+            alias_code=alias_code,
+        )
+        if len(identities) != 1:
+            raise TCBContractError("INPUT_READ_FAILED")
+        return self._publish(
+            AdmittedFile(
+                relative_path,
+                data,
+                hashlib.sha256(data).hexdigest(),
+                identities[0],
+                is_record=True,
+                purpose=purpose,
+            )
+        )
+
+    def admit_executable(
+        self,
+        relative_path: str,
+        expected_sha256: str,
+        maximum: int,
+        *,
+        purpose: str,
+        size_code: str,
+        hash_code: str = "EXECUTION_FILE_HASH_MISMATCH",
+        alias_code: str = "PHYSICAL_IDENTITY_ALIAS",
+    ) -> Tuple[AdmittedFile, bool]:
+        _relative_components(relative_path, "EXECUTABLE_FILE_INVALID")
+        digest = _require_digest(expected_sha256, hash_code)
+        existing = self.by_path.get(relative_path)
+        if existing is not None:
+            if existing.is_record:
+                raise TCBContractError(alias_code)
+            if existing.sha256 != digest:
+                raise TCBContractError(hash_code)
+            existing.purposes.add(purpose)
+            return existing, False
+        identities: List[FileIdentity] = []
+        data = _read_rooted_regular_file(
+            self.root_descriptor,
+            relative_path,
+            maximum,
+            size_code=size_code,
+            invalid_code="EXECUTABLE_FILE_INVALID",
+            read_code="EXECUTABLE_READ_FAILED",
+            changed_code="EXECUTABLE_CHANGED",
+            identity_out=identities,
+            known_identities=self.by_identity,
+            alias_code=alias_code,
+        )
+        if len(identities) != 1:
+            raise TCBContractError("EXECUTABLE_READ_FAILED")
+        observed_digest = hashlib.sha256(data).hexdigest()
+        if observed_digest != digest:
+            raise TCBContractError(hash_code)
+        entry = AdmittedFile(
+            relative_path,
+            data,
+            observed_digest,
+            identities[0],
+            is_record=False,
+            purpose=purpose,
+        )
+        return self._publish(entry), True
+
+    def lookup_exact(
+        self,
+        relative_path: str,
+        expected_sha256: str,
+        code: str,
+    ) -> AdmittedFile:
+        """Resolve only an already admitted exact path; never touch filesystem."""
+
+        entry = self.by_path.get(relative_path)
+        if (
+            entry is None
+            or entry.is_record
+            or entry.sha256 != expected_sha256
+        ):
+            raise TCBContractError(code)
+        return entry
 
 
 def _duplicate_safe_object(
@@ -335,6 +658,16 @@ def _relative_components(value: Any, code: str) -> Tuple[str, ...]:
     return components
 
 
+def _validate_repository_locator(value: Any) -> Dict[str, Any]:
+    locator = _require_object(
+        value, _LOCATOR_FIELDS, "INVOCATION_LOCATOR_INVALID"
+    )
+    if locator["base"] != "repository_root":
+        raise TCBContractError("INVOCATION_LOCATOR_INVALID")
+    _relative_components(locator["path"], "INVOCATION_LOCATOR_INVALID")
+    return locator
+
+
 def _absolute_root_components(value: Any) -> Tuple[str, ...]:
     path = _require_string(value, "REPOSITORY_ROOT_INVALID")
     if not path.startswith("/") or path == "/" or "\\" in path or "\x00" in path:
@@ -363,6 +696,12 @@ def _metadata(identity: os.stat_result) -> Tuple[int, ...]:
         identity.st_mtime_ns,
         identity.st_ctime_ns,
     )
+
+
+def _physical_identity(identity: os.stat_result) -> FileIdentity:
+    """Return the injectable physical file identity used by admission."""
+
+    return (identity.st_dev, identity.st_ino)
 
 
 def _nofollow_directory_flags() -> int:
@@ -394,6 +733,95 @@ def _close_descriptors_once(
             if result is None:
                 result = TCBContractError(code)
     return result
+
+
+def _verify_atomic_entrypoint_snapshot(data: bytes) -> None:
+    """Prove the bounded pre-spawn pipe primitive from cached admitted bytes.
+
+    This does not prove a future launcher's identity.  It proves only that the
+    declared non-empty snapshot fits the pinned atomic bound, is written in
+    one complete write before any child could exist, and is read back exactly
+    after the writer has been closed.
+    """
+
+    if type(data) is not bytes:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_INVALID")
+    if not data or len(data) > MAX_ATOMIC_ENTRYPOINT_BYTES:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_SIZE_LIMIT")
+
+    descriptors: List[int] = []
+    primary: Optional[TCBContractError] = None
+    observed = b""
+    try:
+        pair = os.pipe()
+        if type(pair) is tuple:
+            for item in pair:
+                if (
+                    type(item) is int
+                    and item >= 0
+                    and item not in descriptors
+                ):
+                    descriptors.append(item)
+        if (
+            type(pair) is not tuple
+            or len(pair) != 2
+            or any(type(item) is not int or item < 3 for item in pair)
+            or pair[0] == pair[1]
+        ):
+            raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+        read_descriptor, write_descriptor = pair
+        read_status = os.fstat(read_descriptor)
+        write_status = os.fstat(write_descriptor)
+        read_flags = fcntl.fcntl(read_descriptor, fcntl.F_GETFL)
+        write_flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
+        if (
+            not stat.S_ISFIFO(read_status.st_mode)
+            or not stat.S_ISFIFO(write_status.st_mode)
+            or read_flags & os.O_ACCMODE != os.O_RDONLY
+            or write_flags & os.O_ACCMODE != os.O_WRONLY
+            or os.get_inheritable(read_descriptor)
+            or os.get_inheritable(write_descriptor)
+        ):
+            raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+        pipe_buf = os.fpathconf(write_descriptor, "PC_PIPE_BUF")
+        if type(pipe_buf) is not int or pipe_buf < MAX_ATOMIC_ENTRYPOINT_BYTES:
+            raise TCBContractError("ENTRYPOINT_TRANSPORT_SIZE_LIMIT")
+        written = os.write(write_descriptor, data)
+        if type(written) is not int or written != len(data):
+            raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+
+        # A writer is attempted exactly once.  The future launcher may spawn
+        # only after this close returns successfully.
+        descriptors.remove(write_descriptor)
+        try:
+            os.close(write_descriptor)
+        except BaseException:
+            raise TCBContractError("ENTRYPOINT_TRANSPORT_CLOSE_FAILED")
+
+        chunks: List[bytes] = []
+        remaining = len(data)
+        while remaining:
+            chunk = os.read(read_descriptor, remaining)
+            if type(chunk) is not bytes or not chunk:
+                raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        extra = os.read(read_descriptor, 1)
+        if type(extra) is not bytes or extra:
+            raise TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+        observed = b"".join(chunks)
+        if observed != data:
+            raise TCBContractError("ENTRYPOINT_TRANSPORT_BINDING_MISMATCH")
+    except TCBContractError as error:
+        primary = error
+    except BaseException:
+        primary = TCBContractError("ENTRYPOINT_TRANSPORT_IO_FAILED")
+    finally:
+        primary = _close_descriptors_once(
+            descriptors, primary, "ENTRYPOINT_TRANSPORT_CLOSE_FAILED"
+        )
+    if primary is not None:
+        raise primary
 
 
 def _open_repository_root(
@@ -516,6 +944,8 @@ def _read_rooted_regular_file(
     read_code: str = "INPUT_READ_FAILED",
     changed_code: str = "INPUT_CHANGED",
     identity_out: Optional[List[FileIdentity]] = None,
+    known_identities: Optional[Mapping[FileIdentity, Any]] = None,
+    alias_code: str = "PHYSICAL_IDENTITY_ALIAS",
 ) -> bytes:
     """Read stable exact bytes through descriptor-rooted no-follow traversal."""
 
@@ -562,6 +992,9 @@ def _read_rooted_regular_file(
         leaf_before = os.fstat(leaf_descriptor)
         if not stat.S_ISREG(leaf_before.st_mode) or leaf_before.st_nlink != 1:
             raise TCBContractError(invalid_code)
+        leaf_identity = _physical_identity(leaf_before)
+        if known_identities is not None and leaf_identity in known_identities:
+            raise TCBContractError(alias_code)
         if leaf_before.st_size > max_bytes:
             raise TCBContractError(size_code)
         remaining = leaf_before.st_size
@@ -608,7 +1041,7 @@ def _read_rooted_regular_file(
     if leaf_before is None:
         raise TCBContractError(read_code)
     if identity_out is not None:
-        identity_out.append((leaf_before.st_dev, leaf_before.st_ino))
+        identity_out.append(_physical_identity(leaf_before))
     return data
 
 
@@ -676,6 +1109,74 @@ def contract_digest(canonical_bytes: bytes) -> str:
     return hashlib.sha256(framed).hexdigest()
 
 
+def canonical_envelope_bytes(value: Any) -> bytes:
+    """Return the canonical execution-envelope encoding."""
+
+    try:
+        encoded = json.dumps(
+            value,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii", errors="strict") + b"\n"
+    except (TypeError, ValueError, UnicodeEncodeError, RecursionError):
+        raise TCBContractError("EXECUTION_ENVELOPE_INVALID")
+    if len(encoded) > MAX_JSON_INPUT_BYTES:
+        raise TCBContractError("INPUT_SIZE_LIMIT")
+    return encoded
+
+
+def envelope_digest(canonical_bytes: bytes) -> str:
+    """Return the v3 domain-separated canonical envelope digest."""
+
+    if type(canonical_bytes) is not bytes:
+        raise TCBContractError("INVALID_TYPE")
+    return hashlib.sha256(
+        _ENVELOPE_DOMAIN
+        + b"\x00"
+        + len(canonical_bytes).to_bytes(8, "big")
+        + canonical_bytes
+    ).hexdigest()
+
+
+def execution_envelope_digest(canonical_bytes: bytes) -> str:
+    """Named public helper for the execution-envelope framed digest."""
+
+    return envelope_digest(canonical_bytes)
+
+
+def canonical_runtime_acceptance_bytes(value: Any) -> bytes:
+    """Return the canonical external runtime-acceptance encoding."""
+
+    try:
+        encoded = json.dumps(
+            value,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii", errors="strict") + b"\n"
+    except (TypeError, ValueError, UnicodeEncodeError, RecursionError):
+        raise TCBContractError("RUNTIME_ACCEPTANCE_MALFORMED")
+    if len(encoded) > MAX_JSON_INPUT_BYTES:
+        raise TCBContractError("INPUT_SIZE_LIMIT")
+    return encoded
+
+
+def runtime_acceptance_digest(canonical_bytes: bytes) -> str:
+    """Return the external runtime-acceptance framed digest."""
+
+    if type(canonical_bytes) is not bytes:
+        raise TCBContractError("INVALID_TYPE")
+    return hashlib.sha256(
+        _RUNTIME_ACCEPTANCE_DOMAIN
+        + b"\x00"
+        + len(canonical_bytes).to_bytes(8, "big")
+        + canonical_bytes
+    ).hexdigest()
+
+
 def _validate_contract_bytes(contract_bytes: bytes) -> Tuple[Dict[str, Any], str]:
     contract = _require_object(
         parse_json_bytes(contract_bytes), _CONTRACT_FIELDS, "CONTRACT_INVALID"
@@ -694,18 +1195,14 @@ def _validate_contract_bytes(contract_bytes: bytes) -> Tuple[Dict[str, Any], str
 
 
 def _verify_executable_identity(
-    root_descriptor: int,
+    admitted_files: AdmittedFileIndex,
     relative_path: str,
     expected_sha256: str,
-    verified: VerifiedFiles,
     total_bytes: int,
-) -> Tuple[int, bool, FileIdentity]:
-    existing = verified.get(relative_path)
-    if existing is not None:
-        existing_sha256, existing_identity = existing
-        if existing_sha256 != expected_sha256:
-            raise TCBContractError("EXECUTION_FILE_HASH_MISMATCH")
-        return total_bytes, False, existing_identity
+    *,
+    purpose: str,
+    hash_code: str = "EXECUTION_FILE_HASH_MISMATCH",
+) -> Tuple[int, bool, AdmittedFile]:
     remaining = MAX_EXECUTABLE_TOTAL_BYTES - total_bytes
     if remaining < 0:
         raise TCBContractError("EXECUTABLE_TOTAL_SIZE_LIMIT")
@@ -715,34 +1212,23 @@ def _verify_executable_identity(
         if remaining >= MAX_EXECUTABLE_FILE_BYTES
         else "EXECUTABLE_TOTAL_SIZE_LIMIT"
     )
-    identities: List[FileIdentity] = []
-    data = _read_rooted_regular_file(
-        root_descriptor,
+    entry, added = admitted_files.admit_executable(
         relative_path,
+        expected_sha256,
         limit,
+        purpose=purpose,
         size_code=size_code,
-        invalid_code="EXECUTABLE_FILE_INVALID",
-        read_code="EXECUTABLE_READ_FAILED",
-        changed_code="EXECUTABLE_CHANGED",
-        identity_out=identities,
+        hash_code=hash_code,
     )
-    if len(identities) != 1:
-        raise TCBContractError("EXECUTABLE_READ_FAILED")
-    if hashlib.sha256(data).hexdigest() != expected_sha256:
-        raise TCBContractError("EXECUTION_FILE_HASH_MISMATCH")
-    identity = identities[0]
-    verified[relative_path] = (expected_sha256, identity)
-    return total_bytes + len(data), True, identity
+    return total_bytes + (len(entry.data) if added else 0), added, entry
 
 
 def _validate_manifest_bytes(
     manifest_bytes: bytes,
-    root_descriptor: int,
+    admitted_files: AdmittedFileIndex,
     record_paths: Sequence[str],
-    record_identities: Set[FileIdentity],
-    verified: VerifiedFiles,
     total_bytes: int,
-) -> Tuple[Dict[str, Any], str, int, int]:
+) -> Tuple[Dict[str, Any], str, int, int, Dict[str, AdmittedFile]]:
     manifest_value = parse_json_bytes(manifest_bytes)
     manifest = _require_object(
         manifest_value, _MANIFEST_FIELDS, "MANIFEST_INVALID"
@@ -791,24 +1277,32 @@ def _validate_manifest_bytes(
         raise TCBContractError("MANIFEST_NONCANONICAL")
 
     executable_count = 0
-    manifest_identities: Set[FileIdentity] = set()
+    manifest_bindings: Dict[str, AdmittedFile] = {}
+    role_by_path = {
+        row["path"]: row["role"] for row in manifest["files"]
+    }
     for path, digest in prepared:
         try:
-            total_bytes, added, identity = _verify_executable_identity(
-                root_descriptor, path, digest, verified, total_bytes
+            total_bytes, added, entry = _verify_executable_identity(
+                admitted_files,
+                path,
+                digest,
+                total_bytes,
+                purpose="manifest_role:{}".format(role_by_path[path]),
+                hash_code="MANIFEST_FILE_HASH_MISMATCH",
             )
-        except TCBContractError as error:
-            if error.code == "EXECUTION_FILE_HASH_MISMATCH":
-                raise TCBContractError("MANIFEST_FILE_HASH_MISMATCH")
+        except TCBContractError:
             raise
-        if identity in record_identities:
-            raise TCBContractError("MANIFEST_SELF_ENTRY_FORBIDDEN")
-        if identity in manifest_identities:
-            raise TCBContractError("MANIFEST_PATH_INVALID")
-        manifest_identities.add(identity)
+        manifest_bindings[role_by_path[path]] = entry
         if added:
             executable_count += 1
-    return manifest, manifest_digest(canonical), total_bytes, executable_count
+    return (
+        manifest,
+        manifest_digest(canonical),
+        total_bytes,
+        executable_count,
+        manifest_bindings,
+    )
 
 
 def _validate_acceptance_record(
@@ -861,10 +1355,9 @@ def _require_ascii_text(
 
 def _validate_interpreter(
     value: Any,
-    root_descriptor: int,
-    verified: VerifiedFiles,
+    admitted_files: AdmittedFileIndex,
     total_bytes: int,
-) -> Tuple[Dict[str, Any], int]:
+) -> Tuple[Dict[str, Any], int, AdmittedFile]:
     interpreter = _require_object(
         value, _INTERPRETER_FIELDS, "EXECUTION_ENVELOPE_INVALID"
     )
@@ -923,21 +1416,21 @@ def _validate_interpreter(
         or soabi != "cpython-39-darwin"
     ):
         raise TCBContractError("RUNTIME_IDENTITY_INVALID")
-    executable_path = _require_string(
-        interpreter["executable_path"], "RUNTIME_IDENTITY_INVALID"
+    repository_locator = _require_string(
+        interpreter["repository_locator"], "RUNTIME_IDENTITY_INVALID"
     )
-    _relative_components(executable_path, "RUNTIME_IDENTITY_INVALID")
+    _relative_components(repository_locator, "RUNTIME_IDENTITY_INVALID")
     executable_sha256 = _require_digest(
         interpreter["executable_sha256"], "RUNTIME_IDENTITY_INVALID"
     )
-    total_bytes, _added, _identity = _verify_executable_identity(
-        root_descriptor,
-        executable_path,
+    total_bytes, _added, entry = _verify_executable_identity(
+        admitted_files,
+        repository_locator,
         executable_sha256,
-        verified,
         total_bytes,
+        purpose="interpreter",
     )
-    return interpreter, total_bytes
+    return interpreter, total_bytes, entry
 
 
 def _validate_bytecode(value: Any) -> Dict[str, Any]:
@@ -994,8 +1487,6 @@ def _validate_python_flags(value: Any) -> Dict[str, Any]:
         "utf8_mode": 1,
         "verbose": 0,
     }
-    if flags != expected:
-        raise TCBContractError("INVOCATION_POLICY_INVALID")
     if type(flags["dev_mode"]) is not bool:
         raise TCBContractError("INVOCATION_POLICY_INVALID")
     for field in (
@@ -1015,28 +1506,166 @@ def _validate_python_flags(value: Any) -> Dict[str, Any]:
         "verbose",
     ):
         _require_nonnegative_int(flags[field], "INVOCATION_POLICY_INVALID")
+    if flags != expected:
+        raise TCBContractError("INVOCATION_FLAGS_MISMATCH")
     return flags
 
 
-def _validate_invocation(value: Any) -> Tuple[Dict[str, Any], Tuple[str, ...]]:
+def _validate_execution_plan_shape(value: Any) -> Dict[str, Any]:
+    plan = _require_object(value, _EXECUTION_PLAN_FIELDS, "EXECUTION_PLAN_INVALID")
+    if (
+        plan["plan_schema"] != EXECUTION_PLAN_SCHEMA
+        or _require_positive_int(
+            plan["plan_generation"], "EXECUTION_PLAN_INVALID"
+        )
+        != EXECUTION_PLAN_GENERATION
+    ):
+        raise TCBContractError("EXECUTION_PLAN_INVALID")
+
+    interpreter = _require_object(
+        plan["interpreter"],
+        _PLAN_INTERPRETER_FIELDS,
+        "EXECUTION_PLAN_INVALID",
+    )
+    _relative_components(
+        interpreter["repository_locator"], "EXECUTION_PLAN_INVALID"
+    )
+    _require_digest(interpreter["sha256"], "EXECUTION_PLAN_INVALID")
+
+    entrypoint = _require_object(
+        plan["entrypoint"],
+        _PLAN_ENTRYPOINT_FIELDS,
+        "EXECUTION_PLAN_INVALID",
+    )
+    if (
+        entrypoint["mode"] != "descriptor_script_file"
+        or entrypoint["role"] != "provider_request_harness"
+    ):
+        raise TCBContractError("EXECUTION_PLAN_ENTRYPOINT_MISMATCH")
+    _relative_components(
+        entrypoint["repository_locator"],
+        "EXECUTION_PLAN_ENTRYPOINT_MISMATCH",
+    )
+    if entrypoint["repository_locator"].startswith("-"):
+        raise TCBContractError("EXECUTION_PLAN_ENTRYPOINT_MISMATCH")
+    _require_digest(
+        entrypoint["sha256"], "EXECUTION_PLAN_ENTRYPOINT_MISMATCH"
+    )
+
+    launcher = _require_object(
+        plan["launcher"], _PLAN_LAUNCHER_FIELDS, "LAUNCHER_POLICY_INVALID"
+    )
+    blockers = _require_list(
+        launcher["blockers"], "LAUNCHER_POLICY_INVALID", 8
+    )
+    if (
+        launcher["status"] != "unproven"
+        or tuple(blockers) != _PLAN_LAUNCHER_BLOCKERS
+    ):
+        raise TCBContractError("LAUNCHER_POLICY_INVALID")
+
+    raw_roles = _require_list(
+        plan["role_imports"], "EXECUTION_PLAN_INVALID", MAX_SEQUENCE_ENTRIES
+    )
+    if len(raw_roles) != len(_REQUIRED_IMPORTED_ROLES):
+        raise TCBContractError("EXECUTION_PLAN_ROLE_BINDING_MISMATCH")
+    modules: Set[str] = set()
+    paths: Set[str] = set()
+    observed_roles: List[str] = []
+    for raw in raw_roles:
+        row = _require_object(
+            raw,
+            _PLAN_ROLE_IMPORT_FIELDS,
+            "EXECUTION_PLAN_INVALID",
+        )
+        role = _require_string(
+            row["role"], "EXECUTION_PLAN_ROLE_BINDING_MISMATCH"
+        )
+        observed_roles.append(role)
+        if row["kind"] != "source":
+            raise TCBContractError("EXECUTION_PLAN_ROLE_BINDING_MISMATCH")
+        module = _require_string(
+            row["module"], "EXECUTION_PLAN_ROLE_BINDING_MISMATCH"
+        )
+        if _MODULE.fullmatch(module) is None or module in modules:
+            raise TCBContractError("EXECUTION_PLAN_ROLE_BINDING_MISMATCH")
+        modules.add(module)
+        path = _require_string(
+            row["path"], "EXECUTION_PLAN_ROLE_BINDING_MISMATCH"
+        )
+        _relative_components(path, "EXECUTION_PLAN_ROLE_BINDING_MISMATCH")
+        if path in paths or path == entrypoint["repository_locator"]:
+            raise TCBContractError("EXECUTION_PLAN_ROLE_BINDING_MISMATCH")
+        paths.add(path)
+        _require_digest(
+            row["sha256"], "EXECUTION_PLAN_ROLE_BINDING_MISMATCH"
+        )
+    if tuple(observed_roles) != _REQUIRED_IMPORTED_ROLES:
+        raise TCBContractError("EXECUTION_PLAN_ROLE_BINDING_MISMATCH")
+    return plan
+
+
+def _validate_invocation(
+    value: Any,
+    interpreter: Mapping[str, Any],
+    plan: Mapping[str, Any],
+    manifest_bindings: Mapping[str, AdmittedFile],
+    bytecode: Mapping[str, Any],
+    environment: Mapping[str, Any],
+) -> Tuple[Dict[str, Any], Tuple[str, ...]]:
     invocation = _require_object(
         value, _INVOCATION_FIELDS, "INVOCATION_POLICY_INVALID"
     )
-    if invocation["mode"] != "verified_open_descriptors_no_reopen":
+    if invocation["mode"] != "typed_entrypoint_fd_no_repository_reopen":
         raise TCBContractError("INVOCATION_POLICY_INVALID")
     _validate_python_flags(invocation["python_flags"])
 
-    argv = _require_list(
-        invocation["argv"], "INVOCATION_POLICY_INVALID", MAX_SEQUENCE_ENTRIES
+    argv0 = _validate_repository_locator(invocation["argv0"])
+    os_exec_target = _validate_repository_locator(
+        invocation["os_exec_target"]
     )
-    if not argv:
-        raise TCBContractError("INVOCATION_POLICY_INVALID")
-    for argument in argv:
+    interpreter_locator = interpreter["repository_locator"]
+    if (
+        argv0["path"] != interpreter_locator
+        or os_exec_target["path"] != interpreter_locator
+        or plan["interpreter"]["repository_locator"] != interpreter_locator
+    ):
+        raise TCBContractError("INVOCATION_INTERPRETER_MISMATCH")
+
+    argv_tail = _require_list(
+        invocation["argv_tail"],
+        "INVOCATION_ARGV_GRAMMAR_INVALID",
+        MAX_SEQUENCE_ENTRIES,
+    )
+    for argument in argv_tail:
         _require_ascii_text(
-            argument, "INVOCATION_POLICY_INVALID", allow_empty=True
+            argument, "INVOCATION_ARGV_GRAMMAR_INVALID", allow_empty=True
         )
-    cwd = _require_string(invocation["cwd"], "INVOCATION_POLICY_INVALID")
-    _relative_components(cwd, "INVOCATION_POLICY_INVALID")
+    if tuple(argv_tail) == (
+        "-I",
+        "-S",
+        "-X",
+        "utf8",
+        "/dev/fd/3",
+    ):
+        raise TCBContractError("INVOCATION_FLAGS_MISMATCH")
+    if (
+        len(argv_tail) == 6
+        and argv_tail[-1]
+        in {entry.path for entry in manifest_bindings.values()}
+    ):
+        raise TCBContractError("INVOCATION_ENTRYPOINT_MISMATCH")
+    if tuple(argv_tail) != (
+        "-I",
+        "-S",
+        "-B",
+        "-X",
+        "utf8",
+        "/dev/fd/3",
+    ):
+        raise TCBContractError("INVOCATION_ARGV_GRAMMAR_INVALID")
+
+    cwd = _validate_repository_locator(invocation["cwd"])
 
     sys_path_rows = _require_list(
         invocation["sys_path"],
@@ -1044,15 +1673,66 @@ def _validate_invocation(value: Any) -> Tuple[Dict[str, Any], Tuple[str, ...]]:
         MAX_SEQUENCE_ENTRIES,
     )
     sys_paths: List[str] = []
-    for path in sys_path_rows:
-        path = _require_string(path, "INVOCATION_POLICY_INVALID")
-        _relative_components(path, "INVOCATION_POLICY_INVALID")
-        sys_paths.append(path)
+    for raw_locator in sys_path_rows:
+        locator = _validate_repository_locator(raw_locator)
+        sys_paths.append(locator["path"])
     if len(sys_paths) != len(set(sys_paths)):
         raise TCBContractError("INVOCATION_POLICY_INVALID")
 
-    if invocation["inherited_fds"] != []:
-        raise TCBContractError("INVOCATION_POLICY_INVALID")
+    fd_rows = _require_list(
+        invocation["inherited_fds"],
+        "ENTRYPOINT_TRANSPORT_REQUIRED",
+        MAX_SEQUENCE_ENTRIES,
+    )
+    if len(fd_rows) != 1:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_REQUIRED")
+    fd_row = _require_object(
+        fd_rows[0], _INHERITED_FD_FIELDS, "ENTRYPOINT_TRANSPORT_INVALID"
+    )
+    child_fd = _require_nonnegative_int(
+        fd_row["child_fd"], "ENTRYPOINT_TRANSPORT_FD_MISMATCH"
+    )
+    byte_count = _require_positive_int(
+        fd_row["byte_count"], "ENTRYPOINT_TRANSPORT_SIZE_LIMIT"
+    )
+    provider_entry = manifest_bindings.get("provider_request_harness")
+    entrypoint = plan["entrypoint"]
+    if provider_entry is None:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_BINDING_MISMATCH")
+    supplied_digest = _require_digest(
+        fd_row["sha256"], "ENTRYPOINT_TRANSPORT_BINDING_MISMATCH"
+    )
+    supplied_locator = _require_string(
+        fd_row["repository_locator"],
+        "ENTRYPOINT_TRANSPORT_BINDING_MISMATCH",
+    )
+    _relative_components(
+        supplied_locator, "ENTRYPOINT_TRANSPORT_BINDING_MISMATCH"
+    )
+    if (
+        child_fd != 3
+        or fd_row["process_path"] != "/dev/fd/3"
+        or child_fd in (0, 1, 2)
+    ):
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_FD_MISMATCH")
+    if (
+        fd_row["mode"] != "read"
+        or fd_row["purpose"] != "provider_request_harness"
+        or fd_row["role"] != "provider_request_harness"
+        or fd_row["transport"] != "darwin_pipe_atomic_preload_v1"
+    ):
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_INVALID")
+    if (
+        supplied_locator != provider_entry.path
+        or supplied_locator != entrypoint["repository_locator"]
+        or supplied_digest != provider_entry.sha256
+        or supplied_digest != entrypoint["sha256"]
+        or byte_count != len(provider_entry.data)
+    ):
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_BINDING_MISMATCH")
+    if byte_count > MAX_ATOMIC_ENTRYPOINT_BYTES:
+        raise TCBContractError("ENTRYPOINT_TRANSPORT_SIZE_LIMIT")
+    _verify_atomic_entrypoint_snapshot(provider_entry.data)
 
     stdio = _require_object(
         invocation["stdio"], _STDIO_FIELDS, "INVOCATION_POLICY_INVALID"
@@ -1071,9 +1751,119 @@ def _validate_invocation(value: Any) -> Tuple[Dict[str, Any], Tuple[str, ...]]:
         _require_nonnegative_int(row["fd"], "INVOCATION_POLICY_INVALID")
         _require_ascii_text(row["mode"], "INVOCATION_POLICY_INVALID")
         _require_ascii_text(row["target"], "INVOCATION_POLICY_INVALID")
-    if invocation["warnoptions"] != [] or invocation["xoptions"] != []:
-        raise TCBContractError("INVOCATION_POLICY_INVALID")
+    if invocation["warnoptions"] != [] or invocation["xoptions"] != ["utf8"]:
+        raise TCBContractError("INVOCATION_FLAGS_MISMATCH")
+    if (
+        bytecode.get("dont_write_bytecode") is not True
+        or environment.get("ambient_inheritance") is not False
+        or environment.get("policy") != "empty"
+        or environment.get("variables") != []
+    ):
+        raise TCBContractError("INVOCATION_FLAGS_MISMATCH")
     return invocation, tuple(sys_paths)
+
+
+def _validate_execution_plan_primary_bindings(
+    plan: Mapping[str, Any],
+    interpreter: Mapping[str, Any],
+    interpreter_entry: AdmittedFile,
+    manifest_bindings: Mapping[str, AdmittedFile],
+    admitted_files: AdmittedFileIndex,
+) -> None:
+    plan_interpreter = plan["interpreter"]
+    if (
+        plan_interpreter["repository_locator"]
+        != interpreter["repository_locator"]
+        or plan_interpreter["sha256"] != interpreter["executable_sha256"]
+        or admitted_files.lookup_exact(
+            plan_interpreter["repository_locator"],
+            plan_interpreter["sha256"],
+            "EXECUTION_PLAN_INTERPRETER_MISMATCH",
+        )
+        is not interpreter_entry
+    ):
+        raise TCBContractError("EXECUTION_PLAN_INTERPRETER_MISMATCH")
+
+    provider_entry = manifest_bindings.get("provider_request_harness")
+    entrypoint = plan["entrypoint"]
+    if (
+        provider_entry is None
+        or entrypoint["repository_locator"] != provider_entry.path
+        or entrypoint["sha256"] != provider_entry.sha256
+        or admitted_files.lookup_exact(
+            entrypoint["repository_locator"],
+            entrypoint["sha256"],
+            "EXECUTION_PLAN_ENTRYPOINT_MISMATCH",
+        )
+        is not provider_entry
+    ):
+        raise TCBContractError("EXECUTION_PLAN_ENTRYPOINT_MISMATCH")
+
+
+def _validate_execution_plan_bindings(
+    plan: Mapping[str, Any],
+    interpreter: Mapping[str, Any],
+    interpreter_entry: AdmittedFile,
+    manifest_bindings: Mapping[str, AdmittedFile],
+    imports: Sequence[Mapping[str, Any]],
+    import_bindings: Sequence[AdmittedFile],
+    admitted_files: AdmittedFileIndex,
+) -> None:
+    _validate_execution_plan_primary_bindings(
+        plan,
+        interpreter,
+        interpreter_entry,
+        manifest_bindings,
+        admitted_files,
+    )
+
+    if len(imports) != len(import_bindings):
+        raise TCBContractError("EXECUTION_PLAN_IMPORT_BINDING_MISMATCH")
+    role_by_entry = {
+        id(entry): role for role, entry in manifest_bindings.items()
+    }
+    observed_manifest_roles: List[str] = []
+    for import_row, import_entry in zip(imports, import_bindings):
+        role = role_by_entry.get(id(import_entry))
+        if role is not None:
+            if role == "provider_request_harness":
+                raise TCBContractError("EXECUTION_PLAN_IMPORT_BINDING_MISMATCH")
+            observed_manifest_roles.append(role)
+
+    if tuple(observed_manifest_roles) != _REQUIRED_IMPORTED_ROLES:
+        raise TCBContractError("EXECUTION_PLAN_IMPORT_BINDING_MISMATCH")
+
+    for plan_row in plan["role_imports"]:
+        role = plan_row["role"]
+        manifest_entry = manifest_bindings.get(role)
+        if (
+            manifest_entry is None
+            or plan_row["path"] != manifest_entry.path
+            or plan_row["sha256"] != manifest_entry.sha256
+            or admitted_files.lookup_exact(
+                plan_row["path"],
+                plan_row["sha256"],
+                "EXECUTION_PLAN_ROLE_BINDING_MISMATCH",
+            )
+            is not manifest_entry
+        ):
+            raise TCBContractError("EXECUTION_PLAN_ROLE_BINDING_MISMATCH")
+        expected_import = {
+            "kind": "source",
+            "module": plan_row["module"],
+            "path": plan_row["path"],
+            "sha256": plan_row["sha256"],
+        }
+        matches = [
+            index
+            for index, import_row in enumerate(imports)
+            if import_row == expected_import
+        ]
+        if (
+            len(matches) != 1
+            or import_bindings[matches[0]] is not manifest_entry
+        ):
+            raise TCBContractError("EXECUTION_PLAN_IMPORT_BINDING_MISMATCH")
 
 
 def _validate_runtime_hooks(value: Any) -> Dict[str, Any]:
@@ -1097,8 +1887,7 @@ def _validate_runtime_hooks(value: Any) -> Dict[str, Any]:
 
 def _validate_native_dependencies(
     value: Any,
-    root_descriptor: int,
-    verified: VerifiedFiles,
+    admitted_files: AdmittedFileIndex,
     total_bytes: int,
 ) -> Tuple[Dict[str, Any], int]:
     native = _require_object(
@@ -1142,8 +1931,12 @@ def _validate_native_dependencies(
             raise TCBContractError("NATIVE_DEPENDENCY_POLICY_INVALID")
         install_names.add(install_name)
         paths.add(path)
-        total_bytes, _added, _identity = _verify_executable_identity(
-            root_descriptor, path, digest, verified, total_bytes
+        total_bytes, _added, _entry = _verify_executable_identity(
+            admitted_files,
+            path,
+            digest,
+            total_bytes,
+            purpose="native_dependency:{}".format(install_name),
         )
     return native, total_bytes
 
@@ -1151,15 +1944,16 @@ def _validate_native_dependencies(
 def _validate_imports(
     value: Any,
     interpreter_sha256: str,
+    interpreter_entry: AdmittedFile,
     sys_paths: Sequence[str],
-    root_descriptor: int,
-    verified: VerifiedFiles,
+    admitted_files: AdmittedFileIndex,
     total_bytes: int,
-) -> Tuple[List[Dict[str, Any]], int]:
+) -> Tuple[List[Dict[str, Any]], int, List[AdmittedFile]]:
     raw_rows = _require_list(
         value, "IMPORT_CLOSURE_INVALID", MAX_IMPORT_ENTRIES
     )
     rows: List[Dict[str, Any]] = []
+    bindings: List[AdmittedFile] = []
     modules: Set[str] = set()
     used_sys_paths: Set[str] = set()
     for raw in raw_rows:
@@ -1175,6 +1969,7 @@ def _validate_imports(
         if kind in ("builtin", "frozen"):
             if row["path"] is not None or digest != interpreter_sha256:
                 raise TCBContractError("IMPORT_CLOSURE_INVALID")
+            entry = interpreter_entry
         else:
             path = _require_string(row["path"], "IMPORT_CLOSURE_INVALID")
             _relative_components(path, "IMPORT_CLOSURE_INVALID")
@@ -1186,47 +1981,79 @@ def _validate_imports(
             if len(matching_roots) != 1:
                 raise TCBContractError("IMPORT_PATH_SHADOWING")
             used_sys_paths.add(matching_roots[0])
-            total_bytes, _added, _identity = _verify_executable_identity(
-                root_descriptor,
+            total_bytes, _added, entry = _verify_executable_identity(
+                admitted_files,
                 path,
                 digest,
-                verified,
                 total_bytes,
+                purpose="import:{}:{}".format(kind, module),
             )
         rows.append(row)
+        bindings.append(entry)
     if used_sys_paths != set(sys_paths):
         raise TCBContractError("IMPORT_CLOSURE_INVALID")
-    return rows, total_bytes
+    return rows, total_bytes, bindings
 
 
 def _validate_execution_state(
     value: Any,
     root_descriptor: int,
-    verified: VerifiedFiles,
+    admitted_files: AdmittedFileIndex,
+    manifest_bindings: Mapping[str, AdmittedFile],
     total_bytes: int,
 ) -> Tuple[Dict[str, Any], int, int]:
-    state = _require_object(
-        value, _STATE_FIELDS, "EXECUTION_ENVELOPE_INVALID"
+    if (
+        type(value) is dict
+        and set(value) == set(_STATE_FIELDS) - {"execution_plan"}
+    ):
+        raise TCBContractError("EXECUTION_PLAN_INVALID")
+    state = _require_object(value, _STATE_FIELDS, "EXECUTION_ENVELOPE_INVALID")
+    bytecode = _validate_bytecode(state["bytecode"])
+    environment = _validate_environment(state["environment"])
+    plan = _validate_execution_plan_shape(state["execution_plan"])
+    interpreter, total_bytes, interpreter_entry = _validate_interpreter(
+        state["interpreter"], admitted_files, total_bytes
     )
-    _validate_bytecode(state["bytecode"])
-    _validate_environment(state["environment"])
-    interpreter, total_bytes = _validate_interpreter(
-        state["interpreter"], root_descriptor, verified, total_bytes
+    _validate_execution_plan_primary_bindings(
+        plan,
+        interpreter,
+        interpreter_entry,
+        manifest_bindings,
+        admitted_files,
     )
-    invocation, sys_paths = _validate_invocation(state["invocation"])
-    _verify_rooted_directory(root_descriptor, invocation["cwd"])
-    imports, total_bytes = _validate_imports(
+    invocation, sys_paths = _validate_invocation(
+        state["invocation"],
+        interpreter,
+        plan,
+        manifest_bindings,
+        bytecode,
+        environment,
+    )
+    _verify_rooted_directory(
+        root_descriptor, invocation["cwd"]["path"]
+    )
+    if state["imports"] == []:
+        raise TCBContractError("EXECUTION_PLAN_IMPORT_BINDING_MISMATCH")
+    imports, total_bytes, import_bindings = _validate_imports(
         state["imports"],
         interpreter["executable_sha256"],
+        interpreter_entry,
         sys_paths,
-        root_descriptor,
-        verified,
+        admitted_files,
         total_bytes,
+    )
+    _validate_execution_plan_bindings(
+        plan,
+        interpreter,
+        interpreter_entry,
+        manifest_bindings,
+        imports,
+        import_bindings,
+        admitted_files,
     )
     _native, total_bytes = _validate_native_dependencies(
         state["native_dependencies"],
-        root_descriptor,
-        verified,
+        admitted_files,
         total_bytes,
     )
     _validate_runtime_hooks(state["runtime_hooks"])
@@ -1246,22 +2073,20 @@ def _semantic_json_bytes(value: Any) -> bytes:
         raise TCBContractError("EXECUTION_ENVELOPE_INVALID")
 
 
-def _validate_execution_envelope(
+def _validate_execution_envelope_identity(
     envelope_bytes: bytes,
     contract_sha256: str,
     manifest: Mapping[str, Any],
     manifest_sha256: str,
-    root_descriptor: int,
-    verified: VerifiedFiles,
-    total_bytes: int,
-) -> Tuple[Dict[str, Any], int, int]:
+) -> Tuple[Dict[str, Any], str, str]:
     parsed_envelope = parse_json_bytes(envelope_bytes)
     envelope = _require_object(
         parsed_envelope,
         _ENVELOPE_FIELDS,
         "EXECUTION_ENVELOPE_INVALID",
     )
-    if envelope_bytes != _semantic_json_bytes(envelope) + b"\n":
+    canonical = canonical_envelope_bytes(envelope)
+    if envelope_bytes != canonical:
         raise TCBContractError("EXECUTION_ENVELOPE_NONCANONICAL")
     for field in (
         "contract_generation",
@@ -1292,14 +2117,152 @@ def _validate_execution_envelope(
     ):
         raise TCBContractError("EXECUTION_LINKAGE_MISMATCH")
 
+    return (
+        envelope,
+        envelope_digest(canonical),
+        hashlib.sha256(canonical).hexdigest(),
+    )
+
+
+def _validate_runtime_acceptance_record(
+    runtime_acceptance_bytes: bytes,
+    contract_sha256: str,
+    manifest: Mapping[str, Any],
+    manifest_sha256: str,
+    envelope: Mapping[str, Any],
+    envelope_sha256: str,
+    envelope_raw_sha256: str,
+) -> Dict[str, Any]:
+    try:
+        parsed = parse_json_bytes(runtime_acceptance_bytes)
+    except TCBContractError as error:
+        if error.code == "JSON_DUPLICATE_KEY":
+            raise TCBContractError("RUNTIME_ACCEPTANCE_DUPLICATE_KEY")
+        raise TCBContractError("RUNTIME_ACCEPTANCE_MALFORMED")
+    if type(parsed) is not dict:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_MALFORMED")
+    fields = set(parsed)
+    required = set(_RUNTIME_ACCEPTANCE_FIELDS)
+    if required - fields:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_FIELD_MISSING")
+    if fields - required:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_FIELD_EXTRA")
+    runtime_acceptance = parsed
+    if runtime_acceptance_bytes != canonical_runtime_acceptance_bytes(
+        runtime_acceptance
+    ):
+        raise TCBContractError("RUNTIME_ACCEPTANCE_NONCANONICAL")
+
+    if runtime_acceptance["runtime_acceptance_schema"] != RUNTIME_ACCEPTANCE_SCHEMA:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_SCHEMA_MISMATCH")
+    if (
+        _require_positive_int(
+            runtime_acceptance["runtime_acceptance_generation"],
+            "RUNTIME_ACCEPTANCE_GENERATION_MISMATCH",
+        )
+        != RUNTIME_ACCEPTANCE_GENERATION
+    ):
+        raise TCBContractError("RUNTIME_ACCEPTANCE_GENERATION_MISMATCH")
+    state = runtime_acceptance["runtime_acceptance_state"]
+    if state == "proposed":
+        raise TCBContractError("RUNTIME_ACCEPTANCE_STATE_PROPOSED")
+    if state == "retired":
+        raise TCBContractError("RUNTIME_ACCEPTANCE_STATE_RETIRED")
+    if state == "proven":
+        raise TCBContractError("RUNTIME_ACCEPTANCE_SELF_ASSERTED_PROVEN")
+    if state != ACCEPTANCE_STATE:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_STATE_INVALID")
+
+    for field in (
+        "contract_generation",
+        "envelope_generation",
+        "implementation_generation",
+        "protocol_generation",
+    ):
+        _require_positive_int(
+            runtime_acceptance[field], "RUNTIME_ACCEPTANCE_MALFORMED"
+        )
+    supplied_contract_sha256 = _require_digest(
+        runtime_acceptance["contract_sha256"],
+        "RUNTIME_ACCEPTANCE_CONTRACT_DIGEST_MISMATCH",
+    )
+    supplied_manifest_sha256 = _require_digest(
+        runtime_acceptance["manifest_sha256"],
+        "RUNTIME_ACCEPTANCE_MANIFEST_DIGEST_MISMATCH",
+    )
+    supplied_envelope_sha256 = _require_digest(
+        runtime_acceptance["envelope_sha256"],
+        "RUNTIME_ACCEPTANCE_ENVELOPE_DIGEST_MISMATCH",
+    )
+    if runtime_acceptance["contract_schema"] != CONTRACT_SCHEMA:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_CONTRACT_SCHEMA_MISMATCH")
+    if runtime_acceptance["contract_version"] != CONTRACT_VERSION:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_CONTRACT_VERSION_MISMATCH")
+    if runtime_acceptance["contract_generation"] != CONTRACT_GENERATION:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_CONTRACT_GENERATION_MISMATCH")
+    if supplied_contract_sha256 != contract_sha256:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_CONTRACT_DIGEST_MISMATCH")
+    if runtime_acceptance["manifest_schema"] != MANIFEST_SCHEMA:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_MANIFEST_SCHEMA_MISMATCH")
+    if supplied_manifest_sha256 != manifest_sha256:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_MANIFEST_DIGEST_MISMATCH")
+    if (
+        runtime_acceptance["implementation_generation"]
+        != manifest["implementation_generation"]
+    ):
+        raise TCBContractError(
+            "RUNTIME_ACCEPTANCE_IMPLEMENTATION_GENERATION_MISMATCH"
+        )
+    if runtime_acceptance["envelope_schema"] != EXECUTION_ENVELOPE_SCHEMA:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_ENVELOPE_SCHEMA_MISMATCH")
+    if (
+        runtime_acceptance["envelope_generation"]
+        != EXECUTION_ENVELOPE_GENERATION
+    ):
+        raise TCBContractError("RUNTIME_ACCEPTANCE_ENVELOPE_GENERATION_MISMATCH")
+    if runtime_acceptance["envelope_digest_domain"] != _ENVELOPE_DOMAIN.decode(
+        "ascii"
+    ):
+        raise TCBContractError("RUNTIME_ACCEPTANCE_ENVELOPE_DOMAIN_MISMATCH")
+    if (
+        runtime_acceptance["envelope_digest_framing"]
+        != _ENVELOPE_DIGEST_FRAMING
+    ):
+        raise TCBContractError("RUNTIME_ACCEPTANCE_ENVELOPE_FRAMING_MISMATCH")
+    if supplied_envelope_sha256 == envelope_raw_sha256:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_ENVELOPE_RAW_SHA_FORBIDDEN")
+    if supplied_envelope_sha256 != envelope_sha256:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_ENVELOPE_DIGEST_MISMATCH")
+    if runtime_acceptance["protocol_generation"] != PROTOCOL_GENERATION:
+        raise TCBContractError("RUNTIME_ACCEPTANCE_PROTOCOL_GENERATION_MISMATCH")
+    if (
+        envelope["envelope_schema"] != runtime_acceptance["envelope_schema"]
+        or envelope["envelope_generation"]
+        != runtime_acceptance["envelope_generation"]
+    ):
+        raise TCBContractError("RUNTIME_ACCEPTANCE_ENVELOPE_SCHEMA_MISMATCH")
+    return runtime_acceptance
+
+
+def _validate_execution_envelope_state(
+    envelope: Mapping[str, Any],
+    root_descriptor: int,
+    admitted_files: AdmittedFileIndex,
+    manifest_bindings: Mapping[str, AdmittedFile],
+    total_bytes: int,
+) -> Tuple[int, int]:
     if _semantic_json_bytes(envelope["admitted_state"]) != _semantic_json_bytes(
         envelope["observed_state"]
     ):
         raise TCBContractError("EXECUTION_STATE_MISMATCH")
-    admitted, total_bytes, admitted_imports = _validate_execution_state(
-        envelope["admitted_state"], root_descriptor, verified, total_bytes
+    _admitted, total_bytes, import_entries = _validate_execution_state(
+        envelope["admitted_state"],
+        root_descriptor,
+        admitted_files,
+        manifest_bindings,
+        total_bytes,
     )
-    return envelope, total_bytes, admitted_imports
+    return total_bytes, import_entries
 
 
 def _empty_counts() -> Dict[str, int]:
@@ -1324,7 +2287,11 @@ def _result(
         codes = ["SYNTHETIC_CONFORMANCE_ONLY"]
     else:
         status = "error"
-        codes = [code if type(code) is str and _CODE.fullmatch(code) else "UNEXPECTED_FAILURE"]
+        codes = [
+            code
+            if type(code) is str and code in _ALLOWED_CODES
+            else "UNEXPECTED_FAILURE"
+        ]
     return {
         "codes": codes,
         "counts": {
@@ -1342,48 +2309,67 @@ def _verify_bytes_with_root(
     manifest_bytes: bytes,
     acceptance_bytes: bytes,
     envelope_bytes: bytes,
-    record_identities: Set[FileIdentity],
+    runtime_acceptance_bytes: bytes,
+    admitted_files: AdmittedFileIndex,
     root_descriptor: int,
     contract_path: str,
     manifest_path: str,
     acceptance_path: str,
     envelope_path: str,
+    runtime_acceptance_path: str,
 ) -> Dict[str, Any]:
     _contract, contract_sha256 = _validate_contract_bytes(contract_bytes)
-    verified: VerifiedFiles = {}
-    manifest, manifest_sha256, total_bytes, _manifest_files = (
+    (
+        manifest,
+        manifest_sha256,
+        total_bytes,
+        _manifest_files,
+        manifest_bindings,
+    ) = (
         _validate_manifest_bytes(
             manifest_bytes,
-            root_descriptor,
+            admitted_files,
             (
                 contract_path,
                 manifest_path,
                 acceptance_path,
                 envelope_path,
+                runtime_acceptance_path,
             ),
-            record_identities,
-            verified,
             0,
         )
     )
     _validate_acceptance_record(acceptance_bytes, manifest, manifest_sha256)
-    _envelope, _total_bytes, import_entries = (
-        _validate_execution_envelope(
-            envelope_bytes,
-            contract_sha256,
-            manifest,
-            manifest_sha256,
-            root_descriptor,
-            verified,
-            total_bytes,
+    envelope, envelope_sha256, envelope_raw_sha256 = (
+        _validate_execution_envelope_identity(
+            envelope_bytes, contract_sha256, manifest, manifest_sha256
         )
+    )
+    _validate_runtime_acceptance_record(
+        runtime_acceptance_bytes,
+        contract_sha256,
+        manifest,
+        manifest_sha256,
+        envelope,
+        envelope_sha256,
+        envelope_raw_sha256,
+    )
+    _total_bytes, import_entries = _validate_execution_envelope_state(
+        envelope,
+        root_descriptor,
+        admitted_files,
+        manifest_bindings,
+        total_bytes,
+    )
+    executable_files = sum(
+        not entry.is_record for entry in admitted_files.by_path.values()
     )
     return _result(
         "ok",
         contract_records=1,
-        executable_files=len(verified),
+        executable_files=executable_files,
         import_entries=import_entries,
-        linkage_records=2,
+        linkage_records=3,
     )
 
 
@@ -1392,6 +2378,7 @@ def verify_paths(
     manifest_path: str,
     acceptance_path: str,
     envelope_path: str,
+    runtime_acceptance_path: str,
     repository_root: str,
 ) -> Dict[str, Any]:
     """Verify explicitly named rooted records; never discover input paths."""
@@ -1404,45 +2391,38 @@ def verify_paths(
         root_descriptor, root_descriptors, root_links = _open_repository_root(
             repository_root
         )
-        record_identities: List[FileIdentity] = []
-        contract_bytes = _read_rooted_regular_file(
-            root_descriptor,
-            contract_path,
-            MAX_JSON_INPUT_BYTES,
-            identity_out=record_identities,
+        admitted_files = AdmittedFileIndex(root_descriptor)
+        contract_entry = admitted_files.admit_record(
+            contract_path, "contract_record"
         )
-        _validate_contract_bytes(contract_bytes)
-        manifest_bytes = _read_rooted_regular_file(
-            root_descriptor,
-            manifest_path,
-            MAX_JSON_INPUT_BYTES,
-            identity_out=record_identities,
+        _validate_contract_bytes(contract_entry.data)
+        manifest_entry = admitted_files.admit_record(
+            manifest_path, "manifest_record"
         )
-        acceptance_bytes = _read_rooted_regular_file(
-            root_descriptor,
-            acceptance_path,
-            MAX_JSON_INPUT_BYTES,
-            identity_out=record_identities,
+        acceptance_entry = admitted_files.admit_record(
+            acceptance_path, "implementation_acceptance_record"
         )
-        envelope_bytes = _read_rooted_regular_file(
-            root_descriptor,
-            envelope_path,
-            MAX_JSON_INPUT_BYTES,
-            identity_out=record_identities,
+        envelope_entry = admitted_files.admit_record(
+            envelope_path, "execution_envelope_record"
         )
-        if len(record_identities) != 4:
-            raise TCBContractError("INPUT_READ_FAILED")
+        runtime_acceptance_entry = admitted_files.admit_record(
+            runtime_acceptance_path,
+            "runtime_acceptance_record",
+            alias_code="RUNTIME_ACCEPTANCE_ALIAS_FORBIDDEN",
+        )
         result = _verify_bytes_with_root(
-            contract_bytes,
-            manifest_bytes,
-            acceptance_bytes,
-            envelope_bytes,
-            set(record_identities),
+            contract_entry.data,
+            manifest_entry.data,
+            acceptance_entry.data,
+            envelope_entry.data,
+            runtime_acceptance_entry.data,
+            admitted_files,
             root_descriptor,
             contract_path,
             manifest_path,
             acceptance_path,
             envelope_path,
+            runtime_acceptance_path,
         )
         _verify_open_directory_links(root_links, "REPOSITORY_ROOT_CHANGED")
     except TCBContractError as error:
@@ -1462,11 +2442,17 @@ def verify_paths(
 
 def _execute(argv: Sequence[str]) -> Dict[str, Any]:
     try:
-        if type(argv) not in (list, tuple) or len(argv) != 6:
+        if type(argv) not in (list, tuple):
             raise TCBContractError("CLI_ARGUMENTS_INVALID")
+        if len(argv) < 7:
+            raise TCBContractError("CLI_ARGUMENT_MISSING")
+        if len(argv) > 7:
+            raise TCBContractError("CLI_ARGUMENT_EXTRA")
         if argv[0] != "verify" or any(type(value) is not str for value in argv):
             raise TCBContractError("CLI_ARGUMENTS_INVALID")
-        return verify_paths(argv[1], argv[2], argv[3], argv[4], argv[5])
+        return verify_paths(
+            argv[1], argv[2], argv[3], argv[4], argv[5], argv[6]
+        )
     except TCBContractError as error:
         return _result("error", code=error.code)
     except BaseException:
@@ -1492,7 +2478,7 @@ def _encode_result(result: Mapping[str, Any]) -> bytes:
             or any(type(value) is not int or value < 0 for value in counts.values())
             or type(codes) is not list
             or len(codes) != 1
-            or any(type(code) is not str or _CODE.fullmatch(code) is None for code in codes)
+            or any(type(code) is not str or code not in _ALLOWED_CODES for code in codes)
             or result["status"] not in ("ok", "error")
         ):
             raise TCBContractError("UNEXPECTED_FAILURE")
