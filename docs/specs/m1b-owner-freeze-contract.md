@@ -5,7 +5,7 @@
 - Owner record schema: `m1b-owner-freeze-decision-v1`
 - Acceptance: exact declarative proposal v7/generation 108 принят владельцем
   только как основа подготовки будущего M1B-1A
-- Operational effect: только после review и merge owner-freeze PR в `main`
+- Operational effect: exact declarative scope действует после merge owner-freeze PR #6 в `main` как `9f854da`; `OWNER_FREEZE: ACCEPTED`
 - Gate state: `M1B: NOT_EVALUATED`; `M1A: BLOCKED`; `M2: FORBIDDEN`
 
 Этот contract создаёт отдельную внешнюю фиксацию решения владельца. Он не
@@ -16,8 +16,8 @@ report/fixture и trusted proposal validator остаются `proposed`. Нов
 
 Contract не является benchmark report schema, executable implementation
 manifest, prompt/template, model profile, provider probe, live admission или
-feasibility verdict. Успешная offline-проверка на ветке PR означает только, что
-публичные records согласованы и готовы к review.
+feasibility verdict. Успешная offline-проверка подтверждает только
+согласованность публичных records с accepted identities.
 
 ## Trust boundary
 
@@ -153,9 +153,13 @@ component count, а также требует одновременно:
 [`m1b_owner_freeze.py`](../../tools/research/m1b_owner_freeze.py) — отдельный
 Python 3.9 standard-library verifier и не импортирует benchmark validator.
 Каждый input отдельно ограничен `64 KiB`. Reader использует explicit open с
-no-follow, non-blocking и close-on-exec там, где ОС предоставляет flags, принимает только
-regular file с одной hard link и требует неизменность descriptor identity,
-size и timestamps на протяжении bounded read.
+no-follow, non-blocking и close-on-exec там, где ОС предоставляет flags, и
+принимает только regular file с одной hard link. Bounded read обязан накопить
+ровно `before.st_size` bytes из pre-read `fstat`: обычные короткие положительные
+`os.read()` продолжают накапливаться, а `b""` при
+`len(data) < before.st_size` завершается controlled `INPUT_CHANGED` до возврата
+bytes и до JSON parsing/admission. Pre/post descriptor identity, size и
+timestamps comparison сохраняется.
 
 JSON обязан быть strict UTF-8 без duplicate keys, lone surrogate, float,
 NaN/Infinity или integer вне signed 64-bit lexical range. Все objects closed;
@@ -213,5 +217,7 @@ Owner-freeze не снимает:
 report-schema, executable-TCB или feasibility owner decision остаётся отдельным
 gate.
 
-После review и merge этого PR следующий возможный шаг — новое отдельное задание
-`M1B-1A local synthetic provider preflight`. Текущий contract не запускает его.
+После merge PR #6 owner-freeze действует только в exact accepted scope. Первый
+отдельный contract-only этап `M1B-1A0 — Offline executable/TCB admission
+contract` остаётся `NOT_STARTED` и может начаться только после review и merge
+M1B-0F-H1; текущий contract и hardening его не запускают.
