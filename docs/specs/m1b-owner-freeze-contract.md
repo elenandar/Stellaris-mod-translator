@@ -217,7 +217,10 @@ Owner-freeze не снимает:
 report-schema, executable-TCB или feasibility owner decision остаётся отдельным
 gate.
 
-После merge PR #6 owner-freeze действует только в exact accepted scope. Первый
-отдельный contract-only этап `M1B-1A0 — Offline executable/TCB admission
-contract` остаётся `NOT_STARTED` и может начаться только после review и merge
-M1B-0F-H1; текущий contract и hardening его не запускают.
+После merge PR #6 owner-freeze действует только в exact accepted scope.
+Stable-reader hardening PR #7 merged as `424a4e4` и имеет state
+`STABLE_READ_HARDENING: ACCEPTED`; accepted snapshot и decision bytes не
+изменились. Отдельный [M1B-1A0 executable/TCB contract](m1b-offline-executable-tcb-admission-contract.md)
+теперь `READY_FOR_REVIEW`, но сохраняет `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`
+и `M1B-1A PROVIDER EXECUTION: NOT_STARTED`. Он не расширяет owner-freeze scope и
+не разрешает model/provider action.

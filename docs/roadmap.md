@@ -7,7 +7,7 @@ Roadmap показывает порядок решений, а не даты. П
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
-| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal и external owner-freeze PR #6 merged; `OWNER_FREEZE: ACCEPTED`; post-merge stable-read hardening — `READY_FOR_REVIEW`; `M1B-1A0: NOT_STARTED`; `M1B: NOT_EVALUATED`; benchmark не запускался |
+| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6 и stable-read PR #7 merged; `OWNER_FREEZE: ACCEPTED`; `STABLE_READ_HARDENING: ACCEPTED`; `M1B-1A0 CONTRACT: READY_FOR_REVIEW`; executable TCB admission не выдан; `M1B: NOT_EVALUATED`; benchmark не запускался |
 | M2 — Safety kernel & technical CLI | lossless CST, typed atoms, controlled render, containment | M1A, M1B | одновременно получены `GO` и `QUALITY_FEASIBLE`; taxonomy/holdout проходят technical gates | **FORBIDDEN**: M1A is `BLOCKED`; M1B is `NOT_EVALUATED` |
 | M3 — Incremental engine & publishing | SQLite, identity, jobs, backup, versioned artifact и rollback | M2 | unchanged = zero work; crash/update/conflict/restore безопасны | not started |
 | M4 — Local quality engine | context, glossary, memory, Ollama, review/repair и editorial states | M1B, M3 | quality thresholds и human-review policy соблюдены | not started |
@@ -28,12 +28,26 @@ digest `df84871be332ee52c315d0c0cc1a7a0046251352a2a0131382b5cb994cffcb58`.
 Operational admission freeze действует в exact declarative scope после merge
 [PR #6](https://github.com/elenandar/Stellaris-mod-translator/pull/6) как
 [`9f854da`](https://github.com/elenandar/Stellaris-mod-translator/commit/9f854da7501dec6ec9afc5e4bf71dfaa1ea9ecbc);
-`OWNER_FREEZE: ACCEPTED`. M1B-0F-H1 исправляет только post-merge stable-reader
-implementation gap и не меняет owner decision, registry snapshot, bundle
-identities, acceptance scope или authorization booleans. До review и merge
-hardening первый отдельный этап `M1B-1A0 — Offline executable/TCB admission
-contract` остаётся `NOT_STARTED`. States: `STABLE_READ_HARDENING:
-READY_FOR_REVIEW`, `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
+`OWNER_FREEZE: ACCEPTED`. Stable-reader hardening [PR #7](https://github.com/elenandar/Stellaris-mod-translator/pull/7)
+head `4c849f5` merged в `main` как [`424a4e4`](https://github.com/elenandar/Stellaris-mod-translator/commit/424a4e45066cfbff3f9b3da2ec2cf6ad62a643fb);
+`STABLE_READ_HARDENING: ACCEPTED`. Он не меняет owner decision, registry
+snapshot, bundle identities, acceptance scope или authorization booleans.
+
+### M1B-1A0 — offline executable/TCB admission contract
+
+[Offline executable/TCB contract](specs/m1b-offline-executable-tcb-admission-contract.md)
+и [review record](decisions/M1B-1A0-contract-review.md) задают отдельные
+contract schema/version/generation, manifest v1 verifier и execution envelope для
+будущего exact executable/runtime admission. External contract digest —
+`589cf895c659b57c2f44268acfa0bf33b3c98d6cd5e6b4fea1f2f9b2500d1a5f`.
+
+Это contract-only state: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`,
+`EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`,
+`EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`,
+`M1B-1A PROVIDER EXECUTION: NOT_STARTED`. Следующий отдельный gate после review
+и merge — реальные four-role surfaces плюс external implementation/runtime
+admission; model/provider action ещё запрещён. States остаются
+`M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
 
 ## Точки решения
 
