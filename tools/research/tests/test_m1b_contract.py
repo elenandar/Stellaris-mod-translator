@@ -303,6 +303,165 @@ class SyntheticContractCaseTests(unittest.TestCase):
             "m1b-benchmark-contract-v7",
         )
 
+    def test_legacy_v6_identity_and_lifetime_payload_drift_fail_closed(
+        self,
+    ) -> None:
+        component_indexes = {
+            component["kind"]: index
+            for index, component in enumerate(
+                self.base["definition_bundle"]["components"]
+            )
+        }
+        old_benchmark_hash = (
+            "e180ba237311a7d7de3aa4c7c97881f09507651910a8469df7bcef0cd04cd7f0"
+        )
+        old_validator_hash = (
+            "d261d0ee17e884b2be0f449b2a45bbebd8ea1af02848fb7e94f9662643d0c7a3"
+        )
+        old_bundle_hash = (
+            "7f1e417a843a0f3d0658e1e2abeb794c5c21a1dcb6f6482cd5f561c986ae00a9"
+        )
+        cases = []
+
+        legacy_vector = copy.deepcopy(self.base)
+        legacy_vector["protocol"]["protocol_version"] = (
+            "m1b-benchmark-contract-v6"
+        )
+        legacy_vector["protocol"]["generation"] = 107
+        for result in legacy_vector["conformance_results"]:
+            result["protocol_generation"] = 107
+        for kind in (
+            "benchmark_contract",
+            "split_policy",
+            "validator_policy",
+            "analysis_policy",
+            "implementation_identity_policy",
+        ):
+            component = legacy_vector["definition_bundle"]["components"][
+                component_indexes[kind]
+            ]
+            component["generation"] = 107
+        legacy_vector["definition_bundle"]["components"][
+            component_indexes["benchmark_contract"]
+        ].update(
+            version="m1b-benchmark-contract-v6",
+            sha256=old_benchmark_hash,
+        )
+        legacy_vector["definition_bundle"]["components"][
+            component_indexes["validator_policy"]
+        ].update(
+            version="m1b-validator-policy-v6",
+            sha256=old_validator_hash,
+        )
+        legacy_vector["definition_bundle"]["sha256"] = old_bundle_hash
+        cases.append(
+            ("complete_legacy_identity_vector", legacy_vector, "DEFINITION_VERSION_UNSUPPORTED")
+        )
+
+        protocol_version = copy.deepcopy(self.base)
+        protocol_version["protocol"]["protocol_version"] = (
+            "m1b-benchmark-contract-v6"
+        )
+        cases.append(
+            ("protocol_v6", protocol_version, "PROTOCOL_VERSION_UNSUPPORTED")
+        )
+
+        protocol_generation = copy.deepcopy(self.base)
+        protocol_generation["protocol"]["generation"] = 107
+        cases.append(
+            (
+                "protocol_generation_107",
+                protocol_generation,
+                "PROTOCOL_GENERATION_MISMATCH",
+            )
+        )
+
+        result_generation = copy.deepcopy(self.base)
+        result_generation["conformance_results"][0]["protocol_generation"] = 107
+        cases.append(
+            (
+                "result_generation_107",
+                result_generation,
+                "PROTOCOL_GENERATION_MISMATCH",
+            )
+        )
+
+        for kind, old_version in (
+            ("benchmark_contract", "m1b-benchmark-contract-v6"),
+            ("validator_policy", "m1b-validator-policy-v6"),
+        ):
+            document = copy.deepcopy(self.base)
+            document["definition_bundle"]["components"][
+                component_indexes[kind]
+            ]["version"] = old_version
+            cases.append(
+                (kind + "_v6", document, "DEFINITION_VERSION_UNSUPPORTED")
+            )
+
+        for kind in (
+            "benchmark_contract",
+            "split_policy",
+            "validator_policy",
+            "analysis_policy",
+            "implementation_identity_policy",
+        ):
+            document = copy.deepcopy(self.base)
+            document["definition_bundle"]["components"][
+                component_indexes[kind]
+            ]["generation"] = 107
+            cases.append(
+                (kind + "_generation_107", document, "DEFINITION_GENERATION_MISMATCH")
+            )
+
+        for kind, old_hash in (
+            ("benchmark_contract", old_benchmark_hash),
+            ("validator_policy", old_validator_hash),
+        ):
+            document = copy.deepcopy(self.base)
+            document["definition_bundle"]["components"][
+                component_indexes[kind]
+            ]["sha256"] = old_hash
+            cases.append((kind + "_old_hash", document, "DEFINITION_HASH_MISMATCH"))
+
+        old_bundle = copy.deepcopy(self.base)
+        old_bundle["definition_bundle"]["sha256"] = old_bundle_hash
+        cases.append(("old_bundle_hash", old_bundle, "BUNDLE_HASH_MISMATCH"))
+
+        for kind, lifetime_field in (
+            ("benchmark_contract", "synthetic_scope_lifetime"),
+            ("validator_policy", "synthetic_scope_registry"),
+        ):
+            document = copy.deepcopy(self.base)
+            component = document["definition_bundle"]["components"][
+                component_indexes[kind]
+            ]
+            definition = json.loads(component["definition"])
+            del definition[lifetime_field]
+            payload = contract._canonical_public_json(definition)
+            component["definition"] = payload.decode("ascii")
+            component["sha256"] = contract.component_hash(
+                component["kind"], component["version"], payload
+            )
+            document["definition_bundle"]["sha256"] = contract.bundle_hash(
+                [
+                    (row["kind"], row["version"], row["sha256"])
+                    for row in document["definition_bundle"]["components"]
+                ]
+            )
+            cases.append(
+                (
+                    kind + "_lifetime_field_removed_and_rehashed",
+                    document,
+                    "DEFINITION_PAYLOAD_MISMATCH",
+                )
+            )
+
+        for name, document, expected_code in cases:
+            with self.subTest(case=name):
+                with self.assertRaises(contract.ContractError) as raised:
+                    contract.validate_document(document)
+                self.assertEqual(raised.exception.code, expected_code)
+
     def test_component_hash_has_a_fixed_public_vector(self) -> None:
         component = self.base["definition_bundle"]["components"][0]
         actual = contract.component_hash(
