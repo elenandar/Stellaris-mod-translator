@@ -341,21 +341,67 @@ class SyntheticContractCaseTests(unittest.TestCase):
                 component_indexes[kind]
             ]
             component["generation"] = 107
-        legacy_vector["definition_bundle"]["components"][
+        benchmark_component = legacy_vector["definition_bundle"]["components"][
             component_indexes["benchmark_contract"]
-        ].update(
+        ]
+        benchmark_definition = json.loads(benchmark_component["definition"])
+        benchmark_definition["protocol_generation"] = 107
+        del benchmark_definition["synthetic_scope_lifetime"]
+        benchmark_payload = contract._canonical_public_json(benchmark_definition)
+        benchmark_component.update(
             version="m1b-benchmark-contract-v6",
-            sha256=old_benchmark_hash,
+            definition=benchmark_payload.decode("ascii"),
         )
-        legacy_vector["definition_bundle"]["components"][
+        calculated_benchmark_hash = contract.component_hash(
+            benchmark_component["kind"],
+            benchmark_component["version"],
+            benchmark_payload,
+        )
+        self.assertEqual(calculated_benchmark_hash, old_benchmark_hash)
+        benchmark_component["sha256"] = calculated_benchmark_hash
+
+        validator_component = legacy_vector["definition_bundle"]["components"][
             component_indexes["validator_policy"]
-        ].update(
+        ]
+        validator_definition = json.loads(validator_component["definition"])
+        del validator_definition["synthetic_scope_registry"]
+        validator_payload = contract._canonical_public_json(validator_definition)
+        validator_component.update(
             version="m1b-validator-policy-v6",
-            sha256=old_validator_hash,
+            definition=validator_payload.decode("ascii"),
         )
-        legacy_vector["definition_bundle"]["sha256"] = old_bundle_hash
+        calculated_validator_hash = contract.component_hash(
+            validator_component["kind"],
+            validator_component["version"],
+            validator_payload,
+        )
+        self.assertEqual(calculated_validator_hash, old_validator_hash)
+        validator_component["sha256"] = calculated_validator_hash
+
+        calculated_bundle_hash = contract.bundle_hash(
+            [
+                (component["kind"], component["version"], component["sha256"])
+                for component in legacy_vector["definition_bundle"]["components"]
+            ]
+        )
+        self.assertEqual(calculated_bundle_hash, old_bundle_hash)
+        legacy_vector["definition_bundle"]["sha256"] = calculated_bundle_hash
+        legacy_payload = contract._canonical_public_json(legacy_vector)
+        # Exact canonical base_document bytes from approved legacy SHA
+        # dd38e49989a21d73deae76505226d8ff95c1b8ff.
+        self.assertEqual(
+            (len(legacy_payload), hashlib.sha256(legacy_payload).hexdigest()),
+            (
+                39026,
+                "80c32267d442605287da0b95140510560bbb1fb4bfa358146851e97637ce4563",
+            ),
+        )
         cases.append(
-            ("complete_legacy_identity_vector", legacy_vector, "DEFINITION_VERSION_UNSUPPORTED")
+            (
+                "exact_legacy_v6_generation_107_document",
+                legacy_vector,
+                "DEFINITION_VERSION_UNSUPPORTED",
+            )
         )
 
         protocol_version = copy.deepcopy(self.base)
