@@ -1,0 +1,491 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "codes": [],
+        "status": "ok"
+      },
+      "id": "positive-exact",
+      "patches": []
+    },
+    {
+      "expected": {
+        "codes": [
+          "PROTOCOL_VERSION_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "stale-protocol-version",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "protocol_version"
+          ],
+          "target": "registry_snapshot",
+          "value": "m1b-benchmark-contract-v6"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "PROTOCOL_GENERATION_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "stale-protocol-generation",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "protocol_generation"
+          ],
+          "target": "registry_snapshot",
+          "value": 107
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "DEFINITION_BUNDLE_HASH_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "wrong-definition-bundle-hash",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "definition_bundle_sha256"
+          ],
+          "target": "registry_snapshot",
+          "value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "COMPONENT_COUNT_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "component-addition",
+      "patches": [
+        {
+          "operation": "append",
+          "path": [
+            "components"
+          ],
+          "target": "registry_snapshot",
+          "value": {
+            "component_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "generation": 1,
+            "kind": "synthetic_extra",
+            "version": "synthetic-v1"
+          }
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "COMPONENT_COUNT_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "component-removal",
+      "patches": [
+        {
+          "operation": "delete",
+          "path": [
+            "components",
+            16
+          ],
+          "target": "registry_snapshot"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "COMPONENT_DUPLICATE"
+        ],
+        "status": "error"
+      },
+      "id": "component-duplication",
+      "patches": [
+        {
+          "operation": "copy",
+          "path": [
+            "components",
+            16
+          ],
+          "source_path": [
+            "components",
+            0
+          ],
+          "target": "registry_snapshot"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "COMPONENT_IDENTITY_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "component-hash-mutation",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "components",
+            0,
+            "component_sha256"
+          ],
+          "target": "registry_snapshot",
+          "value": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "COMPONENT_IDENTITY_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "component-generation-drift-old-bundle-unchanged",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "components",
+            0,
+            "generation"
+          ],
+          "target": "registry_snapshot",
+          "value": 107
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "ACCEPTANCE_STATE_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "acceptance-state-drift-old-bundle-unchanged",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "acceptance_state"
+          ],
+          "target": "registry_snapshot",
+          "value": "proposed"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "COMPONENT_ORDER_NONCANONICAL"
+        ],
+        "status": "error"
+      },
+      "id": "reordered-components",
+      "patches": [
+        {
+          "operation": "reverse",
+          "path": [
+            "components"
+          ],
+          "target": "registry_snapshot"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "REGISTRY_SNAPSHOT_INVALID"
+        ],
+        "status": "error"
+      },
+      "id": "snapshot-unknown-field",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "synthetic_unknown"
+          ],
+          "target": "registry_snapshot",
+          "value": "synthetic"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "REGISTRY_SNAPSHOT_INVALID"
+        ],
+        "status": "error"
+      },
+      "id": "snapshot-missing-field",
+      "patches": [
+        {
+          "operation": "delete",
+          "path": [
+            "schema_version"
+          ],
+          "target": "registry_snapshot"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "COMPONENT_ROW_INVALID"
+        ],
+        "status": "error"
+      },
+      "id": "component-unknown-field",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "components",
+            0,
+            "synthetic_unknown"
+          ],
+          "target": "registry_snapshot",
+          "value": "synthetic"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "COMPONENT_ROW_INVALID"
+        ],
+        "status": "error"
+      },
+      "id": "component-missing-field",
+      "patches": [
+        {
+          "operation": "delete",
+          "path": [
+            "components",
+            0,
+            "version"
+          ],
+          "target": "registry_snapshot"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "INVALID_INTEGER"
+        ],
+        "status": "error"
+      },
+      "id": "bool-instead-of-generation",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "components",
+            0,
+            "generation"
+          ],
+          "target": "registry_snapshot",
+          "value": true
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "OWNER_DECISION_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "owner-record-snapshot-digest-mismatch",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "registry_snapshot_sha256"
+          ],
+          "target": "owner_decision",
+          "value": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "OWNER_DECISION_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "owner-record-blocker-removal",
+      "patches": [
+        {
+          "operation": "delete",
+          "path": [
+            "blockers",
+            5
+          ],
+          "target": "owner_decision"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "OWNER_DECISION_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "owner-record-gate-drift",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "m1b_state"
+          ],
+          "target": "owner_decision",
+          "value": "quality_feasible"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "OWNER_DECISION_INVALID"
+        ],
+        "status": "error"
+      },
+      "id": "fake-acceptance-inside-benchmark-report",
+      "patches": [
+        {
+          "operation": "replace",
+          "path": [],
+          "target": "owner_decision",
+          "value": {
+            "acceptance_state": "owner_accepted",
+            "benchmark_state": {
+              "complete": false,
+              "report_kind": "partial_synthetic_conformance"
+            },
+            "schema": "m1b-synthetic-contract-v4"
+          }
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "OWNER_DECISION_INVALID"
+        ],
+        "status": "error"
+      },
+      "id": "fake-acceptance-inside-fixture",
+      "patches": [
+        {
+          "operation": "replace",
+          "path": [],
+          "target": "owner_decision",
+          "value": {
+            "acceptance_state": "owner_accepted",
+            "cases": [],
+            "fixture_schema": "m1b-owner-freeze-cases-v1"
+          }
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "REGISTRY_SNAPSHOT_SELF_HASH_FORBIDDEN"
+        ],
+        "status": "error"
+      },
+      "id": "snapshot-self-hash-circular-trust-attempt",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "registry_snapshot_sha256"
+          ],
+          "target": "registry_snapshot",
+          "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "OWNER_DECISION_INVALID"
+        ],
+        "status": "error"
+      },
+      "id": "owner-record-unknown-field",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "synthetic_unknown"
+          ],
+          "target": "owner_decision",
+          "value": "synthetic"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "OWNER_DECISION_INVALID"
+        ],
+        "status": "error"
+      },
+      "id": "owner-record-missing-field",
+      "patches": [
+        {
+          "operation": "delete",
+          "path": [
+            "owner_delegation"
+          ],
+          "target": "owner_decision"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "codes": [
+          "OWNER_DECISION_MISMATCH"
+        ],
+        "status": "error"
+      },
+      "id": "integer-instead-of-authorization-boolean",
+      "patches": [
+        {
+          "operation": "set",
+          "path": [
+            "model_calls_authorized"
+          ],
+          "target": "owner_decision",
+          "value": 0
+        }
+      ]
+    }
+  ],
+  "fixture_schema": "m1b-owner-freeze-cases-v1"
+}

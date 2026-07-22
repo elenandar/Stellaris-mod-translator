@@ -6,12 +6,18 @@
 
 ## Статус
 
-Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) слит как [`2b51879`](https://github.com/elenandar/Stellaris-mod-translator/commit/2b51879d8e358cf5412f3a6792f33c71ae79d863), а hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) — как [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240). Текущий verdict остаётся `M1A: BLOCKED`. Это evidence-этап, а не начало product CLI.
+Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) слит как [`2b51879`](https://github.com/elenandar/Stellaris-mod-translator/commit/2b51879d8e358cf5412f3a6792f33c71ae79d863), hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) — как [`9cd10d1`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240), а M1B protocol proposal [PR #5](https://github.com/elenandar/Stellaris-mod-translator/pull/5) — как [`ed07bcc`](https://github.com/elenandar/Stellaris-mod-translator/commit/ed07bcca96945dbb49206c975908e00c832210b5). Текущий verdict остаётся `M1A: BLOCKED`. Это evidence-этап, а не начало product CLI.
 
-После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Сейчас M1B protocol находится under review: `M1B: NOT_EVALUATED`, feasibility verdict отсутствует и benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
+После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Exact proposal v7/generation 108 принят отдельным external owner-freeze record только как declarative basis будущего M1B-1A; operational admission действует лишь после review и merge owner-freeze PR. Текущий M1B-0F verdict — `OWNER_FREEZE: READY_FOR_REVIEW`. `M1B: NOT_EVALUATED`, feasibility verdict отсутствует и benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
 
 Текущая synthetic proposal identity — protocol v7/generation 108 и analysis
-policy v6/generation 108. Она разделяет exact frozen synthetic-scope provenance
+policy v6/generation 108. PR #5 смержен; historical 17 report/fixture entries
+остаются `proposed`. Отдельный owner-freeze snapshot atomically bind-ит их exact
+kind/version/generation/component hashes и snapshot-level
+`acceptance_state=owner_accepted`; его canonical SHA-256 —
+`df84871be332ee52c315d0c0cc1a7a0046251352a2a0131382b5cb994cffcb58`.
+Он принят только для подготовки M1B-1A после merge текущего PR и не является
+benchmark admission. Protocol по-прежнему разделяет exact frozen synthetic-scope provenance
 и полный live decision admission: первый capability разрешает только
 diagnostic math с `decision_grade_eligible=false`, второй M1B-0 не выдаёт.
 Protocol v7 и validator policy v7 byte-bind lifetime ownership: registry не
@@ -23,8 +29,8 @@ Same-process Python runtime, imports, globals/closures и analysis code вход
 TCB; capability предотвращает случайное смешение raw rows, но не является
 security boundary против reflection или monkeypatching внутри TCB. Existing
 reviewer/HGT/no-output invariants сохранены. Synthetic corpus bytes не менялись:
-corpus v3/generation 304 остаётся тем же. Это contract hardening, а не запуск
-M1B-1 и не quality verdict.
+corpus v3/generation 304 остаётся тем же. Это external freeze evidence, а не
+запуск M1B-1A, model call или quality verdict.
 
 ## Контракт MVP
 
@@ -85,9 +91,11 @@ M1B-1 и не quality verdict.
 - [Политика корпуса M1B](docs/m1b-corpus-policy.md)
 - [Quality rubric M1B](docs/specs/m1b-quality-rubric.md)
 - [Модель угроз M1B](docs/m1b-threat-model.md)
+- [External owner-freeze contract M1B-0F](docs/specs/m1b-owner-freeze-contract.md)
+- [Owner signoff M1B-0F](docs/decisions/M1B-0F-owner-signoff.md)
 
 ## Следующий шлюз
 
 Hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) слит, но исторический report 17 июля и повторная проверка 18 июля честно сохраняют `M1A: BLOCKED`: byte/containment evidence собрано, а atomic cross-file coherence, arbitrary same-UID path-race protection и effective load-order/collision policy недостаточны для `GO`.
 
-Следующий разрешённый шаг — только owner review M1B protocol. `M1B: NOT_EVALUATED`: review контракта не является feasibility verdict и не разрешает benchmark, active experiment или product implementation. Только позднее принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешат safety kernel; до этого `M2: FORBIDDEN`.
+После review и merge external owner-freeze PR следующий возможный шаг — только отдельный `M1B-1A local synthetic provider preflight`. Текущий record не запускает его, не разрешает model call/private corpus и не создаёт complete benchmark. `M1B: NOT_EVALUATED`: owner-freeze не является feasibility verdict. Только позднее принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешат safety kernel; до этого `M1A: BLOCKED` и `M2: FORBIDDEN`.
