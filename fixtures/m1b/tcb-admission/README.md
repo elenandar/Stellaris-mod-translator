@@ -21,8 +21,10 @@ controlled failures. Exact fixture identity is `73746` compact sorted-key
 UTF-8 JSON bytes plus one LF, with
 diagnostic SHA-256
 `b729305612bdf5f3e88d42a90603cf6a10b2100bd31b144c28399a155984d862`.
-These values were independently recalculated; the superseded generation-1 and
-generation-2 identities are not evidence for v4.
+These values were independently recalculated; identities from superseded
+contract generations 1, 2, and 3 are not evidence for contract v4. The
+superseded public fixture schema v4 and its identity are not evidence for the
+current fixture schema v5.
 
 The table covers the closed manifest, unchanged five-field implementation
 acceptance, new 16-field runtime acceptance, canonical envelope framed digest,
@@ -83,4 +85,5 @@ python3 -m unittest tools.research.tests.test_m1b_tcb_contract -v
 Passing this synthetic matrix means only `SYNTHETIC_CONFORMANCE_ONLY`. A
 fixture hash, expected result, Git identity, verifier self-report or
 caller-supplied record is not a trust root and cannot grant executable TCB,
-provider, Ollama, corpus, benchmark or M2 admission.
+`M1B-1A1-AUTH`, candidate construction, provider, Ollama, corpus, benchmark or
+M2 admission.

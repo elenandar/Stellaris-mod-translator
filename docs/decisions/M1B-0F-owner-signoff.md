@@ -7,6 +7,8 @@
 - Post-merge hardening state: `STABLE_READ_HARDENING: ACCEPTED`; [PR #7](https://github.com/elenandar/Stellaris-mod-translator/pull/7) head `4c849f528a468545f7c5d39d6c7fddf5b23a066d` merged as `424a4e45066cfbff3f9b3da2ec2cf6ad62a643fb`
 - Operational effect: exact accepted declarative scope действует с merge PR #6
 - Next stage: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`; executable TCB admission не выдан
+- Post-contract authorization: `M1B-1A1-AUTH: OWNER_REVIEW_REQUIRED`
+- Candidate construction: `CANDIDATE CONSTRUCTION: NOT_AUTHORIZED`
 - Executable owner gate: `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`
 - Provider-source gate: `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`
 - M1B verdict: `M1B: NOT_EVALUATED`
@@ -41,7 +43,7 @@ df84871be332ee52c315d0c0cc1a7a0046251352a2a0131382b5cb994cffcb58
 
 Snapshot не содержит self-hash; digest хранится в отдельном owner decision
 record. Git SHA и fixture SHA являются provenance/evidence, но не executable
-или protocol trust identity. Operational admission exact freeze действует с
+или protocol trust identity. Accepted declarative freeze действует только с
 merge PR #6 в `main`; post-merge hardening не изменяет identity или scope.
 
 ## Exact scope
@@ -65,6 +67,8 @@ owner signoff, не принимает executable/runtime bytes и не разр
 execution. Принятое declarative M1B-0F решение не является executable owner
 decision и не снимает `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED` либо
 `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN`.
+Stored next-stage value — umbrella label declarative preparation scope, а не
+owner authorization для M1B-1A1 или создания candidate.
 
 ## Preserved blockers
 
@@ -102,14 +106,32 @@ Benchmark не запускался; model observations, human scores и quality
 Post-merge state — `OWNER_FREEZE: ACCEPTED`. M1B-0F-H1 не пересматривает это
 решение: `STABLE_READ_HARDENING: ACCEPTED`. M1B-1A0 также не пересматривает
 owner-freeze: `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`,
+`M1B-1A1-AUTH: OWNER_REVIEW_REQUIRED`,
+`CANDIDATE CONSTRUCTION: NOT_AUTHORIZED`,
 `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`,
 `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`,
 `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`,
 `M1B-1A PROVIDER EXECUTION: NOT_STARTED`.
 
-После review/merge M1B-1A0 следующий возможный `M1B-1A1` может только
-предложить offline four-role candidate и evidence. Он не создаёт operational
-`owner_accepted` и не принимает bytes. Отдельный `M1B-1A2` может рассмотреть
-owner-controlled решение только над уже известными exact identities; задача
-создания candidate bytes не может также принять их. Даже M1B-1A2 не разрешает
-provider/model execution без следующего явного gate.
+Review и merge M1B-1A0 фиксируют только contract и не выдают owner authorization
+на создание candidate. После merge доступен только отдельный
+`M1B-1A1-AUTH` со state `OWNER_REVIEW_REQUIRED`; до его отдельного явного
+принятия `CANDIDATE CONSTRUCTION: NOT_AUTHORIZED`.
+
+M1B-1A1-AUTH сам не создаёт executable files или real candidate
+manifest/envelope, не запускает interpreter/provider, не создаёт operational
+`owner_accepted` admission и не снимает
+`EXECUTABLE_TCB_OWNER_DECISION_REQUIRED`. Он должен exact перечислить
+разрешённые repository paths для ролей `analysis_engine`, `contract_validator`,
+`provider_request_harness`, `synthetic_fixture_materializer`, отделить
+read-only inputs от разрешённых write outputs и запретить любые не перечисленные
+reads/writes, execution, provider/Ollama/model action, private corpus и
+benchmark.
+
+Только после отдельного explicit owner acceptance M1B-1A1-AUTH отдельный
+`M1B-1A1` может создать proposed four-role candidate bytes и exact offline
+evidence без acceptance или execution. M1B-1A1 не может принять созданные
+identities; отдельный `M1B-1A2` рассматривает owner-controlled решение только
+над уже известными exact identities. Даже M1B-1A2 не разрешает Ollama probe,
+provider/model call, private corpus или benchmark: для исполнения нужен ещё
+один явный gate.

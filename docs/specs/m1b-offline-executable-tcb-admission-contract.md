@@ -10,6 +10,8 @@
 - Preserved benchmark protocol: `m1b-benchmark-contract-v7`, generation `108`
 - Remediation state: `REMEDIATION: READY_FOR_REVIEW`
 - Review state: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`
+- Authorization gate: `M1B-1A1-AUTH: OWNER_REVIEW_REQUIRED`
+- Candidate construction: `CANDIDATE CONSTRUCTION: NOT_AUTHORIZED`
 - Admission state: `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`
 - Owner-decision blocker: `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`
 - Provider-source blocker: `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`
@@ -551,6 +553,8 @@ missing frozen prompt/template bytes, real candidate identities и
 ```text
 REMEDIATION: READY_FOR_REVIEW
 M1B-1A0 CONTRACT: READY_FOR_REVIEW
+M1B-1A1-AUTH: OWNER_REVIEW_REQUIRED
+CANDIDATE CONSTRUCTION: NOT_AUTHORIZED
 EXECUTABLE_TCB_ADMISSION: NOT_GRANTED
 EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED
 PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED
@@ -563,12 +567,26 @@ M1A: BLOCKED
 M2: FORBIDDEN
 ```
 
-После review и merge следующий разрешённый отдельный gate — `M1B-1A1`:
-предложить offline four-role candidate bytes и exact manifest/envelope/launcher/
-import/source-eligibility evidence. M1B-1A1 не создаёт operational
-`owner_accepted`, не выдаёт executable admission и не запускает provider.
-Только следующий отдельный `M1B-1A2` может зафиксировать owner-controlled
-решение над уже известными exact identities; задача, создавшая candidate bytes,
-не может сама принять их. Даже M1B-1A2 не разрешает Ollama probe, model call,
-private corpus, provider execution или benchmark: для них требуется следующий
-явный gate.
+Review и merge PR #8 фиксируют только M1B-1A0 и не выдают owner authorization
+на создание candidate. После merge доступен только отдельный
+`M1B-1A1-AUTH` со state `OWNER_REVIEW_REQUIRED`; до его отдельного явного
+принятия `CANDIDATE CONSTRUCTION: NOT_AUTHORIZED`.
+
+M1B-1A1-AUTH сам не создаёт executable files или real candidate
+manifest/envelope, не запускает interpreter/provider, не создаёт operational
+`owner_accepted` admission и не снимает
+`EXECUTABLE_TCB_OWNER_DECISION_REQUIRED`. Он должен exact перечислить
+разрешённые repository paths для ролей `analysis_engine`, `contract_validator`,
+`provider_request_harness`, `synthetic_fixture_materializer`, отделить
+read-only inputs от разрешённых write outputs и запретить любые не перечисленные
+reads/writes, execution, provider/Ollama/model action, private corpus и
+benchmark.
+
+Только после отдельного explicit owner acceptance M1B-1A1-AUTH отдельный
+`M1B-1A1` может создать proposed four-role candidate bytes и exact offline
+manifest/envelope/launcher/import/source-eligibility evidence без acceptance или
+execution. M1B-1A1 не может принять созданные identities. После его review
+отдельный `M1B-1A2` может зафиксировать owner-controlled решение только над уже
+известными exact identities. Даже M1B-1A2 не разрешает Ollama probe,
+provider/model call, private corpus или benchmark: для исполнения нужен ещё
+один явный gate.
