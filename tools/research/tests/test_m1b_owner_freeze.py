@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import copy
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -426,6 +427,146 @@ class StrictJsonAndBoundaryTests(unittest.TestCase):
         snapshot["definition_bundle_sha256"] = "f" * 64
         result = freeze.verify_bytes(_encode(snapshot), DECISION.read_bytes())
         self.assertEqual(result["codes"], ["PROTOCOL_VERSION_MISMATCH"])
+
+
+class StableReadBoundaryTests(unittest.TestCase):
+    def test_short_positive_reads_accumulate_to_declared_size(self):
+        payload = b"synthetic-short-positive-read-payload"
+        real_read = os.read
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "short-reads.json"
+            path.write_bytes(payload)
+
+            def short_read(descriptor, count):
+                return real_read(descriptor, min(count, 3))
+
+            with mock.patch.object(
+                freeze.os, "read", side_effect=short_read
+            ) as injected_read:
+                data = freeze._read_explicit_regular_file(str(path))
+
+        self.assertEqual(data, payload)
+        self.assertGreater(injected_read.call_count, 1)
+
+    def test_exact_complete_read_returns_all_declared_bytes(self):
+        payload = b"synthetic-exact-complete-read"
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "exact.json"
+            path.write_bytes(payload)
+            self.assertEqual(
+                freeze._read_explicit_regular_file(str(path)), payload
+            )
+
+    def test_premature_eof_cannot_hide_invalid_tail_or_leak_input(self):
+        marker = "SYNTHETIC_UNREAD_TAIL_MUST_NOT_ESCAPE"
+        snapshot_bytes = SNAPSHOT.read_bytes()
+        invalid_tail = b"\xff"
+        real_fstat = os.fstat
+        observed_stats = []
+
+        def stable_fstat(descriptor):
+            result = real_fstat(descriptor)
+            observed_stats.append(result)
+            return result
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            snapshot_path = Path(raw_directory) / (marker + ".json")
+            full_input = snapshot_bytes + invalid_tail
+            snapshot_path.write_bytes(full_input)
+            self.assertEqual(len(snapshot_bytes), 4051)
+            self.assertEqual(snapshot_path.stat().st_size, 4052)
+            stdout_bytes = io.BytesIO()
+            stderr_bytes = io.BytesIO()
+            stdout = io.TextIOWrapper(stdout_bytes, encoding="utf-8")
+            stderr = io.TextIOWrapper(stderr_bytes, encoding="utf-8")
+            with mock.patch.object(
+                freeze.os,
+                "read",
+                side_effect=(snapshot_bytes, b"", DECISION.read_bytes(), b""),
+            ) as injected_read, mock.patch.object(
+                freeze.os, "fstat", side_effect=stable_fstat
+            ) as injected_fstat, mock.patch.object(
+                freeze, "verify_bytes", wraps=freeze.verify_bytes
+            ) as verify_bytes, mock.patch.object(
+                sys, "stdout", stdout
+            ), mock.patch.object(sys, "stderr", stderr):
+                exit_code = freeze.main(
+                    ("verify", str(snapshot_path), str(DECISION))
+                )
+                stdout.flush()
+                stderr.flush()
+
+            output = stdout_bytes.getvalue()
+            errors = stderr_bytes.getvalue()
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(errors, b"")
+            self.assertEqual(injected_read.call_count, 2)
+            self.assertEqual(injected_fstat.call_count, 2)
+            self.assertEqual(observed_stats[0], observed_stats[1])
+            self.assertEqual(observed_stats[0].st_size, 4052)
+            verify_bytes.assert_not_called()
+            self.assertEqual(
+                json.loads(output),
+                {
+                    "codes": ["INPUT_CHANGED"],
+                    "counts": {"component_identities": 0, "owner_records": 0},
+                    "status": "error",
+                },
+            )
+            for forbidden in (
+                marker.encode("ascii"),
+                str(snapshot_path).encode("utf-8"),
+                full_input,
+                invalid_tail,
+            ):
+                self.assertNotIn(forbidden, output + errors)
+
+    def test_descriptor_is_closed_on_success_and_premature_eof(self):
+        payload = b"synthetic-descriptor-close-payload"
+        real_close = os.close
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "close.json"
+            path.write_bytes(payload)
+
+            with mock.patch.object(
+                freeze.os, "close", side_effect=real_close
+            ) as close_success:
+                self.assertEqual(
+                    freeze._read_explicit_regular_file(str(path)), payload
+                )
+            close_success.assert_called_once()
+            success_descriptor = close_success.call_args.args[0]
+            with self.assertRaises(OSError):
+                os.fstat(success_descriptor)
+
+            with mock.patch.object(
+                freeze.os, "read", side_effect=(payload[:-1], b"")
+            ), mock.patch.object(
+                freeze.os, "close", side_effect=real_close
+            ) as close_failure:
+                with self.assertRaises(freeze.OwnerFreezeError) as raised:
+                    freeze._read_explicit_regular_file(str(path))
+            self.assertEqual(raised.exception.code, "INPUT_CHANGED")
+            close_failure.assert_called_once()
+            failure_descriptor = close_failure.call_args.args[0]
+            with self.assertRaises(OSError):
+                os.fstat(failure_descriptor)
+
+    def test_physical_oversize_file_is_rejected_before_read(self):
+        real_close = os.close
+        with tempfile.TemporaryDirectory() as raw_directory:
+            path = Path(raw_directory) / "oversize.json"
+            path.write_bytes(b" " * (freeze.MAX_INPUT_BYTES + 1))
+            with mock.patch.object(
+                freeze.os, "read"
+            ) as injected_read, mock.patch.object(
+                freeze.os, "close", side_effect=real_close
+            ) as close:
+                with self.assertRaises(freeze.OwnerFreezeError) as raised:
+                    freeze._read_explicit_regular_file(str(path))
+            self.assertEqual(raised.exception.code, "INPUT_SIZE_LIMIT")
+            injected_read.assert_not_called()
+            close.assert_called_once()
 
 
 class OfflineCliBoundaryTests(unittest.TestCase):

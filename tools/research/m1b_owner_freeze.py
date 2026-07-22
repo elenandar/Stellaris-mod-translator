@@ -307,7 +307,7 @@ def _read_explicit_regular_file(value: str) -> bytes:
         if before.st_size > MAX_INPUT_BYTES:
             raise OwnerFreezeError("INPUT_SIZE_LIMIT")
         chunks = []
-        remaining = MAX_INPUT_BYTES + 1
+        remaining = before.st_size
         while remaining:
             chunk = os.read(descriptor, min(remaining, 8192))
             if not chunk:
@@ -337,6 +337,8 @@ def _read_explicit_regular_file(value: str) -> bytes:
             after.st_ctime_ns,
         )
         if before_identity != after_identity:
+            raise OwnerFreezeError("INPUT_CHANGED")
+        if len(data) != before.st_size:
             raise OwnerFreezeError("INPUT_CHANGED")
         return data
     except OwnerFreezeError:
