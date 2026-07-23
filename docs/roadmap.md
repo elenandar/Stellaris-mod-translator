@@ -7,7 +7,7 @@ Roadmap показывает порядок решений, а не даты. П
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
-| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7 и contract PR #8 merged; `OWNER_FREEZE: ACCEPTED`; `STABLE_READ_HARDENING: ACCEPTED`; `M1B-1A0 CONTRACT: ACCEPTED/MERGED`; `M1B-1A1-AUTH: READY_FOR_OWNER_REVIEW`; `CANDIDATE CONSTRUCTION: NOT_AUTHORIZED_UNTIL_AUTH_MERGE`; `RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED`; executable TCB admission не выдан; `M1B: NOT_EVALUATED`; benchmark не запускался |
+| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7, contract PR #8 и AUTH PR #9 merged; exact draft PR #10 требует remediation; `M1B-1A-R1-AUTH: READY_FOR_OWNER_REVIEW`; `EFFECT: NOT_ACTIVE_UNTIL_OWNER_REVIEW_AND_MERGE`; `PR10: CHANGES_REQUIRED_UNCHANGED`; `M1B-1A1: BLOCKED_PENDING_R1_AUTH`; `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`; `M1B: NOT_EVALUATED`; benchmark не запускался |
 | M2 — Safety kernel & technical CLI | lossless CST, typed atoms, controlled render, containment | M1A, M1B | одновременно получены `GO` и `QUALITY_FEASIBLE`; taxonomy/holdout проходят technical gates | **FORBIDDEN**: M1A is `BLOCKED`; M1B is `NOT_EVALUATED` |
 | M3 — Incremental engine & publishing | SQLite, identity, jobs, backup, versioned artifact и rollback | M2 | unchanged = zero work; crash/update/conflict/restore безопасны | not started |
 | M4 — Local quality engine | context, glossary, memory, Ollama, review/repair и editorial states | M1B, M3 | quality thresholds и human-review policy соблюдены | not started |
@@ -87,10 +87,8 @@ launcher opened-byte handoff, exact admitted-CPython provider source eligibility
 `18` read-only base inputs, `4` post-merge AUTH inputs, `4` inert role paths,
 `4` create-only future directories и `12` future output paths.
 
-Machine record содержит `acceptance_state=owner_accepted`, но effect имеет
-exact значение `after_review_and_merge_to_main`. До owner review и merge этого
-AUTH PR действуют `M1B-1A1-AUTH: READY_FOR_OWNER_REVIEW` и
-`CANDIDATE CONSTRUCTION: NOT_AUTHORIZED_UNTIL_AUTH_MERGE`.
+Machine record содержит `acceptance_state=owner_accepted`; exact effect
+`after_review_and_merge_to_main` завершён merge PR #9.
 
 После effect отдельный M1B-1A1 может создать только четыре inert role files,
 proposed manifest, synthetic fixture README/data, candidate review, sanitized
@@ -114,10 +112,31 @@ publishing запрещены. Bounded system validation-tool selection/испо
 `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED` и
 `RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED` сохраняются.
 
-M1B-1A1 не может принять созданные identities. Только отдельный будущий
-M1B-1A2 может рассмотреть owner-controlled решение над уже известными exact
-identities; даже он не разрешает provider/model call, private corpus или
-benchmark без следующего explicit execution gate. States остаются
+Exact candidate construction находится в draft PR #10, но не получает
+admission. Raw static review требует отдельной transport/evidence-provenance
+remediation до любого M1B-1A2 decision.
+
+### M1B-1A-R1-AUTH — transport and evidence-provenance remediation
+
+[Canonical scope](../registry/m1b/m1b-1a-r1-remediation-scope-v1.json),
+[authorization contract](specs/m1b-1a-r1-remediation-authorization-contract.md),
+[machine owner record](decisions/M1B-1A-R1-AUTH-owner-authorization.json) и
+[owner signoff](decisions/M1B-1A-R1-AUTH-owner-signoff.md) не дают authority
+до owner review и merge.
+
+Future effect ограничен existing draft PR #10 и требует exact pre-remediation
+head `66f905cf266b9d1c1f56d0d706184387ffedb36e`. Он разрешит только versioned
+contract-v5/candidate static remediation, bounded request/private-result
+transport definitions, diagnostic-only admission, evidence provenance,
+terminal-failure accounting, inert fixtures/reviews и regenerated proposed
+identities в closed allowlist.
+
+Candidate import/parse/compile/execute, provider/model call, private corpus,
+runtime envelope instance, acceptance, executable admission, M1B-1A2 и
+benchmark не разрешены. До effect действуют
+`M1B-1A-R1-AUTH: READY_FOR_OWNER_REVIEW`,
+`PR10: CHANGES_REQUIRED_UNCHANGED`,
+`M1B-1A1: BLOCKED_PENDING_R1_AUTH`,
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
 
 ## Точки решения
