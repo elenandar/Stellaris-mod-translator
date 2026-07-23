@@ -79,27 +79,40 @@ launcher opened-byte handoff, exact admitted-CPython provider source eligibility
 
 ### M1B-1A1-AUTH — bounded candidate-construction authorization
 
-[Canonical scope](../registry/m1b/m1b-1a1-candidate-construction-scope-v1.json),
+[Canonical scope](../registry/m1b/m1b-1a1-candidate-construction-scope-v2.json),
 [authorization contract](specs/m1b-1a1-candidate-construction-authorization-contract.md),
 [machine owner record](decisions/M1B-1A1-AUTH-owner-authorization.json) и
 [owner signoff](decisions/M1B-1A1-AUTH-owner-signoff.md) подготавливают только
-ограниченный future construction scope. Scope generation `1` exact bind-ит
-`18` read-only base inputs, `4` post-merge AUTH inputs, четыре inert role paths
-и `13` future output paths.
+ограниченный future construction scope. Scope generation `2` exact bind-ит
+`18` read-only base inputs, `4` post-merge AUTH inputs, `4` inert role paths,
+`4` create-only future directories и `12` future output paths.
 
 Machine record содержит `acceptance_state=owner_accepted`, но effect имеет
 exact значение `after_review_and_merge_to_main`. До owner review и merge этого
 AUTH PR действуют `M1B-1A1-AUTH: READY_FOR_OWNER_REVIEW` и
 `CANDIDATE CONSTRUCTION: NOT_AUTHORIZED_UNTIL_AUTH_MERGE`.
 
-После effect отдельный M1B-1A1 может создать только четыре role files, proposed
-manifest, synthetic fixture README/data, static-byte test, candidate review,
-ignored evidence и три status-only updates из exact allowlist. Proposed
-manifest не является admission. Execution/runtime envelope, invocation plan,
-implementation/runtime acceptance, import/compile/execution candidate,
-interpreter selection, provider/Ollama/model action, corpus, benchmark, product
-CLI, M2, activation и publishing запрещены. Поэтому
-`RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED` сохраняется.
+После effect отдельный M1B-1A1 может создать только четыре inert role files,
+proposed manifest, synthetic fixture README/data, candidate review, sanitized
+ignored evidence и три status-only updates из exact allowlist. `cases.json`
+остаётся инертными данными. Четыре отсутствующих каталога создаются только по
+exact create-only allowlist с modes `0700`/`0755`; любой другой каталог
+запрещён. Repository content plane остаётся default-deny, а отдельно
+перечисленные Git/GitHub operations и host validation доступны только после
+effect и не становятся candidate/provider authority.
+
+Новый repository test, другой executable fixture, import или execution любого
+созданного repository file, а также parse/compile candidate source запрещены.
+Future static data/Markdown validation выполняют только существующие host tools
+с `PYTHONDONTWRITEBYTECODE=1`, без `.pyc`/`__pycache__`. Proposed manifest не
+является admission.
+Execution/runtime envelope, invocation plan, implementation/runtime acceptance,
+candidate/provider runtime interpreter selection/copy, interpreter admission,
+provider/Ollama/model action, corpus, benchmark, product CLI, M2, activation и
+publishing запрещены. Bounded system validation-tool selection/исполнение не
+является runtime authority. Поэтому
+`NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED` и
+`RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED` сохраняются.
 
 M1B-1A1 не может принять созданные identities. Только отдельный будущий
 M1B-1A2 может рассмотреть owner-controlled решение над уже известными exact
