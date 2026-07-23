@@ -7,7 +7,7 @@ Roadmap показывает порядок решений, а не даты. П
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
-| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6 и stable-read PR #7 merged; `OWNER_FREEZE: ACCEPTED`; `STABLE_READ_HARDENING: ACCEPTED`; `M1B-1A0 CONTRACT: READY_FOR_REVIEW`; `M1B-1A1-AUTH: OWNER_REVIEW_REQUIRED`; `CANDIDATE CONSTRUCTION: NOT_AUTHORIZED`; `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED` и `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN` сохранены; executable TCB admission не выдан; `M1B: NOT_EVALUATED`; benchmark не запускался |
+| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7 и contract PR #8 merged; `OWNER_FREEZE: ACCEPTED`; `STABLE_READ_HARDENING: ACCEPTED`; `M1B-1A0 CONTRACT: ACCEPTED/MERGED`; `M1B-1A1-AUTH: READY_FOR_OWNER_REVIEW`; `CANDIDATE CONSTRUCTION: NOT_AUTHORIZED_UNTIL_AUTH_MERGE`; `RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED`; executable TCB admission не выдан; `M1B: NOT_EVALUATED`; benchmark не запускался |
 | M2 — Safety kernel & technical CLI | lossless CST, typed atoms, controlled render, containment | M1A, M1B | одновременно получены `GO` и `QUALITY_FEASIBLE`; taxonomy/holdout проходят technical gates | **FORBIDDEN**: M1A is `BLOCKED`; M1B is `NOT_EVALUATED` |
 | M3 — Incremental engine & publishing | SQLite, identity, jobs, backup, versioned artifact и rollback | M2 | unchanged = zero work; crash/update/conflict/restore безопасны | not started |
 | M4 — Local quality engine | context, glossary, memory, Ollama, review/repair и editorial states | M1B, M3 | quality thresholds и human-review policy соблюдены | not started |
@@ -41,6 +41,11 @@ contract v4/version v4/generation 4, manifest v1 verifier, execution envelope
 v4, execution plan v3/generation 3 и runtime acceptance v1 для будущего exact
 executable/runtime admission. Final v4 identities и validation evidence
 зафиксированы в review record после post-remediation revalidation.
+[PR #8](https://github.com/elenandar/Stellaris-mod-translator/pull/8) exact head
+`6a2243ad803bf47056f2577013053b6abc2df020` merged в `main` как
+[`bfe3faa`](https://github.com/elenandar/Stellaris-mod-translator/commit/bfe3faaaf1c13021f4ecc62b7c584bc28ba964bc).
+Это приняло только contract: `M1B-1A0 CONTRACT: ACCEPTED/MERGED`; executable или
+runtime admission не выдан.
 
 Generation 4 использует `m1b-execution-envelope-v4`, closed
 `m1b-execution-plan-v3` и отдельный
@@ -66,34 +71,53 @@ launcher opened-byte handoff, exact admitted-CPython provider source eligibility
 только structural conformance при сохранённом blocker. Caller-supplied
 `owner_accepted` означает только shape/linkage, не operational owner decision.
 
-Это contract-only state: `M1B-1A0 CONTRACT: READY_FOR_REVIEW`,
-`M1B-1A1-AUTH: OWNER_REVIEW_REQUIRED`,
-`CANDIDATE CONSTRUCTION: NOT_AUTHORIZED`,
-`EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`,
+После merge PR #8 состояния: `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`,
 `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`,
 `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`,
-`EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`,
-`M1B-1A PROVIDER EXECUTION: NOT_STARTED`. Review и merge PR #8 фиксируют только
-M1B-1A0 и не разрешают создание candidate. После merge доступен только
-отдельный `M1B-1A1-AUTH` со state `OWNER_REVIEW_REQUIRED`; до его отдельного
-явного принятия candidate construction запрещён.
+`EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED` и
+`M1B-1A PROVIDER EXECUTION: NOT_STARTED`.
 
-M1B-1A1-AUTH сам не создаёт executable files или real manifest/envelope, не
-запускает interpreter/provider, не создаёт operational `owner_accepted`
-admission и не снимает `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED`. Он должен exact
-перечислить разрешённые repository paths для четырёх ролей `analysis_engine`,
-`contract_validator`, `provider_request_harness`,
-`synthetic_fixture_materializer`, отделить read-only inputs от разрешённых write
-outputs и запретить любые не перечисленные reads/writes, execution,
-provider/Ollama/model action, private corpus и benchmark.
+### M1B-1A1-AUTH — bounded candidate-construction authorization
 
-Только после отдельного explicit owner acceptance `M1B-1A1-AUTH` отдельный `M1B-1A1`
-может создать proposed four-role candidate bytes и exact offline evidence без
-acceptance или execution. M1B-1A1 не может принять созданные identities;
-отдельный `M1B-1A2` рассматривает owner-controlled решение только над уже
-известными exact identities. Даже M1B-1A2 не разрешает Ollama probe,
-provider/model call, private corpus или benchmark: требуется ещё один явный
-execution gate. States остаются
+[Canonical scope](../registry/m1b/m1b-1a1-candidate-construction-scope-v2.json),
+[authorization contract](specs/m1b-1a1-candidate-construction-authorization-contract.md),
+[machine owner record](decisions/M1B-1A1-AUTH-owner-authorization.json) и
+[owner signoff](decisions/M1B-1A1-AUTH-owner-signoff.md) подготавливают только
+ограниченный future construction scope. Scope generation `2` exact bind-ит
+`18` read-only base inputs, `4` post-merge AUTH inputs, `4` inert role paths,
+`4` create-only future directories и `12` future output paths.
+
+Machine record содержит `acceptance_state=owner_accepted`, но effect имеет
+exact значение `after_review_and_merge_to_main`. До owner review и merge этого
+AUTH PR действуют `M1B-1A1-AUTH: READY_FOR_OWNER_REVIEW` и
+`CANDIDATE CONSTRUCTION: NOT_AUTHORIZED_UNTIL_AUTH_MERGE`.
+
+После effect отдельный M1B-1A1 может создать только четыре inert role files,
+proposed manifest, synthetic fixture README/data, candidate review, sanitized
+ignored evidence и три status-only updates из exact allowlist. `cases.json`
+остаётся инертными данными. Четыре отсутствующих каталога создаются только по
+exact create-only allowlist с modes `0700`/`0755`; любой другой каталог
+запрещён. Repository content plane остаётся default-deny, а отдельно
+перечисленные Git/GitHub operations и host validation доступны только после
+effect и не становятся candidate/provider authority.
+
+Новый repository test, другой executable fixture, import или execution любого
+созданного repository file, а также parse/compile candidate source запрещены.
+Future static data/Markdown validation выполняют только существующие host tools
+с `PYTHONDONTWRITEBYTECODE=1`, без `.pyc`/`__pycache__`. Proposed manifest не
+является admission.
+Execution/runtime envelope, invocation plan, implementation/runtime acceptance,
+candidate/provider runtime interpreter selection/copy, interpreter admission,
+provider/Ollama/model action, corpus, benchmark, product CLI, M2, activation и
+publishing запрещены. Bounded system validation-tool selection/исполнение не
+является runtime authority. Поэтому
+`NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED` и
+`RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED` сохраняются.
+
+M1B-1A1 не может принять созданные identities. Только отдельный будущий
+M1B-1A2 может рассмотреть owner-controlled решение над уже известными exact
+identities; даже он не разрешает provider/model call, private corpus или
+benchmark без следующего explicit execution gate. States остаются
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
 
 ## Точки решения
