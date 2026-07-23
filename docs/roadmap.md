@@ -113,31 +113,49 @@ publishing запрещены. Bounded system validation-tool selection/испо
 `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED` и
 `RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED` сохраняются.
 
-Exact candidate construction находится в draft PR #10, но не получает
-admission. Raw static review требует отдельной transport/evidence-provenance
-remediation до любого M1B-1A2 decision.
+Exact candidate construction из PR #10 был слит внешним owner-controlled
+действием вопреки stop rule. Это
+`PR10: MERGED_OWNER_CONTROLLED_SCOPE_DEVIATION`, а не задним числом разрешённое
+scope v1 действие. Candidate bytes остаются `INERT_NOT_ADMITTED`; raw static
+review по-прежнему требует отдельной transport/evidence-provenance remediation
+до любого M1B-1A2 decision.
 
-### M1B-1A-R1-AUTH — transport and evidence-provenance remediation
+### M1B-1A-R1-AUTH v2 — post-merge transport and evidence-provenance remediation
 
-[Canonical scope](../registry/m1b/m1b-1a-r1-remediation-scope-v1.json),
+[Canonical scope](../registry/m1b/m1b-1a-r1-remediation-scope-v2.json),
 [authorization contract](specs/m1b-1a-r1-remediation-authorization-contract.md),
 [machine owner record](decisions/M1B-1A-R1-AUTH-owner-authorization.json) и
 [owner signoff](decisions/M1B-1A-R1-AUTH-owner-signoff.md) не дают authority
 до owner review и merge.
 
-Future effect ограничен existing draft PR #10 и требует exact pre-remediation
-head `66f905cf266b9d1c1f56d0d706184387ffedb36e`. Он разрешит только versioned
-contract-v5/candidate static remediation, bounded request/private-result
-transport definitions, diagnostic-only admission, evidence provenance,
-terminal-failure accounting, inert fixtures/reviews и regenerated proposed
-identities в closed allowlist.
+Scope v2 bind-ит PR #10 как historical merged baseline: head
+`66f905cf266b9d1c1f56d0d706184387ffedb36e`, merge
+`3c6ca3146d838b977f24bbc6b8c79dfb271e142b`, ordered parents
+`1f10c151c5adac5fbf765af8093c7eddf8cf0429` и
+`66f905cf266b9d1c1f56d0d706184387ffedb36e`, tree
+`289e2396975c5ef6fe1001a7c5990523edaa06c5`, exact `11` paths. Scope v1
+`SUPERSEDED_NEVER_EFFECTIVE` и не авторизует merge retroactively.
 
-Candidate import/parse/compile/execute, provider/model call, private corpus,
-runtime envelope instance, acceptance, executable admission, M1B-1A2 и
-benchmark не разрешены. До effect действуют
-`M1B-1A-R1-AUTH: READY_FOR_OWNER_REVIEW`,
-`PR10: CHANGES_REQUIRED_UNCHANGED`,
-`M1B-1A1: BLOCKED_PENDING_R1_AUTH`,
+Effect требует external owner-controlled ordinary two-parent merge PR #11 в
+`main`: first parent exact
+`3c6ca3146d838b977f24bbc6b8c79dfb271e142b`, second parent — external final
+head PR #11, оба deltas — exact six AUTH paths, четыре normative artifacts
+byte-identical. Изменение `main` до merge блокирует effect.
+
+После effect разрешены только одна новая ветка
+`agent/m1b-1a-r1-postmerge-remediation` от exact merge PR #11, versioned
+contract-v5/candidate static remediation в closed `19`-path allowlist, один
+ordinary commit, один non-force push и один новый draft PR в `main`. Номер
+future PR bind-ится external GitHub metadata. Четыре AUTH artifacts становятся
+immutable base inputs.
+
+Другие ветки/PR, main mutation, rebase/amend/force-push, merge/auto-merge/ready,
+candidate import/parse/tokenize/lint/compile/execute, provider/model call,
+private corpus, runtime envelope instance, acceptance, executable admission,
+M1B-1A2 и benchmark не разрешены. До effect действуют
+`M1B-1A-R1-AUTH-V2: READY_FOR_OWNER_REVIEW`,
+`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V2_MERGE`,
+`NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`,
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
 
 ### M1B-1A1 — exact inert four-role candidate construction
@@ -145,7 +163,8 @@ benchmark не разрешены. До effect действуют
 [Candidate review](decisions/M1B-1A1-candidate-review.md),
 [proposed executable manifest](../registry/m1b/m1b-1a1-proposed-executable-manifest-v1.json)
 и [inert synthetic fixture](../fixtures/m1b/candidate-construction/README.md)
-имеют status `M1B-1A1 CANDIDATE: READY_FOR_OWNER_REVIEW`.
+остаются historical merged candidate records со status
+`PR10_CANDIDATE: INERT_NOT_ADMITTED`.
 `CANDIDATE CONSTRUCTION: COMPLETE_WITHIN_EXACT_INERT_SCOPE`;
 `CANDIDATE SOURCE: NOT_PARSED_NOT_COMPILED_NOT_IMPORTED_NOT_EXECUTED`;
 `PROPOSED EXECUTABLE MANIFEST: REVIEWABLE_PROPOSAL_ONLY_NOT_ADMISSION`;
