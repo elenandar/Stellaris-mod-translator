@@ -8,7 +8,7 @@
 
 Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) слит как [`2b51879`](https://github.com/elenandar/Stellaris-mod-translator/commit/2b51879d8e358cf5412f3a6792f33c71ae79d863), hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) — как [`9cd10d1`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240), M1B protocol proposal [PR #5](https://github.com/elenandar/Stellaris-mod-translator/pull/5) — как [`ed07bcc`](https://github.com/elenandar/Stellaris-mod-translator/commit/ed07bcca96945dbb49206c975908e00c832210b5), external owner-freeze [PR #6](https://github.com/elenandar/Stellaris-mod-translator/pull/6) — как [`9f854da`](https://github.com/elenandar/Stellaris-mod-translator/commit/9f854da7501dec6ec9afc5e4bf71dfaa1ea9ecbc), stable-read hardening [PR #7](https://github.com/elenandar/Stellaris-mod-translator/pull/7) — как [`424a4e4`](https://github.com/elenandar/Stellaris-mod-translator/commit/424a4e45066cfbff3f9b3da2ec2cf6ad62a643fb), а offline executable/TCB contract [PR #8](https://github.com/elenandar/Stellaris-mod-translator/pull/8) head `6a2243ad803bf47056f2577013053b6abc2df020` — как [`bfe3faa`](https://github.com/elenandar/Stellaris-mod-translator/commit/bfe3faaaf1c13021f4ecc62b7c584bc28ba964bc). Текущий verdict остаётся `M1A: BLOCKED`. Это evidence-этап, а не начало product CLI.
 
-После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Exact proposal v7/generation 108 принят отдельным external owner-freeze record только как declarative basis записанного `M1B-1A local synthetic provider preflight`; после merge PR #6 exact scope действует со state `OWNER_FREEZE: ACCEPTED`, merge PR #7 выставил `STABLE_READ_HARDENING: ACCEPTED`, merge PR #8 — `M1B-1A0 CONTRACT: ACCEPTED/MERGED`, а merge PR #9 — `M1B-1A1-AUTH: ACCEPTED/MERGED`. PR #10 был слит внешним owner-controlled действием вопреки собственному stop rule; классификация — `OWNER_CONTROLLED_SCOPE_DEVIATION`, а старая authorization v1 никогда не получила effect и не разрешала это действие. Слитые candidate bytes остаются inert и reviewable: candidate source не принят как executable, import/parse/tokenize/lint/compile/execution не разрешены, runtime envelope, invocation instance и acceptance records не создавались, executable admission не выдан, provider/Ollama/benchmark не запускались. Текущая граница: `M1B-1A-R1-AUTH-V2: READY_FOR_OWNER_REVIEW`, `EFFECT: NOT_ACTIVE_UNTIL_OWNER_REVIEW_AND_MERGE`, `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V2_MERGE`, `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED`, `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`, `M1B-1A PROVIDER EXECUTION: NOT_STARTED`, `M1B: NOT_EVALUATED`. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
+После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Exact proposal v7/generation 108 принят отдельным external owner-freeze record только как declarative basis записанного `M1B-1A local synthetic provider preflight`; после merge PR #6 exact scope действует со state `OWNER_FREEZE: ACCEPTED`, merge PR #7 выставил `STABLE_READ_HARDENING: ACCEPTED`, merge PR #8 — `M1B-1A0 CONTRACT: ACCEPTED/MERGED`, а merge PR #9 — `M1B-1A1-AUTH: ACCEPTED/MERGED`. PR #10 был слит внешним owner-controlled действием вопреки собственному stop rule; классификация — `OWNER_CONTROLLED_SCOPE_DEVIATION`; `SCOPE_V1: NEVER_EFFECTIVE`, `SCOPE_V2: SUPERSEDED_BEFORE_EFFECT`, и ни одна из них не разрешает это действие retroactively. Слитые candidate bytes остаются inert и reviewable: candidate source не принят как executable, import/parse/tokenize/lint/compile/execution не разрешены, runtime envelope, invocation instance и acceptance records не создавались, executable admission не выдан, provider/Ollama/benchmark не запускались. Текущая граница: `M1B-1A-R1-AUTH-V3: READY_FOR_OWNER_REVIEW`, `EFFECT: NOT_ACTIVE_UNTIL_OWNER_REVIEW_AND_MERGE`, `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V3_MERGE`, `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED`, `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`, `M1B-1A PROVIDER EXECUTION: NOT_STARTED`, `M1B: NOT_EVALUATED`. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
 
 Текущая synthetic proposal identity — protocol v7/generation 108 и analysis
 policy v6/generation 108. PR #5 смержен; historical 17 report/fixture entries
@@ -115,10 +115,10 @@ Contract не принимает текущие executable bytes, runtime или
 - [Candidate review M1B-1A1](docs/decisions/M1B-1A1-candidate-review.md)
 - [Proposed executable manifest M1B-1A1](registry/m1b/m1b-1a1-proposed-executable-manifest-v1.json)
 - [Inert synthetic candidate fixture M1B-1A1](fixtures/m1b/candidate-construction/README.md)
-- [Post-merge transport/provenance remediation scope M1B-1A-R1-AUTH v2](registry/m1b/m1b-1a-r1-remediation-scope-v2.json)
+- [Post-merge transport/provenance remediation scope M1B-1A-R1-AUTH v3](registry/m1b/m1b-1a-r1-remediation-scope-v3.json)
 - [Post-merge transport/provenance remediation authorization contract](docs/specs/m1b-1a-r1-remediation-authorization-contract.md)
-- [Machine owner authorization M1B-1A-R1-AUTH v2](docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json)
-- [Owner signoff M1B-1A-R1-AUTH v2](docs/decisions/M1B-1A-R1-AUTH-owner-signoff.md)
+- [Machine owner authorization M1B-1A-R1-AUTH v3](docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json)
+- [Owner signoff M1B-1A-R1-AUTH v3](docs/decisions/M1B-1A-R1-AUTH-owner-signoff.md)
 
 ## Следующий шлюз
 
@@ -144,12 +144,13 @@ authorization v1 действие. Текущие states:
 `PROPOSED EXECUTABLE MANIFEST: REVIEWABLE_PROPOSAL_ONLY_NOT_ADMISSION`.
 
 Отдельный
-[M1B-1A-R1-AUTH v2 scope](registry/m1b/m1b-1a-r1-remediation-scope-v2.json)
+[M1B-1A-R1-AUTH v3 scope](registry/m1b/m1b-1a-r1-remediation-scope-v3.json)
 и [contract](docs/specs/m1b-1a-r1-remediation-authorization-contract.md)
 только формализуют будущую post-merge remediation из exact исторического
 baseline PR #10. До отдельного owner review и ordinary two-parent merge PR #11
-действуют `OLD_SCOPE_V1: SUPERSEDED_NEVER_EFFECTIVE`,
-`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V2_MERGE` и
+действуют `SCOPE_V1: NEVER_EFFECTIVE`,
+`SCOPE_V2: SUPERSEDED_BEFORE_EFFECT`,
+`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V3_MERGE` и
 `EFFECT: NOT_ACTIVE_UNTIL_OWNER_REVIEW_AND_MERGE`.
 
 Даже после effect разрешены только versioned contract-v5/candidate static

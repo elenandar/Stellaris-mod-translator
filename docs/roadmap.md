@@ -7,7 +7,7 @@ Roadmap показывает порядок решений, а не даты. П
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
-| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7, contract PR #8 и AUTH PR #9 merged; PR #10 merged by external owner-controlled action as `OWNER_CONTROLLED_SCOPE_DEVIATION`; candidate remains `INERT_NOT_ADMITTED`; old scope v1 `SUPERSEDED_NEVER_EFFECTIVE`; `M1B-1A-R1-AUTH-V2: READY_FOR_OWNER_REVIEW`; `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V2_MERGE`; `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED`; `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`; `M1B: NOT_EVALUATED`; benchmark не запускался |
+| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7, contract PR #8 и AUTH PR #9 merged; PR #10 merged by external owner-controlled action as `OWNER_CONTROLLED_SCOPE_DEVIATION`; candidate remains `INERT_NOT_ADMITTED`; `SCOPE_V1: NEVER_EFFECTIVE`; `SCOPE_V2: SUPERSEDED_BEFORE_EFFECT`; `M1B-1A-R1-AUTH-V3: READY_FOR_OWNER_REVIEW`; `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V3_MERGE`; `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED`; `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`; `M1B: NOT_EVALUATED`; benchmark не запускался |
 | M2 — Safety kernel & technical CLI | lossless CST, typed atoms, controlled render, containment | M1A, M1B | одновременно получены `GO` и `QUALITY_FEASIBLE`; taxonomy/holdout проходят technical gates | **FORBIDDEN**: M1A is `BLOCKED`; M1B is `NOT_EVALUATED` |
 | M3 — Incremental engine & publishing | SQLite, identity, jobs, backup, versioned artifact и rollback | M2 | unchanged = zero work; crash/update/conflict/restore безопасны | not started |
 | M4 — Local quality engine | context, glossary, memory, Ollama, review/repair и editorial states | M1B, M3 | quality thresholds и human-review policy соблюдены | not started |
@@ -120,21 +120,22 @@ scope v1 действие. Candidate bytes остаются `INERT_NOT_ADMITTED`
 review по-прежнему требует отдельной transport/evidence-provenance remediation
 до любого M1B-1A2 decision.
 
-### M1B-1A-R1-AUTH v2 — post-merge transport and evidence-provenance remediation
+### M1B-1A-R1-AUTH v3 — post-merge transport and evidence-provenance remediation
 
-[Canonical scope](../registry/m1b/m1b-1a-r1-remediation-scope-v2.json),
+[Canonical scope](../registry/m1b/m1b-1a-r1-remediation-scope-v3.json),
 [authorization contract](specs/m1b-1a-r1-remediation-authorization-contract.md),
 [machine owner record](decisions/M1B-1A-R1-AUTH-owner-authorization.json) и
 [owner signoff](decisions/M1B-1A-R1-AUTH-owner-signoff.md) не дают authority
 до owner review и merge.
 
-Scope v2 bind-ит PR #10 как historical merged baseline: head
+Scope v3 bind-ит PR #10 как historical merged baseline: head
 `66f905cf266b9d1c1f56d0d706184387ffedb36e`, merge
 `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`, ordered parents
 `1f10c151c5adac5fbf765af8093c7eddf8cf0429` и
 `66f905cf266b9d1c1f56d0d706184387ffedb36e`, tree
-`289e2396975c5ef6fe1001a7c5990523edaa06c5`, exact `11` paths. Scope v1
-`SUPERSEDED_NEVER_EFFECTIVE` и не авторизует merge retroactively.
+`289e2396975c5ef6fe1001a7c5990523edaa06c5`, exact `11` paths.
+`SCOPE_V1: NEVER_EFFECTIVE`, `SCOPE_V2: SUPERSEDED_BEFORE_EFFECT`; ни одна не
+авторизует merge retroactively.
 
 Effect требует external owner-controlled ordinary two-parent merge PR #11 в
 `main`: first parent exact
@@ -153,8 +154,8 @@ immutable base inputs.
 candidate import/parse/tokenize/lint/compile/execute, provider/model call,
 private corpus, runtime envelope instance, acceptance, executable admission,
 M1B-1A2 и benchmark не разрешены. До effect действуют
-`M1B-1A-R1-AUTH-V2: READY_FOR_OWNER_REVIEW`,
-`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V2_MERGE`,
+`M1B-1A-R1-AUTH-V3: READY_FOR_OWNER_REVIEW`,
+`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V3_MERGE`,
 `NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`,
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
 

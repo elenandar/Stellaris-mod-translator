@@ -1,7 +1,7 @@
-# M1B-1A-R1-AUTH v2 — post-merge transport and evidence-provenance remediation authorization
+# M1B-1A-R1-AUTH v3 — post-merge transport and evidence-provenance remediation authorization
 
 ```text
-Milestone: M1B-1A-R1-AUTH v2 — authorization only
+Milestone: M1B-1A-R1-AUTH v3 — authorization only
 Разрешённый слой: one bounded future post-merge remediation branch and draft PR after effect
 Рекомендуемая модель Codex: GPT-5.6 Sol
 Уровень рассуждения: Ultra
@@ -12,14 +12,15 @@ Milestone: M1B-1A-R1-AUTH v2 — authorization only
 Вне scope: remediation implementation, candidate execution, provider/model/corpus access, envelope instances, acceptance, admission, benchmark, M2
 ```
 
-- Scope schema: `m1b-1a-r1-remediation-scope-v2`
-- Scope generation: `2`
-- Owner record: `m1b-1a-r1-remediation-owner-authorization-v2`
-- Operational review state: `M1B-1A-R1-AUTH-V2: READY_FOR_OWNER_REVIEW`
+- Scope schema: `m1b-1a-r1-remediation-scope-v3`
+- Scope generation: `3`
+- Owner record: `m1b-1a-r1-remediation-owner-authorization-v3`
+- Operational review state: `M1B-1A-R1-AUTH-V3: READY_FOR_OWNER_REVIEW`
 - Effect: `after_review_and_merge_to_main`
 - Historical PR #10 state: `MERGED_OWNER_CONTROLLED_SCOPE_DEVIATION`
-- Old scope v1 state: `SUPERSEDED_NEVER_EFFECTIVE`
-- Remediation state: `NOT_AUTHORIZED_UNTIL_V2_MERGE`
+- Scope v1 state: `NEVER_EFFECTIVE`
+- Scope v2 state: `SUPERSEDED_BEFORE_EFFECT`
+- Remediation state: `NOT_AUTHORIZED_UNTIL_V3_MERGE`
 - New repository code execution: `NOT_AUTHORIZED`
 - Executable TCB admission: `NOT_GRANTED`
 
@@ -50,10 +51,11 @@ constructed by the scope or owner-record bytes.
 
 PR #10 was merged by an external owner-controlled action contrary to its own
 stop rule. The classification is `OWNER_CONTROLLED_SCOPE_DEVIATION`. Scope v1
-never had effect and does not authorize that action retroactively. The merged
-candidate bytes remain inert and reviewable, not admitted executable bytes.
+never had effect and does not authorize that action retroactively. Scope v2 was
+superseded before effect and grants no authority. The merged candidate bytes
+remain inert and reviewable, not admitted executable bytes.
 
-After effect, scope v2 permits only one new branch
+After effect, scope v3 permits only one new branch
 `agent/m1b-1a-r1-postmerge-remediation`, one ordinary remediation commit, one
 non-force push and one new draft remediation PR to `main`. It does not authorize
 candidate execution, functional tests, provider execution, executable
@@ -62,22 +64,22 @@ acceptance, admission, or any mutation of PR #10.
 ## 2. Normative scope identity
 
 The authoritative machine scope is
-[`registry/m1b/m1b-1a-r1-remediation-scope-v2.json`](../../registry/m1b/m1b-1a-r1-remediation-scope-v2.json).
+[`registry/m1b/m1b-1a-r1-remediation-scope-v3.json`](../../registry/m1b/m1b-1a-r1-remediation-scope-v3.json).
 It is compact sorted-key ASCII JSON plus one LF and contains no self-hash.
 
 | Field | Exact value |
 |---|---|
-| Schema / generation | `m1b-1a-r1-remediation-scope-v2` / `2` |
-| Canonical bytes | `28411` |
-| Raw SHA-256 | `cb1d4f2308c261157bbc97875811c9dccc4cad60c5360c511c64f955420e94a6` |
-| Framing domain | `stellaris-m1b-1a-r1-remediation-scope-v2` |
-| Framed SHA-256 | `3c04686903fcaa2ec0c3eecfcd14b4e7dcf07fab74f8d37e990ceaac8f78cf8e` |
+| Schema / generation | `m1b-1a-r1-remediation-scope-v3` / `3` |
+| Canonical bytes | `44423` |
+| Raw SHA-256 | `1b860ee3ce42ba76ee457d9ceca0a2391e0d6a3216892ca77bf235219a9f4944` |
+| Framing domain | `stellaris-m1b-1a-r1-remediation-scope-v3` |
+| Framed SHA-256 | `fb3f439cfc67707922ddbae2e94a9deec4544336abf8bdace1d56191bad2b6e1` |
 
 The framed digest is:
 
 ```text
 SHA-256(
-  ASCII("stellaris-m1b-1a-r1-remediation-scope-v2") ||
+  ASCII("stellaris-m1b-1a-r1-remediation-scope-v3") ||
   NUL ||
   u64be(canonical_scope_length) ||
   canonical_scope_bytes
@@ -109,27 +111,39 @@ branch-name-only provenance, or a merely descendant first parent cannot
 activate effect.
 
 The separate owner record is canonical
-`m1b-1a-r1-remediation-owner-authorization-v2`, `6983` bytes, raw SHA-256
-`519f568bc4dd0008b92d44ab4839ed3c7b0af7e6abd2767a20deb84c1cde0f10`.
+`m1b-1a-r1-remediation-owner-authorization-v3`, `8146` bytes, raw SHA-256
+`06307a2351a75d19b231a4715f51c0de0f4704d4ca7a523005e221d5194c6fc7`.
 
-## 3. Exact recovery preflight and historical merged baseline
+## 3. Exact v3 correction preflight and historical merged baseline
 
-Recovery preflight stopped before writes unless all of the following matched
-after the bounded fetch:
+The v3 correction preflight stopped before writes unless all of the following
+matched after the bounded fetch:
 
 - repository `elenandar/Stellaris-mod-translator`;
 - clean branch `agent/m1b-1a-r1-transport-provenance-auth` at local/upstream,
-  remote-branch and PR #11 head
-  `b2db2e612aac29f88f2762cb8bc1d3efbcdb6da6`;
-- live and fetched `main` at
+  remote branch and PR #11 head
+  `b247a20500b28227e826b9f3c14da8b8d77d48a3`;
+- `origin/main` and PR #11 base at
   `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`;
+- PR #11 `OPEN / DRAFT / MERGEABLE`, auto-merge absent;
+- clean tracked worktree and index;
+- exact six-path base-to-head diff ending in R1 scope v2;
+- future branch absent from local, remote-tracking, advertised-remote and live
+  GitHub-PR namespaces;
+- unresolved review thread `PRRT_kwDOTbY5J86TVPjf`;
 - PR #10 `MERGED` with head
   `66f905cf266b9d1c1f56d0d706184387ffedb36e`, merge commit
   `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`, ordered parents
   `1f10c151c5adac5fbf765af8093c7eddf8cf0429` then
   `66f905cf266b9d1c1f56d0d706184387ffedb36e`, and merge/head tree
-  `289e2396975c5ef6fe1001a7c5990523edaa06c5`;
-- PR #11 `OPEN`, base `main`, auto-merge absent.
+  `289e2396975c5ef6fe1001a7c5990523edaa06c5`.
+
+The `b247a205…` value is only the exact initial head for this v3 correction.
+It is neither the externally bound final v3 head nor the future remediation
+branch base. Historical recovery integration merge
+`3a57701275914d905f76606cf6db3072c40a17ac` and its ordered parents remain
+unchanged. The future branch base is only the exact external two-parent PR #11
+merge commit after effect.
 
 The exact historical PR #10 merged tree contains these `11` paths:
 
@@ -205,14 +219,31 @@ event, final-head binding, and exact ordinary main authorization merge described
 above.
 
 After effect, a future remediation must fail closed unless exact PR #11 merge,
-ancestry and clean worktree/index are proven. It may then:
+ancestry, exact repository identity and clean tracked worktree/index are proven.
+The current checkout may remain at the external final PR #11 head or be another
+clean non-target branch/detached state of this exact repository. Current `HEAD`
+does not have to equal the merge commit, and no preliminary checkout or switch
+is required or authorized.
+
+After the bounded fetch and before branch creation, the exact future branch name
+must be absent simultaneously from:
+
+1. `refs/heads/agent/m1b-1a-r1-postmerge-remediation`;
+2. `refs/remotes/origin/agent/m1b-1a-r1-postmerge-remediation`;
+3. advertised remote
+   `refs/heads/agent/m1b-1a-r1-postmerge-remediation`;
+4. every live GitHub PR (`OPEN`, draft or non-draft, any base) with exact head
+   branch `agent/m1b-1a-r1-postmerge-remediation`.
+
+Any existing ref or live PR fails closed. It is not reused, deleted or reset.
+The future remediation may then:
 
 1. perform bounded fetches of exact repository refs needed for effect and
    ancestry verification;
-2. create and switch exactly once to
-   `agent/m1b-1a-r1-postmerge-remediation` from the exact external PR #11 merge
-   commit;
-3. write only the exact future-output allowlist and create only the three exact
+2. perform the sole authorized branch transition:
+   `git switch -c agent/m1b-1a-r1-postmerge-remediation
+   <exact-pr11-merge-commit>`;
+3. write only the exact future-output allowlist and create only the four exact
    create-only directories;
 4. create one ordinary remediation commit;
 5. perform one non-force push of that branch;
@@ -230,15 +261,36 @@ other branch or PR mutations, tags, releases, Actions changes, and network
 outside exact Git/GitHub repository operations. A partial push cannot be
 republished without a new owner decision.
 
+After an ambiguous push result, only read-only reconciliation of the exact
+advertised remote ref and intended SHA is authorized. After ambiguous PR
+creation, only a read-only check for exactly one live PR with the exact head and
+base `main` is authorized. No second push or PR creation may occur while the
+first result is unknown. A missing or mismatched remote SHA, zero or multiple
+matching PRs, a wrong base, or continuing uncertainty yields
+`NEW_OWNER_DECISION_REQUIRED`.
+
 No future remediation branch or PR is created in this authorization task:
-`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V2_MERGE`.
+`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V3_MERGE`.
 
 ## 6. Closed repository content plane
+
+Exact closed counts are:
+
+| Surface | Count |
+|---|---:|
+| SHA-bound base inputs | `23` |
+| Authorization-stage outputs | `6` |
+| Immutable AUTH inputs | `4` |
+| Candidate roles | `4` |
+| Historical PR #10 paths | `11` |
+| Future outputs | `19` (`18` tracked + `1` ignored) |
+| Future directories | `4` |
+| Preserved blockers | `16` |
 
 The repository content plane is default-deny. After effect, semantic reads are
 limited to:
 
-- `22` exact SHA-bound historical/read-only inputs in the scope;
+- `23` exact SHA-bound historical/read-only inputs in the scope;
 - the exact `11` historical PR #10 merged bytes above;
 - the four exact reviewed post-merge authorization artifacts;
 - static readback of exact future outputs.
@@ -247,42 +299,82 @@ Candidate source reads remain raw-byte SHA and line-oriented static-text only.
 Metadata reads are limited to exact scope paths and lexical parent closure.
 Unlisted reads and writes are denied.
 
+The 23rd input is root [`.gitignore`](../../.gitignore): exact `733` bytes,
+full file/Git mode `100644`, raw SHA-256
+`0f36fee465d056ae9373a2aa702e58740f82c99c0fb25e0f24a326318087a82d`.
+Its bytes may be read only to verify the `artifacts/` rule, support
+`git status` and `git check-ignore`, and prove ignored evidence will not enter
+the index. `.gitignore` is read-only and may not be changed.
+
 The only future directories that may be created if absent are these exact real
 directories:
 
-| Path | Mode | Required parent |
-|---|---:|---|
-| `artifacts/m1b` | `0700` | pre-existing real `artifacts` |
-| `artifacts/m1b/m1b-1a-r1` | `0700` | authorized predecessor or pre-existing real `artifacts/m1b` |
-| `fixtures/m1b/tcb-admission-v5` | `0755` | pre-existing real `fixtures/m1b` |
+| Path | Mode | Parent | Relationship |
+|---|---:|---|---|
+| `artifacts` | `0755` | repository root / `.` | repository root |
+| `artifacts/m1b` | `0700` | `artifacts` | authorized predecessor or pre-existing real directory |
+| `artifacts/m1b/m1b-1a-r1` | `0700` | `artifacts/m1b` | authorized predecessor or pre-existing real directory |
+| `fixtures/m1b/tcb-admission-v5` | `0755` | `fixtures/m1b` | pre-existing real directory |
 
-Symlink, replacement, deletion, recursive ambient parent creation, or any other
-directory creation is forbidden.
+The closed creation order is `artifacts`, `artifacts/m1b`,
+`artifacts/m1b/m1b-1a-r1`, then independently
+`fixtures/m1b/tcb-admission-v5`. Every row is create-only-if-absent, requires a
+real directory with its exact permission mode and forbids symlink, replacement
+and deletion. An existing wrong type, symlink or wrong mode fails closed; no
+`chmod`, replacement or deletion is authorized. Recursive ambient parent
+creation and any other directory creation are forbidden.
 
 The future file allowlist contains exactly `19` paths: `18` tracked and one
 ignored sanitized evidence file.
 
-| Path | Tracked | Write kind |
-|---|---:|---|
-| `README.md` | `true` | status/link only |
-| `artifacts/m1b/m1b-1a-r1/remediation-evidence.json` | `false` | sanitized ignored evidence |
-| `docs/decisions/M1B-1A-R1-remediation-review.md` | `true` | remediation review |
-| `docs/decisions/M1B-1A0-contract-v5-review.md` | `true` | contract-v5 review |
-| `docs/decisions/M1B-1A1-candidate-review.md` | `true` | candidate review remediation |
-| `docs/roadmap.md` | `true` | status/link only |
-| `docs/specs/m1b-offline-executable-tcb-admission-contract-v5.md` | `true` | versioned v5 specification |
-| `fixtures/m1b/candidate-construction/README.md` | `true` | candidate fixture documentation remediation |
-| `fixtures/m1b/candidate-construction/cases.json` | `true` | inert candidate fixture remediation |
-| `fixtures/m1b/tcb-admission-v5/cases.json` | `true` | versioned contract-v5 inert TCB fixture |
-| `registry/m1b/m1b-1a1-proposed-executable-manifest-v1.json` | `true` | proposed manifest generation 2 |
-| `registry/m1b/offline-executable-tcb-contract-v5.json` | `true` | versioned machine contract v5 |
-| `tools/research/README.md` | `true` | status/link only |
-| `tools/research/m1b_1a1_candidate/analysis_engine.py` | `true` | candidate source remediation |
-| `tools/research/m1b_1a1_candidate/contract_validator.py` | `true` | candidate source remediation |
-| `tools/research/m1b_1a1_candidate/provider_request_harness.py` | `true` | candidate source remediation |
-| `tools/research/m1b_1a1_candidate/synthetic_fixture_materializer.py` | `true` | candidate source remediation |
-| `tools/research/m1b_tcb_contract_v5.py` | `true` | versioned verifier-v5 inert source |
-| `tools/research/tests/test_m1b_tcb_contract_v5.py` | `true` | versioned verifier-v5 test inert source |
+| Path | Tracked | Lifecycle | Write kind |
+|---|---:|---|---|
+| `README.md` | `true` | existing tracked | status/link only |
+| `artifacts/m1b/m1b-1a-r1/remediation-evidence.json` | `false` | new ignored evidence | sanitized ignored evidence |
+| `docs/decisions/M1B-1A-R1-remediation-review.md` | `true` | new tracked | remediation review |
+| `docs/decisions/M1B-1A0-contract-v5-review.md` | `true` | new tracked | contract-v5 review |
+| `docs/decisions/M1B-1A1-candidate-review.md` | `true` | existing tracked | candidate review remediation |
+| `docs/roadmap.md` | `true` | existing tracked | status/link only |
+| `docs/specs/m1b-offline-executable-tcb-admission-contract-v5.md` | `true` | new tracked | versioned v5 specification |
+| `fixtures/m1b/candidate-construction/README.md` | `true` | existing tracked | candidate fixture documentation remediation |
+| `fixtures/m1b/candidate-construction/cases.json` | `true` | existing tracked | inert candidate fixture remediation |
+| `fixtures/m1b/tcb-admission-v5/cases.json` | `true` | new tracked | versioned contract-v5 inert TCB fixture |
+| `registry/m1b/m1b-1a1-proposed-executable-manifest-v1.json` | `true` | existing tracked | proposed manifest generation 2 |
+| `registry/m1b/offline-executable-tcb-contract-v5.json` | `true` | new tracked | versioned machine contract v5 |
+| `tools/research/README.md` | `true` | existing tracked | status/link only |
+| `tools/research/m1b_1a1_candidate/analysis_engine.py` | `true` | existing tracked | candidate source remediation |
+| `tools/research/m1b_1a1_candidate/contract_validator.py` | `true` | existing tracked | candidate source remediation |
+| `tools/research/m1b_1a1_candidate/provider_request_harness.py` | `true` | existing tracked | candidate source remediation |
+| `tools/research/m1b_1a1_candidate/synthetic_fixture_materializer.py` | `true` | existing tracked | candidate source remediation |
+| `tools/research/m1b_tcb_contract_v5.py` | `true` | new tracked | versioned verifier-v5 inert source |
+| `tools/research/tests/test_m1b_tcb_contract_v5.py` | `true` | new tracked | versioned verifier-v5 test inert source |
+
+All pre-write existence, type, mode, link, identity and applicable
+parent-containment checks for all `19` rows must complete successfully before
+the first repository-content write. Post-write checks occur only after the
+corresponding writer has completed.
+
+For the `11` existing tracked rows, pre-write state is the exact regular tracked
+file from the tree of the exact PR #11 authorization merge commit (not a
+`git merge-base` result), full file/Git mode `100644`, `st_nlink == 1`, no
+symlink, hardlink or physical alias, and bytes identical to that bound tree
+blob. Deletion and path replacement are forbidden. Writing is descriptor-bound,
+no-follow and in place; post-write verification repeats type, mode, link count
+and containment.
+
+For the `7` new tracked rows, the path must be absent in both the exact base tree
+and worktree before any write. Creation is exclusive and no-follow. Final state
+is a regular file with full mode `100644`, `st_nlink == 1`, no symlink,
+hardlink or physical alias, and verified containment. Any collision fails
+closed; deletion, replacement of an existing object and overwriting are
+forbidden.
+
+The ignored `remediation-evidence.json` path must likewise be absent before any
+write and be created exclusive/no-follow. Its final state is a regular file
+with permission mode `0600`, `st_nlink == 1`; writer close and post-write
+type/mode/link/containment verification are mandatory. Existing file, symlink,
+hardlink, alias or any other object fails closed without overwrite. It is never
+staged or force-added.
 
 Only `tracked=true` paths may be staged. The ignored evidence must never be
 force-added. `README.md`, `docs/roadmap.md`, and
@@ -415,8 +507,8 @@ These historical paths must remain byte-identical:
 Historical v4 contract framed SHA-256 remains
 `ad6bce1a5c516753d79ee0d807f5445e9b860a398e661adfb9730d9c4fee9c31`.
 
-After PR #11 effect, these four M1B-1A-R1-AUTH v2 artifacts are immutable base
-inputs: owner record, owner signoff, this contract and scope v2. Their exact
+After PR #11 effect, these four M1B-1A-R1-AUTH v3 artifacts are immutable base
+inputs: owner record, owner signoff, this contract and scope v3. Their exact
 bytes must match between the external final PR #11 head and its two-parent
 merge tree. They may not be edited, deleted, replaced or staged as future
 remediation outputs.
@@ -429,6 +521,11 @@ Only these validation purposes are authorized:
 - duplicate-key, type, float, path, order, and closed-schema checks;
 - raw and framed SHA-256;
 - exact file type/mode/link/path and parent closure;
+- all-19-row pre-write lifecycle gate and declarative collision/link cases;
+- four-directory fresh-tree closure;
+- four-namespace branch/live-PR absence;
+- SHA-bound `.gitignore`, `git status`, `git check-ignore` and index exclusion;
+- read-only reconciliation of ambiguous push/PR-creation results;
 - raw-byte and line-oriented static review of scoped future outputs;
 - status-only diff review;
 - Markdown link validation in changed future documents;
@@ -469,22 +566,39 @@ All `16` existing executable/runtime blockers remain preserved.
 The authorization PR may validate only its six tracked outputs and one ignored
 evidence file. It must show exact PR #10 merged provenance/tree parity, exact
 recovery integration provenance, two independent scope
-canonical/raw/framed reproductions, `22/22` immutable input hashes, closed
-schemas/counts/order/parent closure, status-only diffs, Markdown links,
-`git diff --check`, exact six-path final PR diff, scope-v1 absence, and final
-branch/upstream/remote/PR #11 parity.
+canonical/raw/framed reproductions, `23/23` immutable input hashes, lifecycle
+rows `19/19`, directories `4/4`, candidate roles `4/4`, blockers `16/16`,
+immutable AUTH inputs `4/4`, exact parent closure, status-only diffs, Markdown
+links, `git diff --check`, no `.pyc` or `__pycache__`, exact six-path final PR
+diff, and R1 scope-v1/v2 absence from both final tree and PR file list.
+
+Static adversarial review must prove: a fresh tree without `artifacts/` has a
+closed authorized chain; existing symlink/hardlink evidence paths, any new
+tracked collision, and an existing tracked output with `st_nlink > 1` fail
+closed before the first write. It must also prove that an initial `HEAD` at the
+PR #11 final head can directly create-and-switch the future branch from the
+exact merge commit, that absence covers all four namespaces, and that network
+ambiguity never authorizes a repeated mutation.
+
+At least two independent read-only semantic reviews must examine the same final
+machine scope. Any P0–P2 finding blocks publication until corrected and both
+reviews are rerun. Final validation also requires clean
+local/upstream/remote/PR-head parity, PR #11 `OPEN / DRAFT / MERGEABLE`, and
+auto-merge absent. Repository tests are intentionally not run and must not be
+claimed as passed.
 
 No candidate source was executed or passed to Python language tooling. No
 provider, model, corpus, mod, game, launcher, playset, or translation data was
 accessed.
 
 ```text
-RECOVERY_AUTH: READY_FOR_OWNER_REVIEW
+REMEDIATION: READY_FOR_OWNER_REVIEW
 PR10: MERGED_OWNER_CONTROLLED_SCOPE_DEVIATION
 PR10_CANDIDATE: INERT_NOT_ADMITTED
-OLD_SCOPE_V1: SUPERSEDED_NEVER_EFFECTIVE
-M1B-1A-R1-AUTH-V2: READY_FOR_OWNER_REVIEW
-R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V2_MERGE
+SCOPE_V1: NEVER_EFFECTIVE
+SCOPE_V2: SUPERSEDED_BEFORE_EFFECT
+M1B-1A-R1-AUTH-V3: READY_FOR_OWNER_REVIEW
+R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V3_MERGE
 NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED
 PROVIDER_EXECUTION: NOT_STARTED
 EXECUTABLE_TCB_ADMISSION: NOT_GRANTED
