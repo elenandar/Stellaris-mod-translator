@@ -164,3 +164,18 @@ pre-request blockers.
 
 Passing this synthetic conformance gate does not evaluate model quality:
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, and `M2: FORBIDDEN` remain in force.
+
+M1B-1A1 status: `M1B-1A1-AUTH: ACCEPTED/MERGED`;
+`M1B-1A1 CANDIDATE: READY_FOR_OWNER_REVIEW`;
+`CANDIDATE CONSTRUCTION: COMPLETE_WITHIN_EXACT_INERT_SCOPE`;
+`CANDIDATE SOURCE: NOT_PARSED_NOT_COMPILED_NOT_IMPORTED_NOT_EXECUTED`;
+`PROPOSED EXECUTABLE MANIFEST: REVIEWABLE_PROPOSAL_ONLY_NOT_ADMISSION`;
+`NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED`;
+`RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED`;
+`EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`;
+`M1B-1A PROVIDER EXECUTION: NOT_STARTED`;
+`M1B: NOT_EVALUATED`; `M1A: BLOCKED`; `M2: FORBIDDEN`.
+
+Review surfaces: [candidate review](../../docs/decisions/M1B-1A1-candidate-review.md),
+[proposed manifest](../../registry/m1b/m1b-1a1-proposed-executable-manifest-v1.json)
+and [inert fixture](../../fixtures/m1b/candidate-construction/README.md).
