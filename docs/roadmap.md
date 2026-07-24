@@ -7,7 +7,7 @@ Roadmap показывает порядок решений, а не даты. П
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
-| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7, contract PR #8 и AUTH PR #9 merged; `OWNER_FREEZE: ACCEPTED`; `STABLE_READ_HARDENING: ACCEPTED`; `M1B-1A0 CONTRACT: ACCEPTED/MERGED`; `M1B-1A1-AUTH: ACCEPTED/MERGED`; `M1B-1A1 CANDIDATE: READY_FOR_OWNER_REVIEW`; `CANDIDATE CONSTRUCTION: COMPLETE_WITHIN_EXACT_INERT_SCOPE`; `CANDIDATE SOURCE: NOT_PARSED_NOT_COMPILED_NOT_IMPORTED_NOT_EXECUTED`; `PROPOSED EXECUTABLE MANIFEST: REVIEWABLE_PROPOSAL_ONLY_NOT_ADMISSION`; `RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED`; executable TCB admission не выдан; `M1B: NOT_EVALUATED`; benchmark не запускался |
+| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7, contract PR #8 и AUTH PR #9 merged; PR #10 merged by external owner-controlled action as `OWNER_CONTROLLED_SCOPE_DEVIATION`; candidate remains `INERT_NOT_ADMITTED`; `SCOPE_V1: NEVER_EFFECTIVE`; `SCOPE_V2: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V3: SUPERSEDED_BEFORE_EFFECT`; `M1B-1A-R1-AUTH-V4: READY_FOR_OWNER_REVIEW`; `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V4_MERGE`; `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED`; `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`; `M1B: NOT_EVALUATED`; benchmark не запускался |
 | M2 — Safety kernel & technical CLI | lossless CST, typed atoms, controlled render, containment | M1A, M1B | одновременно получены `GO` и `QUALITY_FEASIBLE`; taxonomy/holdout проходят technical gates | **FORBIDDEN**: M1A is `BLOCKED`; M1B is `NOT_EVALUATED` |
 | M3 — Incremental engine & publishing | SQLite, identity, jobs, backup, versioned artifact и rollback | M2 | unchanged = zero work; crash/update/conflict/restore безопасны | not started |
 | M4 — Local quality engine | context, glossary, memory, Ollama, review/repair и editorial states | M1B, M3 | quality thresholds и human-review policy соблюдены | not started |
@@ -113,10 +113,61 @@ publishing запрещены. Bounded system validation-tool selection/испо
 `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED` и
 `RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED` сохраняются.
 
-M1B-1A1 не может принять созданные identities. Только отдельный будущий
-M1B-1A2 может рассмотреть owner-controlled решение над уже известными exact
-identities; даже он не разрешает provider/model call, private corpus или
-benchmark без следующего explicit execution gate. States остаются
+Exact candidate construction из PR #10 был слит внешним owner-controlled
+действием вопреки stop rule. Это
+`PR10: MERGED_OWNER_CONTROLLED_SCOPE_DEVIATION`, а не задним числом разрешённое
+scope v1 действие. Candidate bytes остаются `INERT_NOT_ADMITTED`; raw static
+review по-прежнему требует отдельной transport/evidence-provenance remediation
+до любого M1B-1A2 decision.
+
+### M1B-1A-R1-AUTH v4 — post-merge transport and evidence-provenance remediation
+
+[Canonical scope](../registry/m1b/m1b-1a-r1-remediation-scope-v4.json),
+[authorization contract](specs/m1b-1a-r1-remediation-authorization-contract.md),
+[machine owner record](decisions/M1B-1A-R1-AUTH-owner-authorization.json) и
+[owner signoff](decisions/M1B-1A-R1-AUTH-owner-signoff.md) не дают authority
+до owner review и merge.
+
+Scope v4 bind-ит PR #10 как historical merged baseline: head
+`66f905cf266b9d1c1f56d0d706184387ffedb36e`, merge
+`3c6ca3146d838b977f24bbc6b8c79dfb271e142b`, ordered parents
+`1f10c151c5adac5fbf765af8093c7eddf8cf0429` и
+`66f905cf266b9d1c1f56d0d706184387ffedb36e`, tree
+`289e2396975c5ef6fe1001a7c5990523edaa06c5`, exact `11` paths.
+`SCOPE_V1: NEVER_EFFECTIVE`, `SCOPE_V2: SUPERSEDED_BEFORE_EFFECT`,
+`SCOPE_V3: SUPERSEDED_BEFORE_EFFECT`; ни одна из v1/v2/v3 не авторизует merge
+retroactively.
+
+Effect требует external owner-controlled ordinary two-parent merge PR #11 в
+`main`: first parent exact
+`3c6ca3146d838b977f24bbc6b8c79dfb271e142b`, second parent — external final
+head PR #11, оба deltas — exact six AUTH paths, четыре normative artifacts
+byte-identical. Изменение `main` до merge блокирует effect.
+
+После effect разрешены только одна новая ветка
+`agent/m1b-1a-r1-postmerge-remediation` от exact merge PR #11, versioned
+contract-v5/candidate static remediation в closed `19`-path allowlist, один
+ordinary commit, один non-force push и один новый draft PR в `main`. Номер
+future PR bind-ится external GitHub metadata. Четыре AUTH artifacts становятся
+immutable base inputs.
+
+До branch creation и до lifecycle gate `19/19` полный Git tree текущего
+`HEAD^{tree}` обязан точно равняться tree exact merge-коммита PR #11. Сам commit
+`HEAD` может отличаться; comparison только 19 outputs недостаточен. Любое
+несовпадение даёт `INITIAL_WORKTREE_TREE_MISMATCH` до checkout/switch,
+directory creation или file writes. Единственный direct transition не может
+изменить tracked content и выполняется с отключёнными external Git
+hooks/fsmonitor/submodule checkout и replacement-object semantics; legacy
+grafts и shallow repository state должны отсутствовать в exact bound Git
+common dir.
+
+Другие ветки/PR, main mutation, rebase/amend/force-push, merge/auto-merge/ready,
+candidate import/parse/tokenize/lint/compile/execute, provider/model call,
+private corpus, runtime envelope instance, acceptance, executable admission,
+M1B-1A2 и benchmark не разрешены. До effect действуют
+`M1B-1A-R1-AUTH-V4: READY_FOR_OWNER_REVIEW`,
+`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V4_MERGE`,
+`NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`,
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
 
 ### M1B-1A1 — exact inert four-role candidate construction
@@ -124,7 +175,8 @@ benchmark без следующего explicit execution gate. States остаю
 [Candidate review](decisions/M1B-1A1-candidate-review.md),
 [proposed executable manifest](../registry/m1b/m1b-1a1-proposed-executable-manifest-v1.json)
 и [inert synthetic fixture](../fixtures/m1b/candidate-construction/README.md)
-имеют status `M1B-1A1 CANDIDATE: READY_FOR_OWNER_REVIEW`.
+остаются historical merged candidate records со status
+`PR10_CANDIDATE: INERT_NOT_ADMITTED`.
 `CANDIDATE CONSTRUCTION: COMPLETE_WITHIN_EXACT_INERT_SCOPE`;
 `CANDIDATE SOURCE: NOT_PARSED_NOT_COMPILED_NOT_IMPORTED_NOT_EXECUTED`;
 `PROPOSED EXECUTABLE MANIFEST: REVIEWABLE_PROPOSAL_ONLY_NOT_ADMISSION`;
