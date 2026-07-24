@@ -1,7 +1,7 @@
-# M1B-1A-R1-AUTH v3 — post-merge transport and evidence-provenance remediation authorization
+# M1B-1A-R1-AUTH v4 — post-merge transport and evidence-provenance remediation authorization
 
 ```text
-Milestone: M1B-1A-R1-AUTH v3 — authorization only
+Milestone: M1B-1A-R1-AUTH v4 — authorization only
 Разрешённый слой: one bounded future post-merge remediation branch and draft PR after effect
 Рекомендуемая модель Codex: GPT-5.6 Sol
 Уровень рассуждения: Ultra
@@ -12,15 +12,16 @@ Milestone: M1B-1A-R1-AUTH v3 — authorization only
 Вне scope: remediation implementation, candidate execution, provider/model/corpus access, envelope instances, acceptance, admission, benchmark, M2
 ```
 
-- Scope schema: `m1b-1a-r1-remediation-scope-v3`
-- Scope generation: `3`
-- Owner record: `m1b-1a-r1-remediation-owner-authorization-v3`
-- Operational review state: `M1B-1A-R1-AUTH-V3: READY_FOR_OWNER_REVIEW`
+- Scope schema: `m1b-1a-r1-remediation-scope-v4`
+- Scope generation: `4`
+- Owner record: `m1b-1a-r1-remediation-owner-authorization-v4`
+- Operational review state: `M1B-1A-R1-AUTH-V4: READY_FOR_OWNER_REVIEW`
 - Effect: `after_review_and_merge_to_main`
 - Historical PR #10 state: `MERGED_OWNER_CONTROLLED_SCOPE_DEVIATION`
 - Scope v1 state: `NEVER_EFFECTIVE`
 - Scope v2 state: `SUPERSEDED_BEFORE_EFFECT`
-- Remediation state: `NOT_AUTHORIZED_UNTIL_V3_MERGE`
+- Scope v3 state: `SUPERSEDED_BEFORE_EFFECT`
+- Remediation state: `NOT_AUTHORIZED_UNTIL_V4_MERGE`
 - New repository code execution: `NOT_AUTHORIZED`
 - Executable TCB admission: `NOT_GRANTED`
 
@@ -51,11 +52,11 @@ constructed by the scope or owner-record bytes.
 
 PR #10 was merged by an external owner-controlled action contrary to its own
 stop rule. The classification is `OWNER_CONTROLLED_SCOPE_DEVIATION`. Scope v1
-never had effect and does not authorize that action retroactively. Scope v2 was
-superseded before effect and grants no authority. The merged candidate bytes
-remain inert and reviewable, not admitted executable bytes.
+never had effect and does not authorize that action retroactively. Scope v2 and
+scope v3 were superseded before effect and grant no authority. The merged
+candidate bytes remain inert and reviewable, not admitted executable bytes.
 
-After effect, scope v3 permits only one new branch
+After effect, scope v4 permits only one new branch
 `agent/m1b-1a-r1-postmerge-remediation`, one ordinary remediation commit, one
 non-force push and one new draft remediation PR to `main`. It does not authorize
 candidate execution, functional tests, provider execution, executable
@@ -64,22 +65,23 @@ acceptance, admission, or any mutation of PR #10.
 ## 2. Normative scope identity
 
 The authoritative machine scope is
-[`registry/m1b/m1b-1a-r1-remediation-scope-v3.json`](../../registry/m1b/m1b-1a-r1-remediation-scope-v3.json).
-It is compact sorted-key ASCII JSON plus one LF and contains no self-hash.
+[`registry/m1b/m1b-1a-r1-remediation-scope-v4.json`](../../registry/m1b/m1b-1a-r1-remediation-scope-v4.json).
+It is compact sorted-key ASCII JSON plus one LF, contains no self-hash, and
+forbids duplicate keys, floats, `NaN` and Infinity.
 
 | Field | Exact value |
 |---|---|
-| Schema / generation | `m1b-1a-r1-remediation-scope-v3` / `3` |
-| Canonical bytes | `44423` |
-| Raw SHA-256 | `1b860ee3ce42ba76ee457d9ceca0a2391e0d6a3216892ca77bf235219a9f4944` |
-| Framing domain | `stellaris-m1b-1a-r1-remediation-scope-v3` |
-| Framed SHA-256 | `fb3f439cfc67707922ddbae2e94a9deec4544336abf8bdace1d56191bad2b6e1` |
+| Schema / generation | `m1b-1a-r1-remediation-scope-v4` / `4` |
+| Canonical bytes | `60524` |
+| Raw SHA-256 | `563a9e7c8e91eaf4d5ae350a392a86099c0c6b1df5acab5f8c288aa343e3f1fb` |
+| Framing domain | `stellaris-m1b-1a-r1-remediation-scope-v4` |
+| Framed SHA-256 | `3082cd0f403d08b7a0558cda2c6e8ca517456238d73e78df80987c0935cd1015` |
 
 The framed digest is:
 
 ```text
 SHA-256(
-  ASCII("stellaris-m1b-1a-r1-remediation-scope-v3") ||
+  ASCII("stellaris-m1b-1a-r1-remediation-scope-v4") ||
   NUL ||
   u64be(canonical_scope_length) ||
   canonical_scope_bytes
@@ -111,8 +113,8 @@ branch-name-only provenance, or a merely descendant first parent cannot
 activate effect.
 
 The separate owner record is canonical
-`m1b-1a-r1-remediation-owner-authorization-v3`, `8146` bytes, raw SHA-256
-`06307a2351a75d19b231a4715f51c0de0f4704d4ca7a523005e221d5194c6fc7`.
+`m1b-1a-r1-remediation-owner-authorization-v4`, `12639` bytes, raw SHA-256
+`13cfbad06285fdc15e7914464e0338e7117ef48f9a257bb12c68dc7cddbed6e9`.
 
 ## 3. Exact v3 correction preflight and historical merged baseline
 
@@ -144,6 +146,33 @@ branch base. Historical recovery integration merge
 `3a57701275914d905f76606cf6db3072c40a17ac` and its ordered parents remain
 unchanged. The future branch base is only the exact external two-parent PR #11
 merge commit after effect.
+
+### Exact v4 correction preflight
+
+The v4 correction separately stopped before writes unless the bounded fetch
+proved all of the following:
+
+- branch `agent/m1b-1a-r1-transport-provenance-auth`;
+- local `HEAD`, upstream, remote branch and PR #11 head all equal
+  `901c898e791c07c29b0edbe772c713b70c3fc690`;
+- `origin/main` and PR #11 base both equal
+  `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`;
+- PR #11 `OPEN / DRAFT / MERGEABLE`, auto-merge absent;
+- clean tracked worktree and index;
+- exact six AUTH paths in the current diff, scope v1/v2 absent and only scope
+  v3 present;
+- review thread `PRRT_kwDOTbY5J86TVPjf` remains resolved;
+- the future branch is absent from local, remote-tracking, advertised-remote
+  and live-PR namespaces;
+- exact PR #10 provenance/tree/path/hash parity remains unchanged.
+
+Any mismatch yields `REMEDIATION: BLOCKED` without edits. Scope v3 identity
+remains historical `44423` bytes, raw SHA-256
+`1b860ee3ce42ba76ee457d9ceca0a2391e0d6a3216892ca77bf235219a9f4944`
+and framed SHA-256
+`fb3f439cfc67707922ddbae2e94a9deec4544336abf8bdace1d56191bad2b6e1`,
+but its effect state is `superseded_before_effect` and its path is absent from
+the final v4 tree.
 
 The exact historical PR #10 merged tree contains these `11` paths:
 
@@ -219,11 +248,61 @@ event, final-head binding, and exact ordinary main authorization merge described
 above.
 
 After effect, a future remediation must fail closed unless exact PR #11 merge,
-ancestry, exact repository identity and clean tracked worktree/index are proven.
-The current checkout may remain at the external final PR #11 head or be another
-clean non-target branch/detached state of this exact repository. Current `HEAD`
-does not have to equal the merge commit, and no preliminary checkout or switch
-is required or authorized.
+ancestry and exact repository identity are proven. Before any cleanliness,
+inventory or transition Git operation, command-scope configuration must disable
+all Git hooks with `core.hooksPath=/dev/null`, fsmonitor with
+`core.fsmonitor=false`, and submodule recursion with
+`submodule.recurse=false`. External Git helpers, hook execution, submodule
+checkout, alternate `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` or namespace
+routing, and `-C`, `-f`, `-m`, force, merge, discard or
+ignore-other-worktrees options are denied. Every effect, commit/tree, status,
+inventory and direct-transition Git resolution must simultaneously set
+`GIT_NO_REPLACE_OBJECTS=1` and use the global `git --no-replace-objects`
+option. A replacement ref may not contribute to authority. Before effect and
+again in the fresh initial-state generation, the exact Git common directory
+must be unambiguously bound with alternate Git dir/worktree/index,
+`GIT_COMMON_DIR`, `GIT_NAMESPACE`, object-directory, replace-base and
+shallow-file overrides unset. Both
+`<common-dir>/info/grafts` and `<common-dir>/shallow` must be absent by
+`lstat(ENOENT)`; even an empty file, symlink or other existing type is rejected,
+and their content is not read. Exact merge parents are bound from parent
+headers of the exact raw commit objects, not from a rewritten revision walk.
+Initial read-only validation additionally sets `GIT_OPTIONAL_LOCKS=0`.
+
+After the bounded fetch, one fresh initial-state generation first proves:
+
+- an exact valid 40-hex PR #11 merge commit;
+- a valid current `HEAD` commit;
+- current checkout is not the target branch;
+- target absence in all four required namespaces;
+- full recursive root-tree OID equality, using only Git object metadata under
+  the mandatory no-replace semantics:
+
+  ```text
+  HEAD^{tree} == <exact-pr11-merge-commit>^{tree}
+  ```
+
+The equality includes every tracked path, mode, blob, subtree and gitlink
+identity. It is never replaced by equality of only the 19 future outputs or
+another subset. Current `HEAD` does not have to equal or descend from the merge
+commit: the external final PR #11 head, another clean non-target branch, a
+different same-tree commit, the exact merge commit in a non-target state, or a
+detached same-tree state are allowed. On inequality, the exact disposition is
+`INITIAL_WORKTREE_TREE_MISMATCH`, before branch creation, checkout/switch,
+directory creation, file write or the 19/19 lifecycle gate. No preliminary
+checkout or switch is authorized. If replacement-object or graft influence
+cannot be proven disabled, the disposition is
+`ACTIVATION_GIT_REPLACEMENT_OBJECT_INFLUENCE_UNSAFE` or
+`INITIAL_WORKTREE_GIT_REPLACEMENT_OBJECT_INFLUENCE_UNSAFE`. Common-directory,
+graft/shallow or raw-parent ambiguity yields
+`ACTIVATION_GIT_GRAFT_OR_SHALLOW_AUTHORITY_UNSAFE`.
+
+Only after equality binds the complete recursive tracked set of the exact equal
+tree may the purpose-bounded content-non-output Git validation prove a clean
+stage-0 index and clean tracked worktree, with no hidden dirty state accepted
+through skip-worktree or assume-unchanged, and snapshot the complete before
+inventory. No worktree-content cleanliness scan or inventory read is authorized
+before tree equality.
 
 After the bounded fetch and before branch creation, the exact future branch name
 must be absent simultaneously from:
@@ -236,19 +315,34 @@ must be absent simultaneously from:
    branch `agent/m1b-1a-r1-postmerge-remediation`.
 
 Any existing ref or live PR fails closed. It is not reused, deleted or reset.
-The future remediation may then:
+After snapshotting the complete tracked path/mode/Git-OID and worktree identity
+inventory through the purpose-bounded content-non-output validation plane, the
+only authorized transition is:
 
-1. perform bounded fetches of exact repository refs needed for effect and
-   ancestry verification;
-2. perform the sole authorized branch transition:
-   `git switch -c agent/m1b-1a-r1-postmerge-remediation
-   <exact-pr11-merge-commit>`;
-3. write only the exact future-output allowlist and create only the four exact
-   create-only directories;
-4. create one ordinary remediation commit;
-5. perform one non-force push of that branch;
-6. create exactly one new draft remediation PR with base `main`;
-7. update only the title/body of that new draft PR.
+```text
+git switch -c agent/m1b-1a-r1-postmerge-remediation <exact-pr11-merge-commit>
+```
+
+The command-scope safety configuration remains effective for that sole
+transition. Before the 19/19 lifecycle gate, all postconditions must hold:
+
+- symbolic `HEAD` is the exact target branch;
+- target ref, branch tip and `HEAD` equal the exact merge commit;
+- `HEAD` tree remains the pre-transition tree and equals the target tree;
+- index tree equals the target tree, and index/worktree remain clean;
+- the complete tracked Git/worktree identity inventory is unchanged;
+- tracked add/delete/replacement/overwrite and submodule-update counts are zero;
+- only unavoidable exact Git ref/index metadata changed.
+
+A nonzero or ambiguous result or any non-exact postcondition permits only
+read-only reconciliation and yields `NEW_OWNER_DECISION_REQUIRED`. A retry,
+reset, target-branch deletion, rollback or repair is not authorized.
+
+Only after those postconditions may the remediation run the complete 19/19
+lifecycle and four-directory pre-write gates. Only after all gates pass may it
+write the exact future-output allowlist and create the four exact directories,
+then create one ordinary commit, perform one non-force push, create exactly one
+new draft PR to `main`, and update only that PR's title/body.
 
 The future PR number is unknown before creation and is bound through external
 GitHub metadata. The four normative AUTH artifacts already exist in the PR #11
@@ -270,7 +364,7 @@ matching PRs, a wrong base, or continuing uncertainty yields
 `NEW_OWNER_DECISION_REQUIRED`.
 
 No future remediation branch or PR is created in this authorization task:
-`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V3_MERGE`.
+`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V4_MERGE`.
 
 ## 6. Closed repository content plane
 
@@ -295,9 +389,19 @@ limited to:
 - the four exact reviewed post-merge authorization artifacts;
 - static readback of exact future outputs.
 
+One explicit cross-plane exception exists solely for the initial-worktree gate:
+system Git may internally hash/stat the complete tracked path set recursively
+bound by the exact equal `HEAD`/merge tree, before and after the sole direct
+transition, to prove cleanliness and zero content delta. It may emit only
+booleans, counts, tracked path names, modes, Git OIDs and aggregate identities;
+raw bytes, text lines, patches, content diffs and semantic interpretation are
+forbidden. This is validation, not a semantic project-content read. Untracked
+paths and every other unlisted read remain denied.
+
 Candidate source reads remain raw-byte SHA and line-oriented static-text only.
-Metadata reads are limited to exact scope paths and lexical parent closure.
-Unlisted reads and writes are denied.
+Outside the explicit initial-worktree validation exception above, metadata
+reads are limited to exact scope paths and lexical parent closure; unlisted
+reads and writes are denied.
 
 The 23rd input is root [`.gitignore`](../../.gitignore): exact `733` bytes,
 full file/Git mode `100644`, raw SHA-256
@@ -353,6 +457,10 @@ All pre-write existence, type, mode, link, identity and applicable
 parent-containment checks for all `19` rows must complete successfully before
 the first repository-content write. Post-write checks occur only after the
 corresponding writer has completed.
+
+The initial full-tree equality gate completes before branch creation. The
+direct transition's zero-content-delta postconditions complete before this
+19/19 lifecycle gate. Neither gate substitutes for the other.
 
 For the `11` existing tracked rows, pre-write state is the exact regular tracked
 file from the tree of the exact PR #11 authorization merge commit (not a
@@ -507,8 +615,8 @@ These historical paths must remain byte-identical:
 Historical v4 contract framed SHA-256 remains
 `ad6bce1a5c516753d79ee0d807f5445e9b860a398e661adfb9730d9c4fee9c31`.
 
-After PR #11 effect, these four M1B-1A-R1-AUTH v3 artifacts are immutable base
-inputs: owner record, owner signoff, this contract and scope v3. Their exact
+After PR #11 effect, these four M1B-1A-R1-AUTH v4 artifacts are immutable base
+inputs: owner record, owner signoff, this contract and scope v4. Their exact
 bytes must match between the external final PR #11 head and its two-parent
 merge tree. They may not be edited, deleted, replaced or staged as future
 remediation outputs.
@@ -521,6 +629,10 @@ Only these validation purposes are authorized:
 - duplicate-key, type, float, path, order, and closed-schema checks;
 - raw and framed SHA-256;
 - exact file type/mode/link/path and parent closure;
+- complete initial `HEAD^{tree}`/merge-tree comparison and full tracked
+  before/after inventory comparison;
+- command-scope all-hooks/fsmonitor/submodule-disable verification and
+  read-only transition-result reconciliation;
 - all-19-row pre-write lifecycle gate and declarative collision/link cases;
 - four-directory fresh-tree closure;
 - four-namespace branch/live-PR absence;
@@ -533,6 +645,12 @@ Only these validation purposes are authorized:
 - exact changed-path checks;
 - clean-tree and local/upstream/remote/PR parity;
 - sanitized ignored evidence creation.
+
+The nine initial-worktree cases may be validated read-only or in an isolated
+synthetic temporary Git repository. Such a repository may contain synthetic
+hooks and sentinels solely to prove that the command-scope configuration
+prevents hook, fsmonitor and submodule execution. It may not execute candidate
+or repository source, create the real future branch, or mutate this repository.
 
 Candidate source must not be passed to AST, tokenizer, linter, compiler,
 interpreter, import machinery, `py_compile`, `runpy`, `eval`, `exec`, or a
@@ -570,15 +688,40 @@ canonical/raw/framed reproductions, `23/23` immutable input hashes, lifecycle
 rows `19/19`, directories `4/4`, candidate roles `4/4`, blockers `16/16`,
 immutable AUTH inputs `4/4`, exact parent closure, status-only diffs, Markdown
 links, `git diff --check`, no `.pyc` or `__pycache__`, exact six-path final PR
-diff, and R1 scope-v1/v2 absence from both final tree and PR file list.
+diff, R1 scope-v1/v2/v3 absence from both final tree and PR file list, and scope
+v4 as the only R1 scope path.
+
+The ignored authorization evidence is
+`artifacts/m1b/m1b-1a-r1/auth-v4-evidence.json`: canonical compact sorted-key
+ASCII JSON plus one LF, mode `0600`, and Git-ignored. Existing v1/v2/v3 evidence
+must remain byte-identical.
 
 Static adversarial review must prove: a fresh tree without `artifacts/` has a
 closed authorized chain; existing symlink/hardlink evidence paths, any new
 tracked collision, and an existing tracked output with `st_nlink > 1` fail
-closed before the first write. It must also prove that an initial `HEAD` at the
-PR #11 final head can directly create-and-switch the future branch from the
-exact merge commit, that absence covers all four namespaces, and that network
-ambiguity never authorizes a repeated mutation.
+closed before the first write. It must also prove all of these initial-worktree
+cases:
+
+1. final PR #11 head and future merge commit with the same full tree permit the
+   direct transition after all other preconditions;
+2. a different commit with the same full tree is permitted;
+3. a clean non-target branch with a different tree yields
+   `INITIAL_WORKTREE_TREE_MISMATCH`;
+4. a detached `HEAD` with a different tree is blocked;
+5. one differing unlisted tracked path is blocked before switch;
+6. dirty index or tracked worktree is blocked;
+7. equality of only the 19 outputs never replaces full-tree equality;
+8. an allowed transition preserves full tree and worktree inventory, has the
+   exact tip and clean index, and adds/deletes/overwrites zero tracked paths;
+9. command-scope configuration disables all Git hooks, fsmonitor and submodule
+   checkout before cleanliness/inventory checks and the transition;
+10. a replacement ref without both `GIT_NO_REPLACE_OBJECTS=1` and
+    `git --no-replace-objects` blocks effect, tree authority and the transition;
+11. existing or ambiguous `<common-dir>/info/grafts` or shallow state blocks
+    parent/ancestry authority, effect and the transition.
+
+The same review proves absence in all four namespaces and that ambiguous branch
+transition, push or PR-creation results never authorize a repeated mutation.
 
 At least two independent read-only semantic reviews must examine the same final
 machine scope. Any P0–P2 finding blocks publication until corrected and both
@@ -597,8 +740,9 @@ PR10: MERGED_OWNER_CONTROLLED_SCOPE_DEVIATION
 PR10_CANDIDATE: INERT_NOT_ADMITTED
 SCOPE_V1: NEVER_EFFECTIVE
 SCOPE_V2: SUPERSEDED_BEFORE_EFFECT
-M1B-1A-R1-AUTH-V3: READY_FOR_OWNER_REVIEW
-R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V3_MERGE
+SCOPE_V3: SUPERSEDED_BEFORE_EFFECT
+M1B-1A-R1-AUTH-V4: READY_FOR_OWNER_REVIEW
+R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V4_MERGE
 NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED
 PROVIDER_EXECUTION: NOT_STARTED
 EXECUTABLE_TCB_ADMISSION: NOT_GRANTED
