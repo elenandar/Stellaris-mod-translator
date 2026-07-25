@@ -1,4 +1,4 @@
-# Owner signoff M1B-1A-R1-AUTH v7
+# Owner signoff M1B-1A-R1-AUTH v8
 
 Decision: `owner_accepted` for the exact authorization bytes below only.
 
@@ -11,26 +11,26 @@ M1B-1A2, benchmark, product translation, publishing, M2 or product CLI.
 
 ## Accepted exact artifacts
 
-I accept these exact identities as the complete v7 authorization decision:
+I accept these exact identities as the complete v8 authorization decision:
 
 | Artifact | Bytes | Raw SHA-256 |
 |---|---:|---|
-| `registry/m1b/m1b-1a-r1-remediation-scope-v7.json` | `249528` | `cb66f117c89fac9888047e894762243ae99ac60b4998c6d77f5350617973ff3d` |
-| `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json` | `24603` | `797aab6d7900b76e0de69665ff39ca43f800e7e9fea58c167d10ea58a51bd797` |
-| `docs/specs/m1b-1a-r1-remediation-authorization-contract.md` | `12883` | `3b2d5442b00fffa289229951dc35c25679be25727f067dd934a3b5fdbcf52d50` |
+| `registry/m1b/m1b-1a-r1-remediation-scope-v8.json` | `372231` | `47a86a8560f35f2a95528e466642f4c4d8538b848efc00d268df6da4c8e3dcf7` |
+| `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json` | `27477` | `92f3d2ae13ebe373b352ecb99efd1ff56cc3871d2a57c6aa3f742fdb398a3a34` |
+| `docs/specs/m1b-1a-r1-remediation-authorization-contract.md` | `18394` | `17c53e78c7c1f300d5e1f5a71b137279a9b89e1cc7051bf85bacf1a226c8ccb9` |
 
-The scope schema is `m1b-1a-r1-remediation-scope-v7`, generation `7`. Its
-framing domain is `stellaris-m1b-1a-r1-remediation-scope-v7`; the framed
+The scope schema is `m1b-1a-r1-remediation-scope-v8`, generation `8`. Its
+framing domain is `stellaris-m1b-1a-r1-remediation-scope-v8`; the framed
 SHA-256 is:
 
-`09769aab320568e435f96441f3442b268d322d3adddc15abb7e3445d34d8cc2e`.
+`99a778344c2f3e548a91a65c7b1ba56c2a6664fda932e907aa1d79ca55b1892e`.
 
 The owner schema is
-`m1b-1a-r1-remediation-owner-authorization-v7`. Scope and owner JSON are strict
+`m1b-1a-r1-remediation-owner-authorization-v8`. Scope and owner JSON are strict
 ASCII sorted-key compact JSON with one LF. Duplicate keys, floats, `NaN` and
 Infinity are rejected.
 
-Scope v1 was never effective. Scopes v2, v3, v4, v5 and v6 were superseded
+Scope v1 was never effective. Scopes v2, v3, v4, v5, v6 and v7 were superseded
 before effect. None authorizes PR #10 retroactively.
 
 ## Exact effect boundary
@@ -53,45 +53,94 @@ PR #11 is the only authorization PR:
 
 Effect requires the final reviewed PR #11 head as the exact second parent of
 one ordinary external owner-controlled two-parent merge. The PR and merge
-deltas must contain exactly the five documentation/owner paths and scope v7
-listed by the contract. Scopes v1 through v6 must be absent. Any different
+deltas must contain exactly the five documentation/owner paths and scope v8
+listed by the contract. Scopes v1 through v7 must be absent. Any different
 base, path set, parent order or identity blocks effect.
 
 ## Accepted closure
 
 I accept:
 
-- `30` unique `AUTH_V7_*` / `GATE_*` actions;
-- `82` exact resources;
+- `31` unique `AUTH_V8_*` / `GATE_*` actions;
+- `99` exact resources;
 - `6` closed authority planes;
-- `7` normative process definitions;
-- `4` exact external GitHub operations;
+- `57` normative parent/child process definitions;
+- `3` exact external GitHub operations;
 - resource/process/network/write-derived plane validation with deny precedence.
 
 Declared plane arrays never grant authority. Every action must match its
 independently derived plane set, and every plane allowlist must contain every
 and only its derived actions.
 
-`AUTH_V7_RUN_SYNTHETIC_PROBES`, `synthetic_probe_suite_v7` and the resource
-registry have one exact write set:
+`AUTH_V8_COLLECT_EVIDENCE_INPUTS` and
+`authorization_evidence_collector_v8` have one exact write set:
 
+- `sanitized_evidence_collector_results`;
+- `sanitized_probe_observations`;
 - `temporary_probe_roots`;
 - `temporary_probe_public_files`;
 - `temporary_probe_git_metadata`.
 
-These writes are limited to six distinct fresh roots outside the project under
-umask `0077`, followed by cleanup and absence proof.
+The filesystem writes are limited to seven distinct fresh roots outside the
+project under umask `0077`. Each root is closed, read through EOF,
+identity-rechecked, cleaned and proven absent before its sanitized result is
+retained. The collector declares the two real Node wrapper children plus the
+exact local Git, `gh` and `codesign` read children, then sends one canonical
+sanitized collector value through a bounded anonymous pipe.
+A separate prelaunch record validates Node, launcher and builder identities.
+Before any child spawn, the launcher requires two distinct bounded PASS review
+records over one common frozen scope raw SHA-256, matches that digest against
+a bounded no-follow/nonblocking descriptor-stable current-scope read, then
+self-checks Node, launcher, builder and validation-controller identities and
+rejects ambient environment or Node options. Before any of its children run,
+the validation controller descriptor-stable checks itself, the transient
+scope validator, Python and exact system Git against their current-scope
+identities. It then runs in exact
+`--postpublication` mode and accepts only its single bounded base64url result;
+caller-supplied validation metadata is forbidden. The bound Node launcher
+supplies the exact environment and starts collector, childless assembler and
+writer directly, without a shell or temporary handoff file; Node, Python, Git,
+`gh`, `codesign` and all transient helper-script bytes are phase-current
+identity-bound.
+`AUTH_V8_ASSEMBLE_EVIDENCE` is a separate childless process that consumes the
+fresh workspace metadata, two frozen reviews and collector result, then
+creates both the closed `sanitized_validation_results` value and the bounded
+canonical in-memory evidence bytes. The separate
+`AUTH_V8_WRITE_IGNORED_EVIDENCE` action,
+`authorization_evidence_writer_v8` process and
+`ignored_auth_v8_evidence` resource all declare the singleton evidence write;
+the Node writer consumes only the assembled canonical bytes and cannot read a
+removed temporary resource. Its bound host-Python standard-library child runs
+with exact `-I -S` outside the repository cwd and executes no repository,
+user-site or candidate code. It descriptor-binds the verified repository root
+and each exact evidence-parent component, creates and reopens the target
+relative to that bound parent, re-requires regular `0600`, `nlink=1`, exact
+size and inode at every final checkpoint, rewalks the chain before success,
+and on failure removes only the exact created inode through the bound parent.
 
 ## Accepted Git process and identity boundary
 
-The only critical executable is:
+The profile is `m1b-1a-r1-git-execution-surface-v4`. It binds the root Git
+executable, `git-remote-https → git-remote-http`, the exact pack/unpack/rev
+helpers, stage children, public synthetic transport shell, and
+`git-credential-osxkeychain` private broker route. Direct parent/child
+execution, exact argv/environment/cwd, explicit repository routes, config
+isolation, disabled hooks/fsmonitor/submodule recursion, `gc.auto=0`,
+`maintenance.auto=false` and `core.logAllRefUpdates=false` are mandatory.
 
-`/Library/Developer/CommandLineTools/usr/bin/git`
-
-The profile is `m1b-1a-r1-git-execution-surface-v3`. Direct execution, exact
-argv/environment/cwd, explicit `--git-dir` and `--work-tree`, config isolation,
-disabled hooks/fsmonitor/submodule recursion and
-`core.logAllRefUpdates=false` are mandatory.
+Each probe phase freshly binds type, mode, owner, symlink chain, realpath,
+open-file identity, full-EOF hash and signing identity at phase boundaries;
+the full helper set is then rechecked by lstat/readlink/resolved full-EOF hash
+immediately before and after each of the `36` sequential parent processes,
+while all `31` preserved-sentinel parents and `36` sequential parents have
+Trace2 reconciliation; the sequential tree records `37` child launches and independently normalizes each
+child argv/class/shell route to the recursively declared effective helper IDs,
+including maintenance and receive-side ref enumeration. `PATH`,
+`GIT_EXEC_PATH`, aliases, URL rewrites, repository config/bytes and inherited
+environment cannot substitute an executable or transport route. Credential
+broker reads and writes are not claimed absent; credential values remain in
+the external private channel and cannot enter argv, environment, logs,
+evidence, tracked bytes or model-visible output.
 
 The owner-supplied public commit identity is:
 
@@ -106,26 +155,30 @@ placeholders. Private config and inherited-environment fallback are forbidden.
 NUL, LF, CR, DEL, C0/C1 and other Unicode control characters are rejected.
 
 Local config remains default-deny. `user.name` and `user.email` are explicitly
-denied. Credential values are never read, stored, published or model-visible.
+denied. Credential values are never read by the host controller or model, read
+from repository/private config, stored, published, logged, evidenced or made
+model-visible; only the declared external broker may exchange them through its
+private channel.
 
-## Accepted commit side effects
+## Accepted sequential Git side effects
 
-The publication-shaped commit was checked in all six fresh repositories:
+The public synthetic topology contains existing history, an existing
+remote-tracking reflog and an existing `HEAD` reflog. I accept only:
 
-- HEAD reflog delta `0`;
-- branch reflog delta `0`;
-- post-success lockfile count `0`;
-- post-success temporary-object count `0`;
-- stage-zero index entries unchanged;
-- tracked worktree unchanged;
-- exact tree and commit object additions only;
-- `COMMIT_EDITMSG` SHA-256
-  `6904e055384f68fe37fb043599f6ce095cbacf44c27d92037c2a11c37778e45b`.
+- fetch: exact remote ref/object updates plus one append to the existing
+  remote-tracking reflog;
+- switch with `--no-guess --no-track`: new loose branch ref, symbolic `HEAD`,
+  one `HEAD` reflog append and bounded index metadata, with zero local-config
+  or tracked-content delta and no future branch reflog;
+- stage: the exact raw blob route and exact stage-zero index entry;
+- commit: exact message/tree/commit/ref/index routes plus one `HEAD` reflog
+  append, while the future branch reflog remains absent.
 
-The future commit may touch only the exact commit message, branch ref/lock,
-index lock and bounded index metadata, object database and temporary object
-routes, ordinary commit object, and packed-refs/lock resources. Any reflog
-delta or additional effect fails closed.
+The historical recovery commit
+`105858b4b4008bd1961316c17510b0ad6e107881` is present in both the real
+`HEAD` and current branch reflogs. V8 never describes it as zero-delta.
+After-success locks and temporary object routes must be absent; any additional
+or missing effective delta fails closed.
 
 ## Accepted matrix
 
@@ -160,25 +213,33 @@ Common construction SHA-256:
 | `object_database_unchanged_during_local_closure` | `6d9818ddea11d65a108193c22792091ed6f453e1502b2558346f74c1af78de9b` | `a2360821239e693d9337c7e40267ef79e0926f9cb6413e083d927915114eaaf0` |
 
 Aggregate: `TARGETED_HOST_SENTINELS_PASS`, probes `6/6`, helper executions `0`,
-object-database write delta `0`, cleanup `6/6`. Repository/candidate code was
+object-database final path/mode/size/content delta `0`, cleanup `6/6`. This is
+a final-content delta, not a write-event count. Repository/candidate code was
 not executed.
 
 ## Evidence I require
 
 Final evidence path:
 
-`artifacts/m1b/m1b-1a-r1/auth-v7-evidence.json`
+`artifacts/m1b/m1b-1a-r1/auth-v8-evidence.json`
 
 It must be strict canonical ASCII JSON with one LF, regular mode `0600`,
 `st_nlink=1`, Git-ignored, untracked and physically distinct. It includes
 final scope/owner/publication identities, all 139 exact matrix rows, six
-sanitized observations, exact observation-hash preimages, commit side effects,
-cleanup, closure and validation results.
+sanitized sentinel observations, exact observation-hash preimages, actual
+fetch/switch/stage/commit identities and deltas, helper/process identities,
+cleanup, full action/resource/process/external/write closure and validation
+results.
 
 Absolute paths, private configuration, credentials and raw
 repository/private/copyrighted content are forbidden. Historical evidence v1
-through v6 must remain byte-identical, mode `0600`, `st_nlink=1`, ignored,
+through v7 must remain byte-identical, mode `0600`, `st_nlink=1`, ignored,
 untracked and physically distinct.
+
+The future PR is created once with final validated title/body bytes. A separate
+title/body update is not authorized. Authenticated read-only GitHub operations
+read `external_user_authentication`; final remote-head reconciliation uses the
+exact GitHub ref query and exact expected commit OID.
 
 ## Explicit stop
 
@@ -191,8 +252,8 @@ inputs/outputs are not read.
 This record ends at:
 
 - `REMEDIATION: READY_FOR_REVIEW`;
-- `M1B-1A-R1-AUTH-V7: READY_FOR_OWNER_REVIEW`;
-- `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V7_MERGE`;
+- `M1B-1A-R1-AUTH-V8: READY_FOR_OWNER_REVIEW`;
+- `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V8_MERGE`;
 - `NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`;
 - `PROVIDER_EXECUTION: NOT_STARTED`;
 - `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`;
