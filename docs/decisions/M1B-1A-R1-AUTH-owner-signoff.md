@@ -1,4 +1,4 @@
-# Owner signoff M1B-1A-R1-AUTH v8
+# Owner signoff M1B-1A-R1-AUTH v9
 
 Decision: `owner_accepted` for the exact authorization bytes below only.
 
@@ -11,27 +11,28 @@ M1B-1A2, benchmark, product translation, publishing, M2 or product CLI.
 
 ## Accepted exact artifacts
 
-I accept these exact identities as the complete v8 authorization decision:
+I accept these exact identities as the complete v9 authorization decision:
 
 | Artifact | Bytes | Raw SHA-256 |
 |---|---:|---|
-| `registry/m1b/m1b-1a-r1-remediation-scope-v8.json` | `372231` | `47a86a8560f35f2a95528e466642f4c4d8538b848efc00d268df6da4c8e3dcf7` |
-| `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json` | `27477` | `92f3d2ae13ebe373b352ecb99efd1ff56cc3871d2a57c6aa3f742fdb398a3a34` |
-| `docs/specs/m1b-1a-r1-remediation-authorization-contract.md` | `18394` | `17c53e78c7c1f300d5e1f5a71b137279a9b89e1cc7051bf85bacf1a226c8ccb9` |
+| `registry/m1b/m1b-1a-r1-remediation-scope-v9.json` | `421822` | `df29f40a12e2163afc3e542774d9fdb0fc4542b898880e866c8ecdc4b0a73575` |
+| `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json` | `28971` | `c374f9ebad668fd49692aeb25e58419ebfb7c3539c012d4e714559ec4180ae9e` |
+| `docs/specs/m1b-1a-r1-remediation-authorization-contract.md` | `23047` | `780825ba7cc6470997faf31b1210f44d60553ceeb46531849f0bba820af8238e` |
 
-The scope schema is `m1b-1a-r1-remediation-scope-v8`, generation `8`. Its
-framing domain is `stellaris-m1b-1a-r1-remediation-scope-v8`; the framed
+The scope schema is `m1b-1a-r1-remediation-scope-v9`, generation `9`. Its
+framing domain is `stellaris-m1b-1a-r1-remediation-scope-v9`; the framed
 SHA-256 is:
 
-`99a778344c2f3e548a91a65c7b1ba56c2a6664fda932e907aa1d79ca55b1892e`.
+`092797ab1729359e18e21ff92ee1b0b1f678ce895debf023f2ab50628fb9c292`.
 
 The owner schema is
-`m1b-1a-r1-remediation-owner-authorization-v8`. Scope and owner JSON are strict
+`m1b-1a-r1-remediation-owner-authorization-v9`. Scope and owner JSON are strict
 ASCII sorted-key compact JSON with one LF. Duplicate keys, floats, `NaN` and
 Infinity are rejected.
 
-Scope v1 was never effective. Scopes v2, v3, v4, v5, v6 and v7 were superseded
-before effect. None authorizes PR #10 retroactively.
+Scope v1 was never effective. Scopes v2 through v8 were superseded before
+effect. V8 evidence was not created because its post-publication pipeline
+failed closed before the writer. None authorizes PR #10 retroactively.
 
 ## Exact effect boundary
 
@@ -51,20 +52,23 @@ PR #11 is the only authorization PR:
 - recovery integration merge
   `3a57701275914d905f76606cf6db3072c40a17ac`.
 
+Evidence publication rechecks exact base, head branch, head repository and
+owner together with final head OID, open/draft state and absent auto-merge.
+
 Effect requires the final reviewed PR #11 head as the exact second parent of
 one ordinary external owner-controlled two-parent merge. The PR and merge
-deltas must contain exactly the five documentation/owner paths and scope v8
-listed by the contract. Scopes v1 through v7 must be absent. Any different
+deltas must contain exactly the five documentation/owner paths and scope v9
+listed by the contract. Scopes v1 through v8 must be absent. Any different
 base, path set, parent order or identity blocks effect.
 
 ## Accepted closure
 
 I accept:
 
-- `31` unique `AUTH_V8_*` / `GATE_*` actions;
-- `99` exact resources;
+- `30` unique `AUTH_V9_*` / `GATE_*` actions;
+- `101` exact resources;
 - `6` closed authority planes;
-- `57` normative parent/child process definitions;
+- `66` normative parent/child process definitions;
 - `3` exact external GitHub operations;
 - resource/process/network/write-derived plane validation with deny precedence.
 
@@ -72,8 +76,8 @@ Declared plane arrays never grant authority. Every action must match its
 independently derived plane set, and every plane allowlist must contain every
 and only its derived actions.
 
-`AUTH_V8_COLLECT_EVIDENCE_INPUTS` and
-`authorization_evidence_collector_v8` have one exact write set:
+`AUTH_V9_COLLECT_EVIDENCE_INPUTS` and
+`authorization_evidence_collector_v9` have one exact write set:
 
 - `sanitized_evidence_collector_results`;
 - `sanitized_probe_observations`;
@@ -87,36 +91,52 @@ identity-rechecked, cleaned and proven absent before its sanitized result is
 retained. The collector declares the two real Node wrapper children plus the
 exact local Git, `gh` and `codesign` read children, then sends one canonical
 sanitized collector value through a bounded anonymous pipe.
-A separate prelaunch record validates Node, launcher and builder identities.
-Before any child spawn, the launcher requires two distinct bounded PASS review
-records over one common frozen scope raw SHA-256, matches that digest against
-a bounded no-follow/nonblocking descriptor-stable current-scope read, then
-self-checks Node, launcher, builder and validation-controller identities and
-rejects ambient environment or Node options. Before any of its children run,
-the validation controller descriptor-stable checks itself, the transient
-scope validator, Python and exact system Git against their current-scope
-identities. It then runs in exact
-`--postpublication` mode and accepts only its single bounded base64url result;
-caller-supplied validation metadata is forbidden. The bound Node launcher
-supplies the exact environment and starts collector, childless assembler and
-writer directly, without a shell or temporary handoff file; Node, Python, Git,
-`gh`, `codesign` and all transient helper-script bytes are phase-current
-identity-bound.
-`AUTH_V8_ASSEMBLE_EVIDENCE` is a separate childless process that consumes the
+A separate prelaunch record validates Node, launcher, builder and evidence-I/O
+script identities. Before any child spawn, the launcher strictly decodes and
+round-trips two exact unpadded-base64url canonical ASCII PASS review-record
+byte strings, rejects duplicate keys, requires one common frozen scope raw
+SHA-256 and one identical exact six-output path/byte-count/SHA-256 set, matches
+those anchors against bounded no-follow/nonblocking descriptor-stable
+current-output reads, and rechecks them before and after every successful or
+failed nonterminal child. Immediately before the terminal read-only inspector
+it rechecks scope, all six outputs, helper scripts and interpreters once more;
+the child rechecks Python before reading evidence, and no filesystem read
+follows that inspection. The canonical inspection result is then bound
+directly to success. The launcher rejects ambient environment or Node options.
+Before any of its children run, the validation controller descriptor-stable
+checks itself, the transient scope validator, Python and exact system Git
+against their current-scope identities.
+It then runs in exact `--postpublication` mode and accepts only its single
+bounded base64url result; caller-supplied validation metadata is forbidden.
+The bound Node launcher supplies the exact environment and starts the
+collector and childless assembler without a shell or repository handoff file;
+Node, Python, Git, `gh`, `codesign` and all transient helper-script bytes are
+phase-current identity-bound. Every Node child executes already stable-read
+and hash-bound module bytes, self-checks its eval snapshot and rechecks source
+identity after every exit, including failure; a final helper pass brackets
+later Git/GitHub reads.
+`AUTH_V9_ASSEMBLE_EVIDENCE` is a separate childless process that consumes the
 fresh workspace metadata, two frozen reviews and collector result, then
 creates both the closed `sanitized_validation_results` value and the bounded
-canonical in-memory evidence bytes. The separate
-`AUTH_V8_WRITE_IGNORED_EVIDENCE` action,
-`authorization_evidence_writer_v8` process and
-`ignored_auth_v8_evidence` resource all declare the singleton evidence write;
-the Node writer consumes only the assembled canonical bytes and cannot read a
-removed temporary resource. Its bound host-Python standard-library child runs
-with exact `-I -S` outside the repository cwd and executes no repository,
-user-site or candidate code. It descriptor-binds the verified repository root
-and each exact evidence-parent component, creates and reopens the target
-relative to that bound parent, re-requires regular `0600`, `nlink=1`, exact
-size and inode at every final checkpoint, rewalks the chain before success,
-and on failure removes only the exact created inode through the bound parent.
+canonical in-memory evidence bytes. There is no standalone writer action or
+cleanup process. After a prewrite `git check-ignore` and index-absence gate,
+the bound `authorization_evidence_io_python_v9` child runs exact `-I -S`. It
+descriptor-binds the repository root and evidence-parent chain, fully verifies
+v1–v7 and v8/v9 absence, and authenticates the exact parent Node executable,
+SHA-256-bound opened launcher source and the same two review preimages before
+any staging creation. It then opens `/private/tmp`, descriptor-relatively
+creates one fresh private mode-`0700` same-device staging directory and
+mode-`0600` source, writes, fsyncs and fully reads back the complete bytes,
+keeps that source FD open, and performs one
+terminal `fclonefileat(CLONE_NOFOLLOW)` exclusive clone into the absent final
+name. Any nonzero publisher status, including `EEXIST`, fails
+closed and cannot be recovered. Only a confirmed zero exit with malformed or
+lost stdout may use the exact final bytes as its recovery record. After the
+Git exclusion check, a fresh descriptor-relative full-byte/inode inspection
+is the last validation before success. No final-path unlink, stat-then-unlink
+cleanup, source-path rename, partial final-path write or independently
+invocable writer route exists. Descriptor-relative staging cleanup runs in
+`finally` on every exit after creation and never targets the final path.
 
 ## Accepted Git process and identity boundary
 
@@ -131,9 +151,9 @@ isolation, disabled hooks/fsmonitor/submodule recursion, `gc.auto=0`,
 Each probe phase freshly binds type, mode, owner, symlink chain, realpath,
 open-file identity, full-EOF hash and signing identity at phase boundaries;
 the full helper set is then rechecked by lstat/readlink/resolved full-EOF hash
-immediately before and after each of the `36` sequential parent processes,
-while all `31` preserved-sentinel parents and `36` sequential parents have
-Trace2 reconciliation; the sequential tree records `37` child launches and independently normalizes each
+immediately before and after each of the `44` sequential parent processes,
+while all `31` preserved-sentinel parents and `44` sequential parents have
+Trace2 reconciliation; the sequential tree records `45` child launches and independently normalizes each
 child argv/class/shell route to the recursively declared effective helper IDs,
 including maintenance and receive-side ref enumeration. `PATH`,
 `GIT_EXEC_PATH`, aliases, URL rewrites, repository config/bytes and inherited
@@ -176,9 +196,35 @@ remote-tracking reflog and an existing `HEAD` reflog. I accept only:
 
 The historical recovery commit
 `105858b4b4008bd1961316c17510b0ad6e107881` is present in both the real
-`HEAD` and current branch reflogs. V8 never describes it as zero-delta.
+`HEAD` and current branch reflogs. V9 never describes it as zero-delta.
 After-success locks and temporary object routes must be absent; any additional
 or missing effective delta fails closed.
+
+For the live public HTTPS fetch I accept exactly one normalization:
+`synthetic_side_fetch_https_trace` /
+`git_index_pack_synthetic_helper` /
+`--pack_header=2,N`. The fresh empty bare repository, stable advertisement,
+exact fetched refs, full closure, repository/reachable object-set equality and
+canonical positive unsigned 32-bit `N` must all pass before replacing only
+`N` with `<validated-pack-object-count>`. Raw `N`, raw child hash and both
+object-set counts/digests remain evidence.
+
+Both normative and evidence fetches pin `fetch.unpackLimit=1` and
+`transfer.unpackLimit=1`. A nonzero fetch permits the exact normalized
+`remote-https dispatch → resolved git-remote-http → index-pack → rev-list`
+sequence; a zero-object fetch permits only
+`remote-https dispatch → resolved git-remote-http → rev-list` with zero
+ref/object/reflog/inventory delta. Each dispatch has exactly one resolved child.
+Live HTTPS `unpack-objects` is forbidden. All `39` committed negative cases
+must fail closed.
+
+The future authenticated push has exactly one `remote-https` dispatch and one
+resolved `git-remote-http` child, two ordered private credential-helper
+invocations (`get`, then successful `store`), one pack producer and one
+external receive-pack boundary. Collector identity binding performs exactly
+`88` `codesign` children: three full `28`-path passes and four wrapper-boundary
+checks. The `44` sequential parents bind seven named Trace2 paths, including
+the distinct zero-object HTTPS fetch trace.
 
 ## Accepted matrix
 
@@ -221,15 +267,15 @@ not executed.
 
 Final evidence path:
 
-`artifacts/m1b/m1b-1a-r1/auth-v8-evidence.json`
+`artifacts/m1b/m1b-1a-r1/auth-v9-evidence.json`
 
 It must be strict canonical ASCII JSON with one LF, regular mode `0600`,
 `st_nlink=1`, Git-ignored, untracked and physically distinct. It includes
 final scope/owner/publication identities, all 139 exact matrix rows, six
 sanitized sentinel observations, exact observation-hash preimages, actual
 fetch/switch/stage/commit identities and deltas, helper/process identities,
-cleanup, full action/resource/process/external/write closure and validation
-results.
+atomic-publication and exact-inode inspection proof, full
+action/resource/process/external/write closure and validation results.
 
 Absolute paths, private configuration, credentials and raw
 repository/private/copyrighted content are forbidden. Historical evidence v1
@@ -252,8 +298,8 @@ inputs/outputs are not read.
 This record ends at:
 
 - `REMEDIATION: READY_FOR_REVIEW`;
-- `M1B-1A-R1-AUTH-V8: READY_FOR_OWNER_REVIEW`;
-- `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V8_MERGE`;
+- `M1B-1A-R1-AUTH-V9: READY_FOR_OWNER_REVIEW`;
+- `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V9_MERGE`;
 - `NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`;
 - `PROVIDER_EXECUTION: NOT_STARTED`;
 - `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`;
