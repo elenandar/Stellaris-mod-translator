@@ -1,376 +1,348 @@
-# M1B-1A-R1-AUTH v5 — post-merge transport and evidence-provenance remediation authorization
+# M1B-1A-R1-AUTH v6 — post-merge transport and evidence-provenance remediation authorization
 
 Status: `READY_FOR_OWNER_REVIEW`. This contract is authorization-only. It does
 not authorize R1 remediation until external owner review and the exact PR #11
 merge defined below.
 
 The normative machine source is
-[`registry/m1b/m1b-1a-r1-remediation-scope-v5.json`](../../registry/m1b/m1b-1a-r1-remediation-scope-v5.json).
+[`registry/m1b/m1b-1a-r1-remediation-scope-v6.json`](../../registry/m1b/m1b-1a-r1-remediation-scope-v6.json).
 The machine owner decision is
 [`M1B-1A-R1-AUTH-owner-authorization.json`](../decisions/M1B-1A-R1-AUTH-owner-authorization.json),
 and the human-readable acceptance record is
 [`M1B-1A-R1-AUTH-owner-signoff.md`](../decisions/M1B-1A-R1-AUTH-owner-signoff.md).
-If prose conflicts with the canonical machine scope or owner record, the
-machine artifacts fail closed and a new owner decision is required.
+If prose conflicts with either canonical JSON artifact, authority fails closed
+and a new owner decision is required.
 
-## 1. Decision boundary
+## 1. Decision boundary and generation
 
-This v5 supersedes v4 before effect and closes only the following gaps in the
-future post-merge gate:
+This v6 supersedes v5 before effect. It changes only the authorization control
+plane:
 
-1. persistent object routing and lazy fetch;
-2. effective repository, worktree, index and configuration routing;
-3. attributes, filters, external diff/textconv and raw no-filter cleanliness;
-4. freshness of those gates before fetch, after fetch, and immediately before
-   and after the sole direct transition;
-5. isolated adversarial definitions and bounded host sentinel evidence for
-   those surfaces.
+1. every gate action is closed through an explicit action/authority matrix;
+2. critical Git processes have one normative argv/environment/cwd source;
+3. local configuration and transport routing have closed value predicates;
+4. six host probes have reproducible public declarative definitions and
+   sanitized result identities;
+5. six minimal adversarial families cover the newly closed surfaces.
 
-Everything else remains at committed v4 semantics. In particular, v5 does not
-create a credential authority, a new GitHub API client authority, or a new
-post-transition publication protocol.
+Protocol generation `108`, candidate identities, future contract generation
+`5`, the exact historical PR #10 baseline and all preserved blockers are
+unchanged. Candidate/provider execution, M1B-1A2, benchmark, M2, active
+translation and publishing remain forbidden.
 
-The owner decision remains:
-
-- `acceptance_state = owner_accepted`;
-- effect only `after_review_and_merge_to_main`;
-- before effect, only authorization validation and existing draft PR #11
-  publication are allowed;
-- after effect, only one exact remediation branch, one ordinary commit, one
-  normal non-force push, and one new draft PR are allowed;
-- candidate/provider execution, M1B-1A2, benchmark and M2 remain forbidden.
+Before effect, only validation of these authorization bytes, execution of the
+six committed public synthetic probe definitions, creation of the ignored v6
+evidence, and publication to the existing draft PR #11 are allowed. After
+effect, the already bounded one-branch/one-commit/one-push/one-draft-PR R1
+workflow is unchanged.
 
 ## 2. Canonical identities
 
-The final canonical scope is compact sorted-key ASCII JSON with one trailing
-LF, no duplicate keys, no floats, and no `NaN` or Infinity.
+Both JSON artifacts use strict ASCII, sorted keys, compact encoding and exactly
+one trailing LF. Duplicate keys, floats, `NaN` and Infinity are invalid.
 
 | Artifact | Bytes | Raw SHA-256 |
 |---|---:|---|
-| `registry/m1b/m1b-1a-r1-remediation-scope-v5.json` | `88725` | `e62a2db0459a78a07974ff14af6703fc20531440131e7168dcc79909b01d26f5` |
-| `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json` | `18763` | `6ed5b8490ab678cf614e345de2348f24aa8e04b711e6e8b72757cb35066c41bf` |
+| `registry/m1b/m1b-1a-r1-remediation-scope-v6.json` | `145625` | `508a16e396fd34bfb598dcbbd7e0680402573b12cd0b9b82ad99680d15ae8249` |
+| `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json` | `20869` | `3b046865974be9acbd61729e0dbaff95aa388f55cd2de20220346078b6b9e238` |
 
 Scope framing is
-`SHA-256("stellaris-m1b-1a-r1-remediation-scope-v5" || NUL ||
-u64be(88725) || canonical_scope_bytes)`. The resulting framed SHA-256 is
-`143a8dd1c3bb3b5f80e7450a2fcd319b214c94ffedcefd5ba5f95ed0d982951a`.
+`SHA-256("stellaris-m1b-1a-r1-remediation-scope-v6" || NUL ||
+u64be(145625) || canonical_scope_bytes)`. The framed SHA-256 is
+`99eba953ec70b0b243cc8cfa31dd859b834ed5a8d66e20ca2d3ab1780dde67ec`.
 
-Historical v4 remains byte-identical in the committed parent:
+Scope states are:
 
-- canonical bytes: `60524`;
-- raw SHA-256:
-  `563a9e7c8e91eaf4d5ae350a392a86099c0c6b1df5acab5f8c288aa343e3f1fb`;
-- framed SHA-256:
-  `3082cd0f403d08b7a0558cda2c6e8ca517456238d73e78df80987c0935cd1015`;
-- effect state: `superseded_before_effect`.
+- v1: `never_effective`;
+- v2, v3, v4, v5: `superseded_before_effect`;
+- v6: `not_effective_owner_review_and_merge_required`.
 
-`SCOPE_V1: NEVER_EFFECTIVE`; v2, v3 and v4 are
-`SUPERSEDED_BEFORE_EFFECT`. None may authorize PR #10 retroactively.
+No superseded generation authorizes PR #10 retroactively.
 
-## 3. Historical and publication binding
+## 3. Historical and PR #11 effect binding
 
-PR #10 remains a historical owner-controlled scope deviation:
+PR #10 remains an owner-controlled historical scope deviation:
 
-- PR: `10`;
-- head:
-  `66f905cf266b9d1c1f56d0d706184387ffedb36e`;
-- merge commit:
-  `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`;
-- ordered parents:
+- head `66f905cf266b9d1c1f56d0d706184387ffedb36e`;
+- merge `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`;
+- ordered parents
   `1f10c151c5adac5fbf765af8093c7eddf8cf0429`,
   `66f905cf266b9d1c1f56d0d706184387ffedb36e`;
-- merge tree:
-  `289e2396975c5ef6fe1001a7c5990523edaa06c5`;
-- changed paths: exact `11`;
-- candidate state: `INERT_NOT_ADMITTED`.
+- tree `289e2396975c5ef6fe1001a7c5990523edaa06c5`;
+- exact changed paths `11`;
+- candidate state `INERT_NOT_ADMITTED`.
 
 This authorization remains on existing draft PR #11:
 
-- repository: `elenandar/Stellaris-mod-translator`;
-- base: `main`;
-- historical base:
-  `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`;
-- head branch: `agent/m1b-1a-r1-transport-provenance-auth`;
-- recovery integration merge:
-  `3a57701275914d905f76606cf6db3072c40a17ac`;
-- final head is the external reviewed head of PR #11 and the exact second
-  parent of the future two-parent owner merge.
+- repository `elenandar/Stellaris-mod-translator`;
+- base branch `main`;
+- historical base `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`;
+- head branch `agent/m1b-1a-r1-transport-provenance-auth`;
+- recovery integration merge
+  `3a57701275914d905f76606cf6db3072c40a17ac`.
 
-Effect requires one ordinary two-parent non-squash, non-rebase owner-controlled
-merge. Its first parent is exact
-`3c6ca3146d838b977f24bbc6b8c79dfb271e142b`; its second parent is the final
-reviewed PR #11 head. Both PR and merge deltas must contain the exact six
-authorization-stage outputs, and the scope, owner record, contract and signoff
-must be byte-identical between that final head and the merge tree.
+Effect requires one ordinary external owner-controlled two-parent merge. The
+first parent must be exact
+`3c6ca3146d838b977f24bbc6b8c79dfb271e142b`, and the second parent must be the
+final reviewed PR #11 head. The PR delta and merge delta must both contain the
+exact six authorization paths. Scope v1–v5 must be absent, scope v6 must be the
+only R1 scope, and the four normative artifacts must be byte-identical between
+the final PR head and merge tree. Any change to the base, parent order, path
+set or accepted identity blocks effect.
 
-Changing `main`, changing the exact path set, or changing any normative identity
-before merge blocks effect.
+## 4. Closed action/authority matrix
 
-## 4. Removed semantic scope creep
+The machine scope contains `21` unique action records across six closed planes:
 
-The following dirty-v5 surfaces are explicitly removed and receive no
-authority:
+- `authorization_stage_host_validation`;
+- `activation_verification_plane`;
+- `git_github_control_plane`;
+- `host_validation`;
+- `repository_content_plane`;
+- `initial_worktree_validation_read_plane`.
 
-- owner-supplied PAT or any other owner credential value;
-- Basic-auth header construction;
-- token or header transport through environment or Git configuration;
-- `sandbox-exec` as a network supervisor;
-- temporary network `HOME`, `CURL_HOME` or netrc protocol;
-- exact HTTPS-helper hash, code-signature or codesign pins;
-- connector-specific GitHub API execution profile;
-- manual merge-attestation protocol;
-- post-transition `git add`, raw `update-index`, commit-tree, ref update, push
-  construction or final-parity hardening not present in v4;
-- adversarial families 29–33 and all variants that existed only for those
-  surfaces.
+The matrix namespace is exactly `AUTH_V6_*` and `GATE_*`. Existing post-gate
+publication actions remain separately closed by the exact
+`git_github_control_plane.allowed_actions` plus their count, path, branch and
+pull-request constraints; v6 neither removes nor expands them.
 
-Credential handling is outside tracked authorization bytes and outside model
-context. Existing external user authentication is used for the same bounded
-Git/GitHub publication operations already present in v4. No credential value,
-credential source, header construction, helper binary identity, or private
-configuration value becomes a normative input.
-
-The critical local executable remains absolutely bound to
-`/Library/Developer/CommandLineTools/usr/bin/git`, invoked directly without a
-shell. A fresh per-process filesystem identity check is required, but the
-current host build SHA, code signature, helper SHA or helper signature is not a
-long-lived acceptance root.
-
-## 5. Fail-closed gate order
-
-The single unsafe result for any missing, ambiguous, stale or mismatched
-execution-surface condition is:
-
+Every matrix action record contains one exact ID, phase, every applicable plane,
+metadata reads, content reads, process authority, network authority,
+Git-internal writes and failure classification. Every applicable plane repeats
+that ID in its own closed `allowed_action_ids`. A validator must prove exact
+two-way closure: no missing plane membership, no extra allowlist member, no
+unknown resource and no unresolved process reference. The two namespaces may
+not overlap. Deny takes precedence over every allow. Unknown, duplicate,
+ambiguous or unlisted action in either namespace is
 `INITIAL_WORKTREE_GIT_EXECUTION_SURFACE_UNSAFE`.
 
-Before the first authoritative Git process — including `ls-remote`, fetch, or
-any revision walk — the trusted host controller must perform, in order:
+The ordered gate actions are:
 
-1. bind the exact repository top-level, worktree, Git dir, common dir, object
-   dir, index route, local config route and absolute system-Git executable;
-2. reject alternate environment, command-line and configuration routing;
-3. require `lstat(ENOENT)` for
-   `<object-dir>/info/alternates` and
-   `<object-dir>/info/http-alternates`;
-4. reject partial-clone/promisor/filter configuration;
-5. require absent `core.worktree`, absent `extensions.worktreeConfig`, and
-   `lstat(ENOENT)` for `<common-dir>/config.worktree`;
-6. reject sparse checkout, sparse index, split/alternate index, unmerged
-   entries, `skip-worktree` and `assume-unchanged`;
-7. isolate attributes, filters, external diff/textconv, pager, hooks,
-   fsmonitor, submodule and remote-helper surfaces;
-8. capture a fresh routing/object/config/index/attribute snapshot.
+1. `GATE_BIND_REPOSITORY_LAYOUT`;
+2. `GATE_READ_LOCAL_CONFIG`;
+3. `GATE_READ_INDEX_AND_SPARSE_METADATA`;
+4. `GATE_LSTAT_OBJECT_ALTERNATES`;
+5. `GATE_LSTAT_ATTRIBUTES_METADATA`;
+6. `GATE_SNAPSHOT_EXECUTABLE_ENVIRONMENT`;
+7. `GATE_LS_REMOTE_EXACT`;
+8. `GATE_FETCH_EXACT`;
+9. `GATE_REPEAT_EXECUTION_SURFACE`;
+10. `GATE_VERIFY_LOCAL_OBJECT_CLOSURE`;
+11. `GATE_VERIFY_EFFECT_AND_ABSENCE`;
+12. `GATE_COMPARE_ROOT_TREE`;
+13. `GATE_READ_COMPLETE_TRACKED_INVENTORY`;
+14. `GATE_CHECK_RAW_CLEANLINESS`;
+15. `GATE_PRE_TRANSITION_FRESHNESS`;
+16. `GATE_DIRECT_TRANSITION`;
+17. `GATE_POST_TRANSITION_FRESHNESS`;
+18. `GATE_EVALUATE_OUTPUT_LIFECYCLE`.
 
-No Git process is authoritative before all eight checks pass.
-`rev-list --alternate-refs` is specifically forbidden before absence of
-alternates is proven.
+The three authorization-stage actions are separately closed and do not grant
+future R1 execution.
 
-Only then may one exact remote advertisement and one exact bounded atomic fetch
-run against
-`https://github.com/elenandar/Stellaris-mod-translator.git`, limited to exact
-`main`, PR #11 head and future-branch absence bindings.
+## 5. Exact metadata and content resources
 
-Immediately after fetch the entire eight-step gate is repeated. Then
-`GIT_NO_LAZY_FETCH=1` is mandatory and the host must:
+The repository content plane defaults to deny. It permits only the named
+machine resources and their exact access predicates:
 
-1. prove recursive local commit/tree/blob/gitlink closure for every commit used
-   as ancestry or tree authority;
-2. recompute every required local object identity;
-3. prove zero remote-helper invocations and zero object-database writes after
-   bounded fetch through the direct transition;
-4. verify effect and future branch/PR absence;
-5. compare complete root-tree equality, not only the 19 future outputs;
-6. prove filter-free index/worktree cleanliness;
-7. repeat freshness immediately before the sole direct transition;
-8. perform the exact direct create-and-switch;
-9. repeat freshness and prove zero tracked content delta immediately after the
-   transition;
-10. only then evaluate the `19/19` future-output lifecycle gate.
+- verified repository-root and worktree filesystem identities;
+- verified Git-dir, common-dir and object-dir identities;
+- exact local `config` plus `config.worktree` absence;
+- exact index and sparse metadata;
+- exact `objects/info/alternates` and `http-alternates` absence;
+- exact Git-dir/common-dir `info/attributes` absence;
+- metadata-only `lstat` of relevant worktree `.gitattributes` and
+  `.gitmodules` routes;
+- exact `info/grafts` and `shallow` absence;
+- descriptor-bound object inventory and canonical object bytes solely for
+  local recursive closure;
+- exact executable and process-environment snapshots;
+- the complete equal-tree tracked set, solely for no-follow identity hashing
+  without content output;
+- exact authorization outputs and exact ignored v6 evidence.
 
-The fetch exception permits only its exact object and remote-ref consequences.
-Missing recursive objects fail closed; root-tree OID equality alone is not
-sufficient.
+This is not broad `.git` authority. Untracked content is not readable.
+Relevant untracked attribute paths receive metadata-only `lstat`; their bytes
+remain forbidden. Symlink, hardlink, alias, escape or route ambiguity blocks
+the action.
 
-## 6. Repository, configuration and object routing
+Repository reads and writes are also phase-bound. During v6 authoring, only
+the exact six tracked authorization outputs and exact ignored v6 evidence are
+writable. Activation is read-only apart from exact fetch internals. Post-effect
+writes retain the existing exact future-output and consequential-Git-internal
+limits. A host-validation action outside its declared phase is denied.
 
-The critical process environment isolates global and system Git configuration
-to `/dev/null`, requires `GIT_CONFIG_NOSYSTEM=1`,
-`GIT_NO_REPLACE_OBJECTS=1`, `GIT_OPTIONAL_LOCKS=0`, `LANG=C`, and `LC_ALL=C`.
-After fetch it additionally requires `GIT_NO_LAZY_FETCH=1`.
+## 6. Normative Git processes
 
-The following effective routes are denied:
+The only critical executable is:
 
-- `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`,
-  `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`,
-  `GIT_NAMESPACE`, `GIT_EXEC_PATH`;
-- `GIT_CONFIG`, `GIT_CONFIG_COUNT`, indexed config key/value injection,
-  `GIT_CONFIG_PARAMETERS`, and unapproved global/system config routes;
-- local `include` or `includeIf`;
-- `core.alternateRefsCommand`, `core.worktree`,
-  `extensions.partialClone`, `extensions.worktreeConfig`;
-- `remote.*.promisor` and `remote.*.partialclonefilter`.
+`/Library/Developer/CommandLineTools/usr/bin/git`
 
-The local recursive closure is descriptor-rooted, no-follow, local-only and
-content-non-output. It handles commits, trees, blobs and required gitlink target
-commit objects, recomputes canonical SHA-1 object identities, and emits only
-booleans, counts, hashes and classifications. Missing, wrong-type,
-hash-mismatched, aliased or ambiguous objects block authority.
+The machine profile contains exactly three process definitions:
 
-## 7. Attributes, filters and raw cleanliness
+- `git_ls_remote_exact`;
+- `git_fetch_exact`;
+- `git_direct_transition_exact`.
 
-Every critical process requires `GIT_ATTR_NOSYSTEM=1` and
-`core.attributesFile=/dev/null`. Global and system attributes are isolated
-without reading, modifying or deleting the user's configuration. Global
-Git-LFS configuration is not a semantic input and is not read, modified or
-deleted.
+Each definition stores a full argv array, exact environment map, exact denied
+environment set, pre-check action IDs, post-check action IDs, network scope and
+Git-internal write set. Direct `execve` is required. Shells, aliases, functions,
+wrappers, path substitution and repository discovery from an arbitrary cwd
+are forbidden.
 
-Both `<git-dir>/info/attributes` and
-`<common-dir>/info/attributes` must be absent by `lstat(ENOENT)`. Relevant
-worktree `.gitattributes` ancestors and `.gitmodules` must also be absent unless
-a later owner-reviewed exact policy explicitly admits them.
+Every process cwd is the prevalidated repository-root filesystem identity.
+Before and after execution, the host revalidates cwd, repository root,
+worktree, Git-dir, common-dir, object-dir, index and local-config routes. A
+rename, replacement, identity change or ambiguity fails closed.
 
-Effective local `filter.*`, `diff.external`, `diff.*.command` and
-`diff.*.textconv` are forbidden. Clean, smudge and process drivers cannot run.
-Hooks, fsmonitor and submodule checkout are disabled for the transition.
+All three argv arrays contain these exact command-scoped entries:
 
-Ordinary `git status` or `git diff` is not authority. Raw cleanliness compares
-stage-zero index blob identities with descriptor-rooted, no-follow raw
-worktree Git-blob identities without attributes or filters. A secondary
-`git diff --no-ext-diff --no-textconv` may be diagnostic only after the
-filter-free surface is already proven.
+- `core.attributesFile=/dev/null`;
+- `core.excludesFile=/dev/null`;
+- `core.autocrlf=false`;
+- `core.pager=`;
+- `core.hooksPath=/dev/null`;
+- `core.fsmonitor=false`;
+- `submodule.recurse=false`.
 
-## 8. Adversarial matrix
+Their exact base environment isolates global and system config to `/dev/null`
+and requires `GIT_CONFIG_NOSYSTEM=1`, `GIT_ATTR_NOSYSTEM=1`,
+`GIT_NO_REPLACE_OBJECTS=1`, `GIT_OPTIONAL_LOCKS=0`,
+`GIT_TERMINAL_PROMPT=0`, empty Git/system pagers, and `LANG=LC_ALL=C`.
+After bounded fetch, `GIT_NO_LAZY_FETCH=1` is additionally mandatory.
 
-The final machine scope contains exact counts computed from its enumerations:
+No independent display command is normative or stored. A display form may be
+produced only by the committed POSIX single-quote derivation over the exact
+environment map and argv array, and its round trip must reproduce both
+structures byte-for-byte.
+
+## 7. Local config and transport closure
+
+The local policy defaults to deny and accepts only:
+
+- the six exact repository-core key/value predicates recorded in the machine
+  scope;
+- exact `remote.origin.url =
+  https://github.com/elenandar/Stellaris-mod-translator.git`;
+- exact standard `remote.origin.fetch`;
+- validated local branch `remote=origin` and matching
+  `merge=refs/heads/<same-branch>`.
+
+Deny wins for all of:
+
+- `include.*` and `includeIf.*`;
+- `url.*.insteadOf` and `url.*.pushInsteadOf`;
+- unexpected remote URL/fetch, `pushurl`, VCS/helper/uploadpack or proxy keys;
+- `credential.*` and `core.askPass`;
+- `protocol.*`;
+- external diff, textconv, filter and pager commands;
+- `core.alternateRefsCommand`, worktree redirection, partial clone, promisor
+  and filter configuration;
+- unknown, duplicate, malformed or ambiguous keys/values.
+
+Askpass, SSH-command, Git-proxy and upper/lower-case HTTP proxy environment
+routes are absent from every exact process environment. Credential keys fail
+at key recognition without value decoding, storage or output. Credential
+values are never a tracked input, evidence field or model-visible value.
+Existing external user authentication remains outside tracked bytes and model
+context; this contract creates no credential authority.
+
+## 8. Reproducible six-probe suite
+
+Every probe definition binds the same canonical public construction profile,
+object inventory algorithm, system Git executable, direct argv, exact
+environment, verified synthetic cwd, modes, no-symlink topology, sentinel
+mechanism, expected exit, expected helper count, expected object-write delta,
+sanitized fields and cleanup.
+
+The common fixture uses only public bytes `baseline\n`, `changed\n`, an exact
+public `.gitattributes` string, an empty sentinel, and a committed helper whose
+only possible effect is appending one public `executed\n` record before exit
+`97`. Temporary repositories are freshly created outside the project and
+deleted after observation. No repository or candidate code participates.
+
+| Probe ID | Definition SHA-256 | Expected result |
+|---|---|---|
+| `clean_filter_sentinel_not_executed` | `48b7a6dd201bf4b0b33538b63fb37e9563ff861947f4a920d0c32e5d32b03bdb` | blob OID, helper `0`, object delta `0` |
+| `process_filter_sentinel_not_executed` | `2e4773cf8d159ddd7cc99e6db53a8f31b785c8d7c349b9f8103b8b791bb69d81` | blob OID, helper `0`, object delta `0` |
+| `external_diff_sentinel_not_executed` | `824003584ae87987f7214643ca0f32a3d3e9c7f9a58e64a742b12738933b3baf` | expected difference, helper `0`, object delta `0` |
+| `textconv_sentinel_not_executed` | `1a2ac0758560d02eac5bd4f37143ad3ee095f96fe16649ae87013ba731889bdc` | expected difference, helper `0`, object delta `0` |
+| `remote_helper_sentinel_not_executed_after_gate` | `cf73ffacddf648ad528e08f27335c730ed11d84974d8d54661adb0dff6d8052e` | missing object, helper `0`, object delta `0` |
+| `object_database_unchanged_during_local_closure` | `e8f6c58ae75a110878b9f75b6584affe762539ddc2f1a8c44754da1c7b34b6c1` | local object present, helper `0`, object delta `0` |
+
+The object inventory walks only regular no-follow files under the synthetic
+`.git/objects`, sorts ASCII relative paths, and hashes rows containing relative
+path, mode, size and content SHA-256. Persisted observations contain only
+counts, hashes and classifications. Absolute paths, private configuration,
+credentials and raw repository content are prohibited.
+
+## 9. Adversarial matrix
+
+Counts are derived from the final enumeration:
 
 | Count | Value |
 |---|---:|
 | preserved case families | `11` |
-| new case families | `17` |
-| total case families | `28` |
-| unique `case_id × variant_id` rows | `87` |
+| new case families | `23` |
+| total case families | `34` |
+| unique `case_id × variant_id` rows | `103` |
 
 The row-set digest is SHA-256 over lexicographically sorted UTF-8 rows encoded
 as `case_id || NUL || variant_id || LF`:
 
-`b0d6ce61f98d35d921418d406b88ba8ed4c4cb2b12aeb3116623019137915f84`.
+`ec114a7f11825e889b1cd5fe578ac3f293a6c542fb23abc5ccfcb5f916b32e63`.
 
-Families 1–11 preserve the exact v4 tree/transition cases. Families 12–28 are:
+Families 29–34 minimally add: missing action/plane membership; wrong or
+substituted cwd; each missing required command-scoped config entry; URL
+rewrite; credential/askpass/protocol routing; and argv/environment display
+derivation mismatch. All fail before transition.
 
-12. regular `objects/info/alternates`;
-13. symlink `objects/info/alternates`;
-14. unreadable `objects/info/alternates`;
-15. regular, symlink or unreadable `objects/info/http-alternates`;
-16. partial clone/promisor/filter and missing blob;
-17. equal root tree with missing recursive tree/blob/required gitlink object;
-18. missing object with no lazy fetch, no helper and no object write;
-19. present or redirected `core.worktree`;
-20. worktree-config extension, redirect or stray `config.worktree`;
-21. executable/repository/config/index/common-dir/object-route injection,
-    including a forbidden pre-gate `rev-list --alternate-refs`;
-22. sparse checkout/index, skip-worktree or assume-unchanged;
-23. Git-dir/common-dir info attributes;
-24. isolated global and system attributes;
-25. nested attributes, local clean/smudge/process filters or unreviewed
-    `.gitmodules`;
-26. external diff, diff command or textconv;
-27. routing/config snapshot drift;
-28. positive complete-local-store same-tree direct transition.
+The authorization stage validates all 103 static definitions but executes only
+the exact six public probe definitions. Full execution of the future matrix,
+repository code or candidate code is not authorized by v6.
 
-Every row resolves to exactly one closed classification. Missing, duplicate,
-overlapping or uncovered rows fail closed. Full future execution of all 87 rows
-is not authorized by v5 and requires a separate owner gate.
+## 10. Evidence and validation boundary
 
-## 9. Authorization-stage sentinel evidence
+The ignored evidence path is:
 
-Current AUTH validation executed exactly six allowed host-level probes in fresh
-temporary synthetic Git repositories:
+`artifacts/m1b/m1b-1a-r1/auth-v6-evidence.json`
 
-1. clean-filter sentinel not executed;
-2. process-filter sentinel not executed;
-3. external-diff sentinel not executed;
-4. textconv sentinel not executed;
-5. post-gate no-lazy remote-helper sentinel not executed;
-6. local-closure object database unchanged.
+It must be strict canonical JSON, regular mode `0600`, `st_nlink=1`, ignored,
+untracked and physically distinct from historical evidence. Each probe stores
+its ID, definition hash, sanitized observation hash, exit classification,
+stdout/stderr byte counts and hashes, sentinel pre/post counts, object
+inventory pre/post digests and object-write delta.
 
-Observed counts:
+Historical v1–v5 evidence is immutable. Required validation uses only trusted
+one-shot host validators: two independent canonical/framed reproductions,
+duplicate/float/non-finite rejection, action/plane closure, argv/env/cwd
+closure, config policy closure, matrix recomputation, the six synthetic probes,
+historical evidence identity, exact input closure, exact six-path diff,
+Markdown-link and leakage checks, and final Git/GitHub parity.
 
-- targeted probes: `6/6`;
-- helper sentinel executions: `0`;
-- object-database writes: `0`;
-- classification: `TARGETED_HOST_SENTINELS_PASS`.
+Repository tests and repository Python, candidate/provider import, parsing,
+tokenization, linting, compilation or execution are deliberately excluded.
+Corpus, mods, Stellaris, Workshop, launcher, model store, Ollama and real
+translation data are not read.
 
-These probes executed no repository or candidate code. They prove only the
-bounded helper/filter containment claims above and do not authorize future
-candidate execution or substitute for future remediation acceptance.
+## 11. Status after publication
 
-Final ignored evidence is
-`artifacts/m1b/m1b-1a-r1/auth-v5-evidence.json`. It must be canonical compact
-JSON, regular mode `0600`, `st_nlink=1`, Git-ignored and not staged. It may
-contain only booleans, counts, hashes, case/variant identifiers,
-classifications and exact public PR identifiers. Absolute local paths,
-credentials, private configuration values and raw repository/private content
-are forbidden.
+`REMEDIATION: READY_FOR_REVIEW`
 
-Evidence v1, v2, v3 and v4 must remain byte-identical, regular mode `0600`,
-`st_nlink=1`, physically unique, contained and unstaged.
+`M1B-1A-R1-AUTH-V6: READY_FOR_OWNER_REVIEW`
 
-## 10. Preserved publication semantics
+`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V6_MERGE`
 
-After effect, and only after every initial gate succeeds, the scope permits:
+`NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`
 
-- one new branch
-  `agent/m1b-1a-r1-postmerge-remediation`;
-- exact branch base: the owner-controlled PR #11 merge commit;
-- exactly one direct create-and-switch with zero tracked content delta;
-- the existing closed `19`-path future-output allowlist;
-- one ordinary remediation commit;
-- one normal non-force push;
-- one new draft PR to `main`;
-- one title/body update of that new draft PR;
-- read-only reconciliation if the push or PR mutation result is ambiguous.
+`PROVIDER_EXECUTION: NOT_STARTED`
 
-Credential handling remains external. The tracked scope does not define PAT,
-Basic-auth, environment-header, netrc, connector or helper-identity protocols.
+`EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`
 
-The scope does not permit rebase, amend, force-push, another branch or PR,
-merge, auto-merge, ready-for-review, main mutation, candidate execution,
-provider/Ollama/model calls, corpus/game/mod/Workshop/launcher reads,
-M1B-1A2, benchmark, product CLI or M2.
+`M1B: NOT_EVALUATED`
 
-## 11. Authorization-stage outputs and stop point
+`M1A: BLOCKED`
 
-The final PR #11 diff against `main` must contain exactly:
+`M2: FORBIDDEN`
 
-1. `README.md`;
-2. `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json`;
-3. `docs/decisions/M1B-1A-R1-AUTH-owner-signoff.md`;
-4. `docs/roadmap.md`;
-5. `docs/specs/m1b-1a-r1-remediation-authorization-contract.md`;
-6. `registry/m1b/m1b-1a-r1-remediation-scope-v5.json`.
-
-Scope v4 must be absent. The ignored v5 evidence must not be staged or appear in
-the PR diff.
-
-The stop point is owner review of draft PR #11:
-
-```text
-SCOPE_CREEP: REMOVED
-CANONICAL_IDENTITIES: PASS
-REMEDIATION: READY_FOR_REVIEW
-PR10: MERGED_OWNER_CONTROLLED_SCOPE_DEVIATION
-PR10_CANDIDATE: INERT_NOT_ADMITTED
-SCOPE_V1: NEVER_EFFECTIVE
-SCOPE_V2: SUPERSEDED_BEFORE_EFFECT
-SCOPE_V3: SUPERSEDED_BEFORE_EFFECT
-SCOPE_V4: SUPERSEDED_BEFORE_EFFECT
-M1B-1A-R1-AUTH-V5: READY_FOR_OWNER_REVIEW
-R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V5_MERGE
-NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED
-PROVIDER_EXECUTION: NOT_STARTED
-EXECUTABLE_TCB_ADMISSION: NOT_GRANTED
-M1B: NOT_EVALUATED
-M1A: BLOCKED
-M2: FORBIDDEN
-PR11: DRAFT
-```
+`PR11: DRAFT`
