@@ -100,14 +100,64 @@ def test_ambiguous_markup_is_an_entry_fallback() -> None:
     assert parsed.diagnostics[0]["reason"] == "ambiguous_markup"
 
 
+def test_late_english_header_rejects_the_whole_file() -> None:
+    data = b'# leading comment\nl_english:\n key:0 "text"\n'
+    with pytest.raises(ParseError, match="english_header_not_first_line"):
+        parse_localisation(data)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b' l_english:\n key:0 "text"\n',
+        b'l_english:\n key:0 "text"\n l_french:\n',
+        b'l_english:\n key:0 "text"\nl_french: trailing text\n',
+        b'l_english:\n key:0 "text"\nl_french:trailing text\n',
+    ],
+)
+def test_malformed_language_header_rejects_the_whole_file(data: bytes) -> None:
+    with pytest.raises(ParseError, match="malformed_language_header"):
+        parse_localisation(data)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b'l_english:\n key:0 "text"\nl_french:\n other:0 "texte"\n',
+        b'l_french:\n key:0 "texte"\nl_english:\n other:0 "text"\n',
+        b'l_english:\n key:0 "text"\nl_english:\n other:0 "more"\n',
+    ],
+)
+def test_multiple_or_mixed_language_sections_reject_the_whole_file(
+    data: bytes,
+) -> None:
+    with pytest.raises(ParseError, match="multiple_language_headers"):
+        parse_localisation(data)
+
+
 @pytest.mark.parametrize(
     ("data", "reason"),
     [
         (b"l_english:\n k:0 \"\xff\"\n", "invalid_utf8"),
         (b'l_english:\r\n k:0 "x"\n', "mixed_newlines"),
         (b'l_english:\r k:0 "x"\r', "bare_cr"),
+        ('l_english:\n k:0 "x\ufeffy"\n'.encode(), "hidden_bom"),
+        (b'l_english:\n k:0 "x\x00y"\n', "nul_control"),
+        (b'l_english:\n k:0 "x\x01y"\n', "c0_control"),
+        (b'l_english:\n k:0 "x\x7fy"\n', "c0_control"),
+        ('l_english:\n k:0 "x\u0085y"\n'.encode(), "c1_control"),
+        ('l_english:\n k:0 "x\u2028y"\n'.encode(), "unicode_line_separator"),
+        ('l_english:\n k:0 "x\u2029y"\n'.encode(), "unicode_line_separator"),
     ],
 )
 def test_invalid_file_is_rejected(data: bytes, reason: str) -> None:
     with pytest.raises(ParseError, match=reason):
         parse_localisation(data)
+
+
+def test_atom_only_result_cannot_delete_nonempty_human_text() -> None:
+    entry = parse_localisation(
+        b'l_english:\n key:0 "Human $NAME$"\n'
+    ).entries[0]
+    with pytest.raises(ValueError, match="human text is empty"):
+        entry.restore_translation("__SMT_TOKEN_0000__")

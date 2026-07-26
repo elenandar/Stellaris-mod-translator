@@ -10,7 +10,14 @@ class ParseError(ValueError):
     """The whole file is unsafe to process."""
 
 
-_HEADER = re.compile(rb"^(?P<indent>[ \t]*)l_english:(?P<tail>[ \t]*(?:#.*)?)$")
+_HEADER = re.compile(rb"^l_english:(?P<tail>[ \t]*(?:#.*)?)$")
+_LANGUAGE_HEADER = re.compile(
+    rb"^l_(?P<language>[A-Za-z][A-Za-z0-9_]*):"
+    rb"(?P<tail>[ \t]*(?:#.*)?)$"
+)
+_LANGUAGE_HEADER_LIKE = re.compile(
+    rb"^[ \t]*l_[A-Za-z][A-Za-z0-9_]*[ \t]*:(?![0-9])"
+)
 _ENTRY = re.compile(
     rb'^(?P<indent>[ \t]*)(?P<key>[A-Za-z0-9_.-]+)(?P<precolon>[ \t]*):'
     rb'(?P<version>[0-9]*)(?P<space>[ \t]+)"'
@@ -60,8 +67,26 @@ class Entry:
     def restore_translation(self, translated: str) -> str:
         if not isinstance(translated, str):
             raise ValueError("translation must be a string")
-        if any(ord(char) < 0x20 or ord(char) == 0x7F for char in translated):
+        try:
+            translated.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ValueError("translation is not UTF-8 encodable") from exc
+        translated_human_text = translated
+        for token in self.protected:
+            translated_human_text = translated_human_text.replace(
+                token.placeholder, ""
+            )
+        if self._has_human_text() and not translated_human_text.strip():
+            raise ValueError("translation human text is empty")
+        if any(
+            ord(char) < 0x20
+            or ord(char) == 0x7F
+            or 0x80 <= ord(char) <= 0x9F
+            for char in translated
+        ):
             raise ValueError("translation contains control characters")
+        if any(char in "\u2028\u2029\ufeff" for char in translated):
+            raise ValueError("translation contains unsafe Unicode separators or BOM")
         if any(char in _UNSAFE_UNPROTECTED for char in translated):
             reduced = translated
             for token in self.protected:
@@ -85,6 +110,12 @@ class Entry:
         for token in self.protected:
             restored = restored.replace(token.placeholder, token.original)
         return self.leading_whitespace + restored + self.trailing_whitespace
+
+    def _has_human_text(self) -> bool:
+        human_text = self.model_text()
+        for token in self.protected:
+            human_text = human_text.replace(token.placeholder, "")
+        return bool(human_text.strip())
 
 
 @dataclass(frozen=True)
@@ -112,7 +143,7 @@ class ParsedFile:
             match = _HEADER.fullmatch(body)
             assert match is not None
             lines[self.header_line] = (
-                match.group("indent") + b"l_russian:" + match.group("tail") + ending
+                b"l_russian:" + match.group("tail") + ending
             )
         for entry in self.entries:
             if entry.line_index not in replacements:
@@ -131,9 +162,22 @@ def parse_localisation(data: bytes) -> ParsedFile:
     bom = data.startswith(b"\xef\xbb\xbf")
     payload = data[3:] if bom else data
     try:
-        payload.decode("utf-8")
+        decoded = payload.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ParseError("invalid_utf8") from exc
+    if "\ufeff" in decoded:
+        raise ParseError("hidden_bom")
+    if "\x00" in decoded:
+        raise ParseError("nul_control")
+    if any(
+        (ord(char) < 0x20 and char not in "\t\r\n") or ord(char) == 0x7F
+        for char in decoded
+    ):
+        raise ParseError("c0_control")
+    if any(0x80 <= ord(char) <= 0x9F for char in decoded):
+        raise ParseError("c1_control")
+    if any(char in "\u2028\u2029" for char in decoded):
+        raise ParseError("unicode_line_separator")
     if b"\r" in payload.replace(b"\r\n", b""):
         raise ParseError("bare_cr")
     has_crlf = b"\r\n" in payload
@@ -148,16 +192,44 @@ def parse_localisation(data: bytes) -> ParsedFile:
     elif payload and not lines:
         lines = (payload,)
 
-    header_line: int | None = None
-    entries: list[Entry] = []
-    diagnostics: list[dict[str, object]] = []
+    language_headers: list[tuple[int, re.Match[bytes]]] = []
     for index, raw in enumerate(lines):
         body, _ = _split_ending(raw)
-        header = _HEADER.fullmatch(body)
-        if header:
-            if header_line is not None:
-                raise ParseError("duplicate_english_header")
-            header_line = index
+        header = _LANGUAGE_HEADER.fullmatch(body)
+        if header is not None:
+            language_headers.append((index, header))
+        elif _LANGUAGE_HEADER_LIKE.match(body):
+            raise ParseError("malformed_language_header")
+    if not language_headers:
+        raise ParseError("missing_language_header")
+    if len(language_headers) != 1:
+        raise ParseError("multiple_language_headers")
+
+    language_line, language_header = language_headers[0]
+    is_english = language_header.group("language") == b"english"
+    if is_english and language_line != 0:
+        raise ParseError("english_header_not_first_line")
+
+    header_line: int | None = language_line if is_english else None
+    entries: list[Entry] = []
+    diagnostics: list[dict[str, object]] = []
+    if not is_english:
+        parsed = ParsedFile(
+            original=data,
+            bom=bom,
+            newline=newline,
+            lines=lines,
+            header_line=None,
+            entries=(),
+            diagnostics=(),
+        )
+        if parsed.render() != data:
+            raise AssertionError("lossless render invariant failed")
+        return parsed
+
+    for index, raw in enumerate(lines):
+        body, _ = _split_ending(raw)
+        if index == header_line:
             continue
         match = _ENTRY.fullmatch(body)
         if match:

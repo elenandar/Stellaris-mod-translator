@@ -13,6 +13,11 @@ from typing import Callable
 
 from .ollama import OllamaClient, OllamaError
 from .parser import ParseError, ParsedFile, parse_localisation
+from .publication import (
+    AtomicPublicationUnavailable,
+    DestinationExistsError,
+    atomic_publish_directory_no_replace,
+)
 
 
 class SafetyError(RuntimeError):
@@ -54,7 +59,7 @@ def translate_mod(
         return report
 
     client = client_factory()
-    identity = client.exact_model(model)
+    identity = _validated_model_identity(client.exact_model(model), model)
     report["model"] = identity
     temp = Path(
         tempfile.mkdtemp(prefix=f".{output_abs.name}.tmp-", dir=output_abs.parent)
@@ -100,7 +105,16 @@ def translate_mod(
             (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
         )
         _verify_snapshot(source, files)
-        os.rename(temp, output_abs)
+        final_identity = _validated_model_identity(client.exact_model(model), model)
+        if final_identity != identity:
+            raise SafetyError("model_identity_changed")
+        _verify_snapshot(source, files)
+        try:
+            atomic_publish_directory_no_replace(temp, output_abs)
+        except DestinationExistsError as exc:
+            raise SafetyError("output_appeared_before_publication") from exc
+        except AtomicPublicationUnavailable as exc:
+            raise SafetyError("atomic_no_replace_unavailable") from exc
     except BaseException:
         if temp.exists():
             shutil.rmtree(temp)
@@ -280,6 +294,19 @@ def _write_new(path: Path, data: bytes) -> None:
         except OSError:
             pass
         raise
+
+
+def _validated_model_identity(
+    identity: object, requested_tag: str
+) -> dict[str, str]:
+    if (
+        not isinstance(identity, dict)
+        or identity.get("tag") != requested_tag
+        or not isinstance(identity.get("digest"), str)
+        or not identity["digest"]
+    ):
+        raise OllamaError("invalid exact model identity")
+    return {"tag": requested_tag, "digest": identity["digest"]}
 
 
 def _stat_identity(value: os.stat_result) -> tuple[int, int, int, int]:

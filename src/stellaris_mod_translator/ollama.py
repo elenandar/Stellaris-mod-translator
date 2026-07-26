@@ -34,15 +34,17 @@ class OllamaClient:
         models = payload.get("models")
         if not isinstance(models, list):
             raise OllamaError("invalid model inventory")
-        for model in models:
-            if (
-                isinstance(model, dict)
-                and model.get("name") == tag
-                and isinstance(model.get("digest"), str)
-                and model["digest"]
-            ):
-                return {"tag": tag, "digest": model["digest"]}
-        raise OllamaError(f"exact model tag not installed: {tag}")
+        matches = [
+            model
+            for model in models
+            if isinstance(model, dict) and model.get("name") == tag
+        ]
+        if len(matches) != 1:
+            raise OllamaError(f"exact model tag not installed exactly once: {tag}")
+        digest = matches[0].get("digest")
+        if not isinstance(digest, str) or not digest:
+            raise OllamaError("exact model digest is missing")
+        return {"tag": tag, "digest": digest}
 
     def translate(self, *, tag: str, text: str) -> str:
         prompt = (
@@ -68,6 +70,10 @@ class OllamaClient:
                 },
             },
         )
+        if payload.get("model") != tag:
+            raise OllamaError("Ollama response model does not match requested tag")
+        if payload.get("done") is not True:
+            raise OllamaError("Ollama response is not a complete terminal result")
         response = payload.get("response")
         if not isinstance(response, str):
             raise OllamaError("Ollama response is not a string")
