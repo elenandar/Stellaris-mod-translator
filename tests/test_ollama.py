@@ -16,6 +16,8 @@ _ABSENT = object()
 
 class Handler(BaseHTTPRequestHandler):
     generate_response = {"translation": "Привет __SMT_TOKEN_0000__"}
+    generate_raw_response: object = _ABSENT
+    generate_thinking: object = _ABSENT
     generate_calls = 0
     generate_model = "synthetic:1"
     generate_done: object = True
@@ -48,13 +50,19 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers["Content-Length"])
         request = json.loads(self.rfile.read(length))
         assert request["stream"] is False
+        assert request["think"] is False
         assert request["model"] == "synthetic:1"
         assert request["format"]["additionalProperties"] is False
+        raw_response = type(self).generate_raw_response
+        if raw_response is _ABSENT:
+            raw_response = json.dumps(type(self).generate_response)
         response = {
             "model": type(self).generate_model,
             "done": type(self).generate_done,
-            "response": json.dumps(type(self).generate_response),
+            "response": raw_response,
         }
+        if type(self).generate_thinking is not _ABSENT:
+            response["thinking"] = type(self).generate_thinking
         if type(self).generate_done_reason is not _ABSENT:
             response["done_reason"] = type(self).generate_done_reason
         self._send(response)
@@ -74,6 +82,8 @@ def fake_ollama(monkeypatch: pytest.MonkeyPatch):
     Handler.generate_model = "synthetic:1"
     Handler.generate_done = True
     Handler.generate_done_reason = _ABSENT
+    Handler.generate_raw_response = _ABSENT
+    Handler.generate_thinking = _ABSENT
     Handler.inventory_calls = 0
     Handler.inventory_digests = ["sha256:synthetic"]
     Handler.generate_response = {
@@ -160,6 +170,32 @@ def test_nested_or_non_string_response_is_rejected(fake_ollama) -> None:
     with pytest.raises(OllamaError, match="structured"):
         OllamaClient().translate(tag="synthetic:1", text="x")
     Handler.generate_response = {"translation": "x"}
+
+
+def test_empty_response_with_nonempty_thinking_is_english_fallback(
+    fake_ollama, tmp_path
+) -> None:
+    Handler.generate_raw_response = ""
+    Handler.generate_thinking = json.dumps(
+        {"translation": "Нельзя использовать как перевод"}
+    )
+    source_file = (
+        tmp_path / "source/localisation/english/demo_l_english.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_bytes = b'l_english:\n key:0 "Original English"\n'
+    source_file.write_bytes(source_bytes)
+    output = tmp_path / "candidate"
+
+    report = translate_mod(tmp_path / "source", output, "synthetic:1")
+
+    candidate = output / "localisation/russian/demo_l_russian.yml"
+    assert candidate.read_bytes() == (
+        b'l_russian:\n key:0 "Original English"\n'
+    )
+    assert report["counts"]["translated_occurrences"] == 0
+    assert report["counts"]["fallback_occurrences"] == 1
+    assert source_file.read_bytes() == source_bytes
 
 
 @pytest.mark.parametrize(

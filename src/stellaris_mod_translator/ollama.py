@@ -62,6 +62,7 @@ class OllamaClient:
                 "model": tag,
                 "prompt": prompt,
                 "stream": False,
+                "think": False,
                 "format": {
                     "type": "object",
                     "properties": {"translation": {"type": "string"}},
