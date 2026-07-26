@@ -40,6 +40,14 @@ python3 -m stellaris_mod_translator translate-mod \
 новый output path и создаёт `localisation/russian/**` вместе с локальным
 `translation-report.json`. Fallback остаётся на английском и явно учитывается
 в отчёте; candidate не получает `editorially_approved` автоматически.
+Immediate layer `localisation/replace/**` в MVP-0 не поддерживается: такие
+файлы пропускаются без вызова Ollama и без создания
+`localisation/russian/replace/**`.
+
+Известная граница MVP-0: атомарная публикация защищает от появления конечного
+destination, но не обещает защиту от злонамеренного конкурирующего процесса
+того же macOS UID, который переименовывает output-parent во время выполнения.
+Descriptor-bound filesystem framework остаётся вне этого milestone.
 
 Для поставляемого с macOS старого `pip`, если editable install запрашивает
 `wheel`, доступен полностью локальный совместимый запуск:

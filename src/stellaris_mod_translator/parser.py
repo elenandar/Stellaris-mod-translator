@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import unicodedata
 
 
 class ParseError(ValueError):
@@ -76,7 +77,12 @@ class Entry:
             translated_human_text = translated_human_text.replace(
                 token.placeholder, ""
             )
-        if self._has_human_text() and not translated_human_text.strip():
+        if "__SMT_" in translated_human_text:
+            raise ValueError("foreign protected token")
+        if (
+            self._has_human_text()
+            and not _contains_visible_human_text(translated_human_text)
+        ):
             raise ValueError("translation human text is empty")
         if any(
             ord(char) < 0x20
@@ -85,13 +91,15 @@ class Entry:
             for char in translated
         ):
             raise ValueError("translation contains control characters")
+        if any(unicodedata.category(char) == "Cf" for char in translated):
+            raise ValueError("translation contains Unicode format controls")
         if any(char in "\u2028\u2029\ufeff" for char in translated):
             raise ValueError("translation contains unsafe Unicode separators or BOM")
         if any(char in _UNSAFE_UNPROTECTED for char in translated):
-            reduced = translated
-            for token in self.protected:
-                reduced = reduced.replace(token.placeholder, "")
-            if any(char in _UNSAFE_UNPROTECTED for char in reduced):
+            if any(
+                char in _UNSAFE_UNPROTECTED
+                for char in translated_human_text
+            ):
                 raise ValueError("translation introduces protected syntax")
 
         positions: list[int] = []
@@ -103,10 +111,6 @@ class Entry:
         if positions != sorted(positions):
             raise ValueError("protected token order changed")
 
-        expected = {token.placeholder for token in self.protected}
-        foreign = set(re.findall(r"__SMT_[A-Z]+_[0-9]{4}__", restored)) - expected
-        if foreign:
-            raise ValueError("foreign protected token")
         for token in self.protected:
             restored = restored.replace(token.placeholder, token.original)
         return self.leading_whitespace + restored + self.trailing_whitespace
@@ -115,7 +119,7 @@ class Entry:
         human_text = self.model_text()
         for token in self.protected:
             human_text = human_text.replace(token.placeholder, "")
-        return bool(human_text.strip())
+        return _contains_visible_human_text(human_text)
 
 
 @dataclass(frozen=True)
@@ -176,6 +180,8 @@ def parse_localisation(data: bytes) -> ParsedFile:
         raise ParseError("c0_control")
     if any(0x80 <= ord(char) <= 0x9F for char in decoded):
         raise ParseError("c1_control")
+    if any(unicodedata.category(char) == "Cf" for char in decoded):
+        raise ParseError("unicode_format_control")
     if any(char in "\u2028\u2029" for char in decoded):
         raise ParseError("unicode_line_separator")
     if b"\r" in payload.replace(b"\r\n", b""):
@@ -195,6 +201,8 @@ def parse_localisation(data: bytes) -> ParsedFile:
     language_headers: list[tuple[int, re.Match[bytes]]] = []
     for index, raw in enumerate(lines):
         body, _ = _split_ending(raw)
+        if _ENTRY.fullmatch(body) is not None:
+            continue
         header = _LANGUAGE_HEADER.fullmatch(body)
         if header is not None:
             language_headers.append((index, header))
@@ -299,6 +307,15 @@ def _protected_tokens(value: str) -> tuple[ProtectedToken, ...]:
     if any(delimiter in residue for delimiter in "$[]£§"):
         raise ParseError("ambiguous_markup")
     return tuple(tokens)
+
+
+def _contains_visible_human_text(value: str) -> bool:
+    return any(
+        not char.isspace()
+        and not unicodedata.category(char).startswith("M")
+        and unicodedata.category(char) != "Cf"
+        for char in value
+    )
 
 
 def _split_ending(line: bytes) -> tuple[bytes, bytes]:

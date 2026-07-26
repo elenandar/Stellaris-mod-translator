@@ -58,9 +58,18 @@ def translate_mod(
     if dry_run:
         return report
 
-    client = client_factory()
-    identity = _validated_model_identity(client.exact_model(model), model)
-    report["model"] = identity
+    needs_model = any(
+        item.parsed is not None
+        and item.parsed.is_english
+        and item.parsed.entries
+        for item in files
+    )
+    client: OllamaClient | None = None
+    identity: dict[str, str] | None = None
+    if needs_model:
+        client = client_factory()
+        identity = _validated_model_identity(client.exact_model(model), model)
+        report["model"] = identity
     temp = Path(
         tempfile.mkdtemp(prefix=f".{output_abs.name}.tmp-", dir=output_abs.parent)
     )
@@ -74,6 +83,8 @@ def translate_mod(
             replacements: dict[int, str] = {}
             for entry in parsed.entries:
                 try:
+                    if client is None:
+                        raise SafetyError("model_client_unavailable")
                     result = client.translate(tag=model, text=entry.model_text())
                     replacements[entry.line_index] = entry.restore_translation(result)
                     translated += 1
@@ -105,9 +116,12 @@ def translate_mod(
             (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
         )
         _verify_snapshot(source, files)
-        final_identity = _validated_model_identity(client.exact_model(model), model)
-        if final_identity != identity:
-            raise SafetyError("model_identity_changed")
+        if client is not None:
+            final_identity = _validated_model_identity(
+                client.exact_model(model), model
+            )
+            if final_identity != identity:
+                raise SafetyError("model_identity_changed")
         _verify_snapshot(source, files)
         try:
             atomic_publish_directory_no_replace(temp, output_abs)
@@ -179,12 +193,16 @@ def _snapshot(source: Path) -> list[SourceFile]:
             if identity_before != identity_after:
                 raise SafetyError("source_changed_during_read")
             digest = hashlib.sha256(data).hexdigest()
-            try:
-                parsed = parse_localisation(data)
-                error = None
-            except ParseError as exc:
+            if _is_replace_layer(relative):
                 parsed = None
-                error = str(exc)
+                error = "replace_layer_unsupported"
+            else:
+                try:
+                    parsed = parse_localisation(data)
+                    error = None
+                except ParseError as exc:
+                    parsed = None
+                    error = str(exc)
             results.append(
                 SourceFile(
                     relative=relative,
@@ -218,13 +236,21 @@ def _base_report(source: Path, files: list[SourceFile]) -> dict[str, object]:
         hash_inputs.append((item.relative, item.data))
         if item.error:
             skipped += 1
-            diagnostics.append(
-                {
-                    "path": item.relative.as_posix(),
-                    "code": "file_skipped",
-                    "reason": item.error,
-                }
-            )
+            if item.error == "replace_layer_unsupported":
+                diagnostics.append(
+                    {
+                        "path": item.relative.as_posix(),
+                        "code": "replace_layer_unsupported",
+                    }
+                )
+            else:
+                diagnostics.append(
+                    {
+                        "path": item.relative.as_posix(),
+                        "code": "file_skipped",
+                        "reason": item.error,
+                    }
+                )
         elif item.parsed and item.parsed.is_english:
             english_files += 1
             occurrences += len(item.parsed.entries) + len(item.parsed.diagnostics)
@@ -260,6 +286,8 @@ def _candidate_relative(relative: Path) -> Path:
     tail = parts[1:]
     if tail and tail[0].lower() == "english":
         tail = tail[1:]
+    if tail and tail[0].lower() == "replace":
+        raise SafetyError("replace_layer_unsupported")
     filename = tail[-1]
     if filename.endswith("_l_english.yml"):
         filename = filename[: -len("_l_english.yml")] + "_l_russian.yml"
@@ -268,6 +296,20 @@ def _candidate_relative(relative: Path) -> Path:
     if ".." in candidate.parts:
         raise SafetyError("path_traversal")
     return candidate
+
+
+def _is_replace_layer(relative: Path) -> bool:
+    parts = relative.parts
+    return (
+        len(parts) >= 3
+        and parts[0] == "localisation"
+        and parts[1].lower() == "replace"
+    ) or (
+        len(parts) >= 4
+        and parts[0] == "localisation"
+        and parts[1].lower() == "english"
+        and parts[2].lower() == "replace"
+    )
 
 
 def _tree_hash(items: list[tuple[Path, bytes]]) -> str:

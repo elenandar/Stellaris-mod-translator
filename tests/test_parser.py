@@ -46,6 +46,21 @@ def test_preserves_comments_whitespace_versions_duplicates_and_escapes() -> None
     assert rendered.endswith(b'\tsame.key: "Second"  # two\r\n')
 
 
+def test_versionless_l_prefixed_keys_are_entries_not_language_headers() -> None:
+    data = (
+        b'l_english:\n'
+        b' l_cluster: "Cluster text"\n'
+        b' l_english_name: "English name"\n'
+    )
+    parsed = parse_localisation(data)
+
+    assert [entry.key for entry in parsed.entries] == [
+        "l_cluster",
+        "l_english_name",
+    ]
+    assert parsed.render() == data
+
+
 def test_every_supported_atom_is_opaque_and_restored() -> None:
     data = (
         'l_english:\n k:0 "Hi $NAME$ [Root.GetName] £energy£ §Ggreen§!"\n'
@@ -74,6 +89,24 @@ def test_every_supported_atom_is_opaque_and_restored() -> None:
 def test_atom_reorder_deletion_or_foreign_id_is_rejected(translation: str) -> None:
     entry = parse_localisation(b'l_english:\n k:0 "x $A$ [B]"\n').entries[0]
     with pytest.raises(ValueError):
+        entry.restore_translation(translation)
+
+
+@pytest.mark.parametrize(
+    "translation",
+    [
+        "Текст __SMT_TOKEN_0000__ __SMT_TOKEN_1__",
+        "Текст __SMT_TOKEN_0000__ __SMT_OTHER__",
+        "Текст __SMT_TOKEN_0000__ __SMT_TOKEN_999999_extra",
+    ],
+)
+def test_any_unexpected_reserved_namespace_is_rejected(
+    translation: str,
+) -> None:
+    entry = parse_localisation(
+        b'l_english:\n k:0 "Human $A$"\n'
+    ).entries[0]
+    with pytest.raises(ValueError, match="foreign protected token"):
         entry.restore_translation(translation)
 
 
@@ -146,6 +179,9 @@ def test_multiple_or_mixed_language_sections_reject_the_whole_file(
         (b'l_english:\n k:0 "x\x01y"\n', "c0_control"),
         (b'l_english:\n k:0 "x\x7fy"\n', "c0_control"),
         ('l_english:\n k:0 "x\u0085y"\n'.encode(), "c1_control"),
+        ('l_english:\n k:0 "x\u200by"\n'.encode(), "unicode_format_control"),
+        ('l_english:\n k:0 "x\u202ey"\n'.encode(), "unicode_format_control"),
+        ('l_english:\n k:0 "x\u2066y"\n'.encode(), "unicode_format_control"),
         ('l_english:\n k:0 "x\u2028y"\n'.encode(), "unicode_line_separator"),
         ('l_english:\n k:0 "x\u2029y"\n'.encode(), "unicode_line_separator"),
     ],

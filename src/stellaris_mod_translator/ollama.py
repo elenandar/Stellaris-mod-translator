@@ -74,6 +74,8 @@ class OllamaClient:
             raise OllamaError("Ollama response model does not match requested tag")
         if payload.get("done") is not True:
             raise OllamaError("Ollama response is not a complete terminal result")
+        if "done_reason" in payload and payload["done_reason"] != "stop":
+            raise OllamaError("Ollama response has an unsupported terminal reason")
         response = payload.get("response")
         if not isinstance(response, str):
             raise OllamaError("Ollama response is not a string")

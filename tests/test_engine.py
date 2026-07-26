@@ -89,6 +89,35 @@ def test_translation_changes_only_allowed_spans_and_keeps_source(
     assert persisted["model"]["digest"] == "sha256:synthetic"
 
 
+def test_versionless_l_prefixed_entries_are_translated(
+    tmp_path: Path,
+) -> None:
+    source_bytes = (
+        b'l_english:\n'
+        b' l_cluster: "Hello"\n'
+        b' l_english_name: "Hello name"\n'
+    )
+    source = make_source(tmp_path, source_bytes)
+    source_file = source / "localisation/english/demo_l_english.yml"
+    output = tmp_path / "candidate"
+    FakeClient.calls = 0
+
+    report = translate_mod(
+        source, output, "synthetic:1", client_factory=FakeClient
+    )
+
+    assert (
+        output / "localisation/russian/demo_l_russian.yml"
+    ).read_bytes() == (
+        'l_russian:\n'
+        ' l_cluster: "Привет"\n'
+        ' l_english_name: "Привет name"\n'
+    ).encode()
+    assert report["counts"]["translated_occurrences"] == 2
+    assert FakeClient.calls == 2
+    assert source_file.read_bytes() == source_bytes
+
+
 def test_dry_run_never_calls_provider_or_writes(tmp_path: Path) -> None:
     source = make_source(tmp_path)
     output = tmp_path / "candidate"
@@ -259,6 +288,13 @@ def test_destination_appearing_at_publication_is_preserved(
         "text\u2028",
         "text\u2029",
         "text\ufeff",
+        "text\u200b",
+        "text\u202e",
+        "text\u2066",
+        "\u0301",
+        " \t\u0301\u034f ",
+        "Text __SMT_TOKEN_0000__ __SMT_OTHER__",
+        "Text __SMT_TOKEN_0000__ __SMT_TOKEN_123456__",
     ],
 )
 def test_invalid_translation_falls_back_to_exact_english_and_keeps_source(
@@ -292,6 +328,8 @@ def test_invalid_translation_falls_back_to_exact_english_and_keeps_source(
         'l_english:\n key:0 "x\ufeffy"\n'.encode(),
         b'l_english:\n key:0 "x\x00y"\n',
         'l_english:\n key:0 "x\u0085y"\n'.encode(),
+        'l_english:\n key:0 "x\u200by"\n'.encode(),
+        'l_english:\n key:0 "x\u202ey"\n'.encode(),
         'l_english:\n key:0 "x\u2028y"\n'.encode(),
         'l_english:\n key:0 "x\u2029y"\n'.encode(),
     ],
@@ -312,6 +350,65 @@ def test_unsafe_file_is_skipped_without_translation_or_candidate_bytes(
     assert FakeClient.calls == 0
     assert not (output / "localisation").exists()
     assert source_file.read_bytes() == unsafe_source
+
+
+def test_replace_layer_is_skipped_without_provider_or_source_mutation(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source_file = source / "localisation/replace/demo_l_english.yml"
+    source_file.parent.mkdir(parents=True)
+    source_bytes = b'l_english:\n key:0 "Hello"\n'
+    source_file.write_bytes(source_bytes)
+    output = tmp_path / "candidate"
+
+    def forbidden():
+        raise AssertionError("provider must not be constructed")
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        client_factory=forbidden,
+    )
+
+    assert report["counts"]["skipped_files"] == 1
+    assert report["counts"]["english_files"] == 0
+    assert report["diagnostics"] == [
+        {
+            "path": "localisation/replace/demo_l_english.yml",
+            "code": "replace_layer_unsupported",
+        }
+    ]
+    assert not (output / "localisation").exists()
+    assert not (output / "localisation/russian/replace").exists()
+    assert source_file.read_bytes() == source_bytes
+
+
+def test_replace_layer_does_not_add_calls_or_candidate_paths(
+    tmp_path: Path,
+) -> None:
+    source = make_source(
+        tmp_path,
+        b'l_english:\n key:0 "Hello"\n',
+    )
+    replace_file = (
+        source / "localisation/english/replace/extra_l_english.yml"
+    )
+    replace_file.parent.mkdir(parents=True)
+    replace_bytes = b'l_english:\n replace_key:0 "Do not translate"\n'
+    replace_file.write_bytes(replace_bytes)
+    output = tmp_path / "candidate"
+    FakeClient.calls = 0
+
+    report = translate_mod(
+        source, output, "synthetic:1", client_factory=FakeClient
+    )
+
+    assert FakeClient.calls == 1
+    assert report["counts"]["skipped_files"] == 1
+    assert not (output / "localisation/russian/replace").exists()
+    assert replace_file.read_bytes() == replace_bytes
 
 
 def test_filename_without_language_suffix_is_not_reconstructed(

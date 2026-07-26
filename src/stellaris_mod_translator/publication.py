@@ -46,6 +46,10 @@ def atomic_publish_directory_no_replace(source: Path, destination: Path) -> None
     error_number = ctypes.get_errno()
     if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
         raise DestinationExistsError("destination already exists")
+    if error_number in {errno.ENOTSUP, errno.EOPNOTSUPP}:
+        raise AtomicPublicationUnavailable(
+            "renamex_np(RENAME_EXCL) is unsupported"
+        )
     raise OSError(
         error_number,
         os.strerror(error_number),
