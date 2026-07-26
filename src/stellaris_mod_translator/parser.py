@@ -128,20 +128,23 @@ class ParsedFile:
     bom: bool
     newline: bytes
     lines: tuple[bytes, ...]
-    header_line: int | None
+    header_line: int
+    language: str
     entries: tuple[Entry, ...]
     diagnostics: tuple[dict[str, object], ...]
 
     @property
     def is_english(self) -> bool:
-        return self.header_line is not None
+        return self.language == "english"
 
     def render(
         self, replacements: dict[int, str] | None = None, *, russian_header: bool = False
     ) -> bytes:
         replacements = replacements or {}
         lines = list(self.lines)
-        if russian_header and self.header_line is not None:
+        if russian_header:
+            if not self.is_english:
+                raise ValueError("only English localisation can be rendered as Russian")
             raw = lines[self.header_line]
             body, ending = _split_ending(raw)
             match = _HEADER.fullmatch(body)
@@ -218,26 +221,13 @@ def parse_localisation(data: bytes) -> ParsedFile:
     if is_english and language_line != 0:
         raise ParseError("english_header_not_first_line")
 
-    header_line: int | None = language_line if is_english else None
+    language = language_header.group("language").decode("ascii")
     entries: list[Entry] = []
     diagnostics: list[dict[str, object]] = []
-    if not is_english:
-        parsed = ParsedFile(
-            original=data,
-            bom=bom,
-            newline=newline,
-            lines=lines,
-            header_line=None,
-            entries=(),
-            diagnostics=(),
-        )
-        if parsed.render() != data:
-            raise AssertionError("lossless render invariant failed")
-        return parsed
 
     for index, raw in enumerate(lines):
         body, _ = _split_ending(raw)
-        if index == header_line:
+        if index == language_line:
             continue
         match = _ENTRY.fullmatch(body)
         if match:
@@ -278,7 +268,8 @@ def parse_localisation(data: bytes) -> ParsedFile:
         bom=bom,
         newline=newline,
         lines=lines,
-        header_line=header_line,
+        header_line=language_line,
+        language=language,
         entries=tuple(entries),
         diagnostics=tuple(diagnostics),
     )

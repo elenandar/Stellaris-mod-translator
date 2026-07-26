@@ -61,6 +61,21 @@ def test_versionless_l_prefixed_keys_are_entries_not_language_headers() -> None:
     assert parsed.render() == data
 
 
+def test_russian_candidate_is_losslessly_parsed_for_review_alignment() -> None:
+    data = (
+        'l_russian:\n'
+        ' duplicate.key:0 "Первый $NAME$"\n'
+        ' duplicate.key:0 "Второй \\"текст\\""\n'
+    ).encode()
+    parsed = parse_localisation(data)
+
+    assert parsed.language == "russian"
+    assert parsed.is_english is False
+    assert len(parsed.entries) == 2
+    assert parsed.entries[0].key == parsed.entries[1].key
+    assert parsed.render() == data
+
+
 def test_every_supported_atom_is_opaque_and_restored() -> None:
     data = (
         'l_english:\n k:0 "Hi $NAME$ [Root.GetName] £energy£ §Ggreen§!"\n'

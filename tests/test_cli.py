@@ -55,3 +55,20 @@ def test_occurrence_limit_is_optional() -> None:
         ]
     )
     assert args.max_occurrences_per_file is None
+
+
+def test_build_review_pack_requires_all_three_paths() -> None:
+    args = parser().parse_args(
+        [
+            "build-review-pack",
+            "--source-mod",
+            "/source",
+            "--candidate",
+            "/candidate",
+            "--output",
+            "/review",
+        ]
+    )
+    assert str(args.source_mod) == "/source"
+    assert str(args.candidate) == "/candidate"
+    assert str(args.output) == "/review"

@@ -9,8 +9,8 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-1` — текущий bounded-pilot milestone поверх рабочего `MVP-0`. Owner
-decision от 26 июля 2026 года
+`MVP-2` — текущий local editorial review milestone поверх immutable bounded
+pilot из `MVP-1`, слитого в PR №13. Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
 исторический evidence и не являются runtime authority для нового CLI.
@@ -40,6 +40,11 @@ python3 -m stellaris_mod_translator translate-mod \
   --output /path/to/new-candidate \
   --model exact-ollama-tag \
   --max-occurrences-per-file 3
+
+python3 -m stellaris_mod_translator build-review-pack \
+  --source-mod /path/to/read-only-source-mod \
+  --candidate /path/to/read-only-candidate \
+  --output /path/to/new-review-pack
 ```
 
 `--dry-run` не вызывает Ollama и ничего не записывает. Обычный запуск требует
@@ -75,6 +80,29 @@ deferred — поддержанный occurrence, который bounded run н�
 Accepted unchanged не превращается во fallback и, как весь candidate, требует
 human review. Наличие кириллицы не является техническим условием принятия:
 имена и термины могут законно остаться латиницей.
+
+## Локальный editorial review pack
+
+`build-review-pack` не вызывает Ollama и не переводит текст повторно. Текущий
+MVP-2 builder принимает только exact identities утверждённого pilot
+candidate, повторно сопоставляет source/candidate occurrences по файлу,
+строке и ordinal, проверяет protected atoms, escapes, report counters и
+source/candidate/report SHA-256, а затем атомарно публикует новый output без
+перезаписи существующего пути.
+
+Откройте созданный `index.html` напрямую через `file://`. Pack автономен:
+сервер, интернет, CDN, web fonts и внешний frontend runtime не нужны.
+Промежуточные решения хранятся в browser `localStorage` с ключом exact pack
+fingerprint. Экспорт и импорт decisions JSON выполняются локально; JSON
+содержит только occurrence identities, решения, пользовательскую редакцию,
+комментарии/теги и span hashes, но не полный source corpus.
+
+Решение `accept` означает принятие человеком только конкретного occurrence.
+Оно не назначает `editorially_approved` всему моду и не доказывает
+литературную или lore-готовность остальных строк. Применение экспортированных
+решений обратно к candidate ещё не реализовано и в MVP-2 запрещено. Generated
+`index.html`, `review-pack-summary.json` и decisions JSON остаются локальными
+артефактами вне Git.
 
 Известная граница MVP-0: атомарная публикация защищает от появления конечного
 destination, но не обещает защиту от злонамеренного конкурирующего процесса

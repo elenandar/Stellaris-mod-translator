@@ -7,6 +7,7 @@ import sys
 
 from .engine import SafetyError, inspect_mod, translate_mod
 from .ollama import OllamaError
+from .review import build_review_pack
 
 
 def _occurrence_limit(value: str) -> int:
@@ -46,6 +47,14 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     translate.add_argument("--dry-run", action="store_true")
+
+    review = commands.add_parser(
+        "build-review-pack",
+        help="build an offline editorial review pack from an exact candidate",
+    )
+    review.add_argument("--source-mod", required=True, type=Path)
+    review.add_argument("--candidate", required=True, type=Path)
+    review.add_argument("--output", required=True, type=Path)
     return root
 
 
@@ -54,13 +63,19 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "inspect":
             report = inspect_mod(args.source_mod)
-        else:
+        elif args.command == "translate-mod":
             report = translate_mod(
                 args.source_mod,
                 args.output,
                 args.model,
                 dry_run=args.dry_run,
                 max_occurrences_per_file=args.max_occurrences_per_file,
+            )
+        else:
+            report = build_review_pack(
+                args.source_mod,
+                args.candidate,
+                args.output,
             )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
