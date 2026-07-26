@@ -98,6 +98,21 @@ class StableFile:
     stat_identity: tuple[int, int, int, int]
 
 
+@dataclass(frozen=True)
+class ValidatedReviewInputs:
+    source: Path
+    candidate: Path
+    source_files: list[SourceFile]
+    candidate_files: list[SourceFile]
+    candidate_inventory: tuple[tuple[str, ...], tuple[str, ...]]
+    report_file: StableFile
+    report: dict[str, object]
+    source_localisation_sha256: str
+    candidate_localisation_sha256: str
+    pack_data: dict[str, object]
+    summary: dict[str, int]
+
+
 def build_review_pack(
     source_mod: Path,
     candidate: Path,
@@ -111,68 +126,18 @@ def build_review_pack(
     if _paths_overlap(source, candidate_root):
         raise SafetyError("source_candidate_overlap")
     output_abs = _validated_review_output(source, candidate_root, output)
-
-    source_files = _snapshot(source)
-    candidate_files = _snapshot(candidate_root)
-    report_file = _read_stable_file(
-        candidate_root / "translation-report.json", "candidate_report"
-    )
-    inventory = _candidate_inventory(candidate_root)
-    report = _load_report(report_file.data)
-
-    source_hash = _tree_hash(
-        [(item.relative, item.data) for item in source_files]
-    )
-    candidate_hash = _tree_hash(
-        [(item.relative, item.data) for item in candidate_files]
-    )
-    _require_identity(
-        source_hash,
-        expected_identity.source_localisation_sha256,
-        "source_localisation_identity_mismatch",
-    )
-    _require_identity(
-        candidate_hash,
-        expected_identity.candidate_localisation_sha256,
-        "candidate_localisation_identity_mismatch",
-    )
-    _require_identity(
-        report_file.sha256,
-        expected_identity.candidate_report_sha256,
-        "candidate_report_identity_mismatch",
-    )
-
-    entries, summary = _validated_review_entries(
+    inputs = _validated_review_inputs(
         source,
         candidate_root,
-        source_files,
-        candidate_files,
-        inventory,
-        report,
-        source_hash,
-        candidate_hash,
-        report_file.sha256,
         expected_identity,
     )
-    pack_fingerprint = _sha256_json(
-        {
-            "schema_version": REVIEW_PACK_SCHEMA_VERSION,
-            "source_localisation_sha256": source_hash,
-            "candidate_localisation_sha256": candidate_hash,
-            "candidate_report_sha256": report_file.sha256,
-            "model": {
-                "tag": expected_identity.model_tag,
-                "digest": expected_identity.model_digest,
-            },
-            "occurrence_ids": [entry["id"] for entry in entries],
-        }
-    )
-    pack_data = {
-        "schema_version": REVIEW_PACK_SCHEMA_VERSION,
-        "pack_fingerprint": pack_fingerprint,
-        "summary": summary,
-        "entries": entries,
-    }
+    pack_data = inputs.pack_data
+    summary = inputs.summary
+    pack_fingerprint = pack_data["pack_fingerprint"]
+    assert isinstance(pack_fingerprint, str)
+    source_hash = inputs.source_localisation_sha256
+    candidate_hash = inputs.candidate_localisation_sha256
+
     html = _render_review_html(pack_data)
     pack_summary = {
         "schema_version": REVIEW_PACK_SCHEMA_VERSION,
@@ -181,7 +146,7 @@ def build_review_pack(
         "identities": {
             "source_localisation_sha256": source_hash,
             "candidate_localisation_sha256": candidate_hash,
-            "candidate_report_sha256": report_file.sha256,
+            "candidate_report_sha256": inputs.report_file.sha256,
         },
         "network_dependencies": 0,
     }
@@ -205,11 +170,7 @@ def build_review_pack(
                 + "\n"
             ).encode("ascii"),
         )
-        _verify_snapshot(source, source_files)
-        _verify_snapshot(candidate_root, candidate_files)
-        _verify_stable_file(report_file, "candidate_report_generation_changed")
-        if _candidate_inventory(candidate_root) != inventory:
-            raise SafetyError("candidate_generation_changed")
+        _verify_review_inputs(inputs)
         try:
             atomic_publish_directory_no_replace(temp, output_abs)
         except DestinationExistsError as exc:
@@ -229,6 +190,97 @@ def build_review_pack(
         "identities": pack_summary["identities"],
         "network_dependencies": 0,
     }
+
+
+def _validated_review_inputs(
+    source: Path,
+    candidate: Path,
+    expected_identity: ReviewIdentity,
+) -> ValidatedReviewInputs:
+    """Recompute the authoritative MVP-2 alignment without reading its HTML."""
+    source_files = _snapshot(source)
+    candidate_files = _snapshot(candidate)
+    report_file = _read_stable_file(
+        candidate / "translation-report.json", "candidate_report"
+    )
+    inventory = _candidate_inventory(candidate)
+    report = _load_report(report_file.data)
+    source_hash = _tree_hash(
+        [(item.relative, item.data) for item in source_files]
+    )
+    candidate_hash = _tree_hash(
+        [(item.relative, item.data) for item in candidate_files]
+    )
+    _require_identity(
+        source_hash,
+        expected_identity.source_localisation_sha256,
+        "source_localisation_identity_mismatch",
+    )
+    _require_identity(
+        candidate_hash,
+        expected_identity.candidate_localisation_sha256,
+        "candidate_localisation_identity_mismatch",
+    )
+    _require_identity(
+        report_file.sha256,
+        expected_identity.candidate_report_sha256,
+        "candidate_report_identity_mismatch",
+    )
+    entries, summary = _validated_review_entries(
+        source,
+        candidate,
+        source_files,
+        candidate_files,
+        inventory,
+        report,
+        source_hash,
+        candidate_hash,
+        report_file.sha256,
+        expected_identity,
+    )
+    pack_fingerprint = _sha256_json(
+        {
+            "schema_version": REVIEW_PACK_SCHEMA_VERSION,
+            "source_localisation_sha256": source_hash,
+            "candidate_localisation_sha256": candidate_hash,
+            "candidate_report_sha256": report_file.sha256,
+            "model": {
+                "tag": expected_identity.model_tag,
+                "digest": expected_identity.model_digest,
+            },
+            "occurrence_ids": [entry["id"] for entry in entries],
+        }
+    )
+    return ValidatedReviewInputs(
+        source=source,
+        candidate=candidate,
+        source_files=source_files,
+        candidate_files=candidate_files,
+        candidate_inventory=inventory,
+        report_file=report_file,
+        report=report,
+        source_localisation_sha256=source_hash,
+        candidate_localisation_sha256=candidate_hash,
+        pack_data={
+            "schema_version": REVIEW_PACK_SCHEMA_VERSION,
+            "pack_fingerprint": pack_fingerprint,
+            "summary": summary,
+            "entries": entries,
+        },
+        summary=summary,
+    )
+
+
+def _verify_review_inputs(inputs: ValidatedReviewInputs) -> None:
+    _verify_snapshot(inputs.source, inputs.source_files)
+    _verify_snapshot(inputs.candidate, inputs.candidate_files)
+    _verify_stable_file(
+        inputs.report_file,
+        "candidate_report_generation_changed",
+        label="candidate_report",
+    )
+    if _candidate_inventory(inputs.candidate) != inputs.candidate_inventory:
+        raise SafetyError("candidate_generation_changed")
 
 
 def validate_decisions_payload(
@@ -885,7 +937,12 @@ def _candidate_inventory(
     return tuple(sorted(files)), tuple(sorted(directories))
 
 
-def _read_stable_file(path: Path, label: str) -> StableFile:
+def _read_stable_file(
+    path: Path,
+    label: str,
+    *,
+    max_bytes: int | None = None,
+) -> StableFile:
     if path.is_symlink():
         raise SafetyError(f"{label}_symlink")
     flags = (
@@ -901,8 +958,14 @@ def _read_stable_file(path: Path, label: str) -> StableFile:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise SafetyError(f"{label}_not_regular_file")
+        if max_bytes is not None and before.st_size > max_bytes:
+            raise SafetyError(f"{label}_too_large")
         chunks: list[bytes] = []
-        while chunk := os.read(descriptor, 1024 * 1024):
+        total = 0
+        while chunk := os.read(descriptor, 64 * 1024):
+            total += len(chunk)
+            if max_bytes is not None and total > max_bytes:
+                raise SafetyError(f"{label}_too_large")
             chunks.append(chunk)
         after = os.fstat(descriptor)
     finally:
@@ -920,8 +983,18 @@ def _read_stable_file(path: Path, label: str) -> StableFile:
     )
 
 
-def _verify_stable_file(expected: StableFile, error: str) -> None:
-    current = _read_stable_file(expected.path, "candidate_report")
+def _verify_stable_file(
+    expected: StableFile,
+    error: str,
+    *,
+    label: str = "candidate_report",
+    max_bytes: int | None = None,
+) -> None:
+    current = _read_stable_file(
+        expected.path,
+        label,
+        max_bytes=max_bytes,
+    )
     if (
         current.sha256 != expected.sha256
         or current.stat_identity != expected.stat_identity
