@@ -37,7 +37,7 @@ class SourceFile:
 def inspect_mod(source_mod: Path) -> dict[str, object]:
     source = _validated_source(source_mod)
     files = _snapshot(source)
-    return _base_report(source, files)
+    return _inspect_report(source, files)
 
 
 def translate_mod(
@@ -53,7 +53,7 @@ def translate_mod(
     source = _validated_source(source_mod)
     output_abs = _validated_output(source, output)
     files = _snapshot(source)
-    report = _base_report(source, files)
+    report = _translation_report(source, files)
     report["output"] = str(output_abs)
     report["dry_run"] = dry_run
     report["max_occurrences_per_file"] = max_occurrences_per_file
@@ -65,11 +65,7 @@ def translate_mod(
     report["counts"]["deferred_occurrences"] = deferred
     if dry_run:
         _validate_count_invariant(report, dry_run=True)
-        report["status"] = (
-            "dry_run_plan_with_fallbacks"
-            if report["counts"]["fallback_occurrences"] or deferred
-            else "dry_run_plan"
-        )
+        report["status"] = _translation_status(report, dry_run=True)
         report["editorial_status"] = "not_evaluated"
         report["editorially_approved"] = False
         return report
@@ -85,7 +81,7 @@ def translate_mod(
         tempfile.mkdtemp(prefix=f".{output_abs.name}.tmp-", dir=output_abs.parent)
     )
     candidates: list[tuple[Path, bytes]] = []
-    translated = fallback = 0
+    translated = unchanged = fallback = 0
     try:
         for source_file in files:
             parsed = source_file.parsed
@@ -99,8 +95,11 @@ def translate_mod(
                     if client is None:
                         raise SafetyError("model_client_unavailable")
                     result = client.translate(tag=model, text=entry.model_text())
-                    replacements[entry.line_index] = entry.restore_translation(result)
+                    restored = entry.restore_translation(result)
+                    replacements[entry.line_index] = restored
                     translated += 1
+                    if restored.encode("utf-8") == entry.value.encode("utf-8"):
+                        unchanged += 1
                 except (OllamaError, ValueError) as exc:
                     fallback += 1
                     report["diagnostics"].append(
@@ -121,14 +120,11 @@ def translate_mod(
         _verify_snapshot(source, files)
         candidate_hash = _tree_hash(candidates)
         report["counts"]["translated_occurrences"] = translated
+        report["counts"]["unchanged_accepted_occurrences"] = unchanged
         report["counts"]["fallback_occurrences"] += fallback
         report["hashes"]["output_localisation_sha256"] = candidate_hash
         _validate_count_invariant(report, dry_run=False)
-        report["status"] = (
-            "technical_safe_with_fallbacks"
-            if report["counts"]["fallback_occurrences"] or deferred
-            else "technical_safe"
-        )
+        report["status"] = _translation_status(report, dry_run=False)
         report["editorial_status"] = "human_review_required"
         report["editorially_approved"] = False
         report_path = temp / "translation-report.json"
@@ -198,6 +194,18 @@ def _validate_count_invariant(
 ) -> None:
     counts = report["counts"]
     assert isinstance(counts, dict)
+    unchanged = counts["unchanged_accepted_occurrences"]
+    translated = counts["translated_occurrences"]
+    if (
+        not isinstance(unchanged, int)
+        or isinstance(unchanged, bool)
+        or not isinstance(translated, int)
+        or isinstance(translated, bool)
+        or unchanged < 0
+        or unchanged > translated
+        or (dry_run and (translated != 0 or unchanged != 0))
+    ):
+        raise SafetyError("unchanged_accepted_count_invariant_failed")
     if dry_run:
         accounted = (
             counts["planned_translation_occurrences"]
@@ -212,6 +220,30 @@ def _validate_count_invariant(
         )
     if counts["occurrences"] != accounted:
         raise SafetyError("occurrence_count_invariant_failed")
+
+
+def _translation_status(
+    report: dict[str, object], *, dry_run: bool
+) -> str:
+    counts = report["counts"]
+    assert isinstance(counts, dict)
+    is_partial = any(
+        counts[name]
+        for name in (
+            "fallback_occurrences",
+            "deferred_occurrences",
+            "skipped_files",
+        )
+    )
+    if is_partial:
+        return "dry_run_partial" if dry_run else "technical_safe_partial"
+    if counts["occurrences"] == 0:
+        return (
+            "dry_run_no_translatable_content"
+            if dry_run
+            else "no_translatable_content"
+        )
+    return "dry_run_plan" if dry_run else "technical_safe"
 
 
 def _validated_source(path: Path) -> Path:
@@ -306,7 +338,7 @@ def _verify_snapshot(source: Path, files: list[SourceFile]) -> None:
         raise SafetyError("source_generation_changed")
 
 
-def _base_report(source: Path, files: list[SourceFile]) -> dict[str, object]:
+def _inspect_report(source: Path, files: list[SourceFile]) -> dict[str, object]:
     diagnostics: list[dict[str, object]] = []
     english_files = occurrences = fallback = skipped = 0
     hash_inputs: list[tuple[Path, bytes]] = []
@@ -338,16 +370,15 @@ def _base_report(source: Path, files: list[SourceFile]) -> dict[str, object]:
                     {"path": item.relative.as_posix(), **diagnostic}
                 )
     return {
-        "schema_version": 2,
+        "schema_version": 1,
         "source": str(source),
         "counts": {
             "discovered_yml_files": len(files),
             "english_files": english_files,
             "occurrences": occurrences,
-            "planned_translation_occurrences": 0,
             "translated_occurrences": 0,
             "fallback_occurrences": fallback,
-            "deferred_occurrences": 0,
+            "blocked_occurrences": 0,
             "skipped_files": skipped,
         },
         "hashes": {
@@ -355,6 +386,29 @@ def _base_report(source: Path, files: list[SourceFile]) -> dict[str, object]:
             "output_localisation_sha256": None,
         },
         "diagnostics": diagnostics,
+    }
+
+
+def _translation_report(
+    source: Path, files: list[SourceFile]
+) -> dict[str, object]:
+    inspect_report = _inspect_report(source, files)
+    inspect_counts = inspect_report["counts"]
+    assert isinstance(inspect_counts, dict)
+    return {
+        **inspect_report,
+        "schema_version": 2,
+        "counts": {
+            "discovered_yml_files": inspect_counts["discovered_yml_files"],
+            "english_files": inspect_counts["english_files"],
+            "occurrences": inspect_counts["occurrences"],
+            "planned_translation_occurrences": 0,
+            "translated_occurrences": 0,
+            "unchanged_accepted_occurrences": 0,
+            "fallback_occurrences": inspect_counts["fallback_occurrences"],
+            "deferred_occurrences": 0,
+            "skipped_files": inspect_counts["skipped_files"],
+        },
     }
 
 
