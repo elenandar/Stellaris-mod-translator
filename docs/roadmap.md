@@ -2,8 +2,17 @@
 
 Roadmap показывает порядок решений, а не даты. Первоначальный M0 был слит, но его desktop/public scope заменён уточнённым владельцем персональным baseline. `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2).
 
+26 июля 2026 года владелец ввёл `MVP-0` как отдельный практический путь к
+первому работающему переводчику. Это явное исключение из прежнего AUTH-first
+порядка: оно разрешает только ограниченный Python CLI, synthetic tests,
+loopback Ollama и отдельный candidate output. PR №11 и его AUTH/remediation
+контур superseded для MVP-0 и не являются зависимостью. Старые M1A/M1B записи
+ниже остаются историческим evidence, но не переносят сложный authorization
+контур в MVP-0.
+
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
+| MVP-0 — Safe translate-mod CLI | lossless supported-subset parser, exact local Ollama tag/digest, English fallback и атомарный отдельный RU candidate | явное owner decision | synthetic suite; затем ручной synthetic smoke и только после consent один private mod | **implemented — synthetic suite passed; manual smoke pending** |
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
