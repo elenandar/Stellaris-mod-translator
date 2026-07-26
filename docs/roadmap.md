@@ -7,7 +7,7 @@ Roadmap показывает порядок решений, а не даты. П
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
-| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7, contract PR #8 и AUTH PR #9 merged; PR #10 merged by external owner-controlled action as `OWNER_CONTROLLED_SCOPE_DEVIATION`; candidate remains `INERT_NOT_ADMITTED`; `SCOPE_V1: NEVER_EFFECTIVE`; `SCOPE_V2: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V3: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V4: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V5: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V6: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V7: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V8: SUPERSEDED_BEFORE_EFFECT`; `M1B-1A-R1-AUTH-V9: SUPERSEDED_BEFORE_EFFECT`; v8/v9 evidence не создавались; `M1B-1A-R1-AUTH-V10-DEFINITION: REVIEWABLE`; `POSTPUBLICATION_EVIDENCE: REQUIRED`; `TERMINAL_PUBLICATION_RECEIPT: REQUIRED`; `PR11_METADATA_RECONCILIATION: REQUIRED`; `EFFECT: NOT_ACTIVE`; `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V10_MERGE`; `NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`; `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`; `M1B: NOT_EVALUATED`; benchmark не запускался |
+| M1B — Local quality feasibility | benchmark установленных локальных моделей на human-reviewed corpus | M0R | verdict `QUALITY_FEASIBLE` разрешает совместный gate; `QUALITY_NOT_FEASIBLE` останавливает ветку | PR #5 proposal, owner-freeze PR #6, stable-read PR #7, contract PR #8 и AUTH PR #9 merged; PR #10 merged by external owner-controlled action as `OWNER_CONTROLLED_SCOPE_DEVIATION`; candidate remains `INERT_NOT_ADMITTED`; `SCOPE_V1: NEVER_EFFECTIVE`; `SCOPE_V2: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V3: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V4: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V5: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V6: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V7: SUPERSEDED_BEFORE_EFFECT`; `SCOPE_V8: SUPERSEDED_BEFORE_EFFECT`; `M1B-1A-R1-AUTH-V9: SUPERSEDED_BEFORE_EFFECT`; `M1B-1A-R1-AUTH-V10: SUPERSEDED_BEFORE_EFFECT`; v8/v9/v10 evidence не создавались; `M1B-1A-R1-AUTH-V11-DEFINITION: REVIEWABLE`; `POSTPUBLICATION_EVIDENCE: REQUIRED`; `TERMINAL_PUBLICATION_RECEIPT: REQUIRED`; `PR11_METADATA_RECONCILIATION: REQUIRED`; `EFFECT: NOT_ACTIVE`; `R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V11_MERGE`; `NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`; `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`; `M1B: NOT_EVALUATED`; benchmark не запускался |
 | M2 — Safety kernel & technical CLI | lossless CST, typed atoms, controlled render, containment | M1A, M1B | одновременно получены `GO` и `QUALITY_FEASIBLE`; taxonomy/holdout проходят technical gates | **FORBIDDEN**: M1A is `BLOCKED`; M1B is `NOT_EVALUATED` |
 | M3 — Incremental engine & publishing | SQLite, identity, jobs, backup, versioned artifact и rollback | M2 | unchanged = zero work; crash/update/conflict/restore безопасны | not started |
 | M4 — Local quality engine | context, glossary, memory, Ollama, review/repair и editorial states | M1B, M3 | quality thresholds и human-review policy соблюдены | not started |
@@ -120,15 +120,15 @@ scope v1 действие. Candidate bytes остаются `INERT_NOT_ADMITTED`
 review по-прежнему требует отдельной transport/evidence-provenance remediation
 до любого M1B-1A2 decision.
 
-### M1B-1A-R1-AUTH v10 — post-merge transport and evidence-provenance remediation
+### M1B-1A-R1-AUTH v11 — post-merge transport and evidence-provenance remediation
 
-[Canonical scope](../registry/m1b/m1b-1a-r1-remediation-scope-v10.json),
+[Canonical scope](../registry/m1b/m1b-1a-r1-remediation-scope-v11.json),
 [authorization contract](specs/m1b-1a-r1-remediation-authorization-contract.md),
 [machine owner record](decisions/M1B-1A-R1-AUTH-owner-authorization.json) и
 [owner signoff](decisions/M1B-1A-R1-AUTH-owner-signoff.md) не дают authority
 до owner review и merge.
 
-Scope v10 bind-ит PR #10 как historical merged baseline: head
+Scope v11 bind-ит PR #10 как historical merged baseline: head
 `66f905cf266b9d1c1f56d0d706184387ffedb36e`, merge
 `3c6ca3146d838b977f24bbc6b8c79dfb271e142b`, ordered parents
 `1f10c151c5adac5fbf765af8093c7eddf8cf0429` и
@@ -141,17 +141,27 @@ Scope v10 bind-ит PR #10 как historical merged baseline: head
 `SCOPE_V6: SUPERSEDED_BEFORE_EFFECT`,
 `SCOPE_V7: SUPERSEDED_BEFORE_EFFECT`,
 `SCOPE_V8: SUPERSEDED_BEFORE_EFFECT`,
-`M1B-1A-R1-AUTH-V9: SUPERSEDED_BEFORE_EFFECT`; evidence v8 и v9 не
-создавались, потому что соответствующие pipelines остановились до запуска
-writer или любого evidence effect. Ни одна из v1/v2/v3/v4/v5/v6/v7/v8/v9 не
-авторизует merge retroactively.
+`M1B-1A-R1-AUTH-V9: SUPERSEDED_BEFORE_EFFECT`,
+`M1B-1A-R1-AUTH-V10: SUPERSEDED_BEFORE_EFFECT`; evidence v8, v9 и v10 не
+создавались. V10 остановился до первого child spawn и evidence write boundary
+на несовместимых helper mode-полях; stale parent-launcher SHA, unbound wrapper
+и несовпадающий publication mechanism были независимыми blockers. Ни одна из
+v1/v2/v3/v4/v5/v6/v7/v8/v9/v10 не авторизует merge retroactively.
 
-V10 явно разделяет Git tree/index modes `100644` и POSIX worktree modes
-`0644`/`0600`; bare `mode` запрещён. Closed authority matrix содержит `31`
-actions, `105` resources, `7` planes, `66` normative process definitions и
-`4` external operations. Для PR #11 разрешены ровно один title/body `PATCH` и
-один authenticated `GET` reconciliation; потеря ответа `PATCH` разрешает
-только этот `GET`, а не повторную mutation.
+V11 явно разделяет Git tree/index modes `100644` и POSIX worktree modes
+`0644`/`0600`; bare `mode` запрещён. Closed authority matrix содержит `32`
+actions, `106` resources, `7` planes, `66` normative process definitions и
+`4` external operations. Дельта в одну action и один resource — обязательный
+end-to-end no-write preflight; он завершается до staging, target write-open и
+publication invocation. Exact mechanism во всех terminal surfaces —
+`fclonefileat_open_source_fd_CLONE_NOFOLLOW_EXCL`. Один live positive
+parent-auth и `19` implementation-coupled negative cases выполняются bound
+helpers до no-write PASS; no-write FAILURE receipt авторизован без
+staging/target effect. Zero-status publish консервативно фиксирует write
+boundary до post-child reads, а final descriptor-relative inspection является
+последним filesystem read перед успехом. Для PR #11 разрешены ровно один
+title/body `PATCH` и authenticated `GET` precondition/readback;
+потеря ответа `PATCH` разрешает только readback, а не повторную mutation.
 
 Effect требует external owner-controlled ordinary two-parent merge PR #11 в
 `main`: first parent exact
@@ -180,11 +190,11 @@ common dir.
 candidate import/parse/tokenize/lint/compile/execute, provider/model call,
 private corpus, runtime envelope instance, acceptance, executable admission,
 M1B-1A2 и benchmark не разрешены. До effect действуют
-`M1B-1A-R1-AUTH-V10-DEFINITION: REVIEWABLE`,
+`M1B-1A-R1-AUTH-V11-DEFINITION: REVIEWABLE`,
 `POSTPUBLICATION_EVIDENCE: REQUIRED`,
 `TERMINAL_PUBLICATION_RECEIPT: REQUIRED`,
 `PR11_METADATA_RECONCILIATION: REQUIRED`, `EFFECT: NOT_ACTIVE`,
-`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V10_MERGE`,
+`R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V11_MERGE`,
 `NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED`,
 `M1B: NOT_EVALUATED`, `M1A: BLOCKED`, `M2: FORBIDDEN`.
 
