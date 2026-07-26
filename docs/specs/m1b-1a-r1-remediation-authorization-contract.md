@@ -1,11 +1,14 @@
-# M1B-1A-R1-AUTH v9 — post-merge transport and evidence-provenance remediation authorization
+# M1B-1A-R1-AUTH v10 — post-merge transport and evidence-provenance remediation authorization
 
-Status: `READY_FOR_OWNER_REVIEW`. This contract is authorization-only. It does
-not authorize R1 remediation until external owner review and the exact PR #11
-merge defined below.
+State: `M1B-1A-R1-AUTH-V10-DEFINITION: REVIEWABLE`.
+`POSTPUBLICATION_EVIDENCE: REQUIRED`,
+`TERMINAL_PUBLICATION_RECEIPT: REQUIRED`,
+`PR11_METADATA_RECONCILIATION: REQUIRED`, and `EFFECT: NOT_ACTIVE`.
+This contract is authorization-definition-only. R1 remediation remains
+`NOT_AUTHORIZED_UNTIL_V10_MERGE`.
 
 The normative machine scope is
-[`registry/m1b/m1b-1a-r1-remediation-scope-v9.json`](../../registry/m1b/m1b-1a-r1-remediation-scope-v9.json).
+[`registry/m1b/m1b-1a-r1-remediation-scope-v10.json`](../../registry/m1b/m1b-1a-r1-remediation-scope-v10.json).
 The machine owner decision is
 [`M1B-1A-R1-AUTH-owner-authorization.json`](../decisions/M1B-1A-R1-AUTH-owner-authorization.json),
 and the human-readable record is
@@ -15,13 +18,22 @@ and a new owner decision is required.
 
 ## 1. Decision boundary
 
-V9 supersedes v8 before effect. Scope v1 was never effective; scopes v2 through
-v8 were superseded before effect. V8 evidence was never created: its
-post-publication pipeline failed closed before the writer. No superseded scope
-authorizes the PR #10 merge retroactively.
+V10 supersedes v9 before effect. Scope v1 was never effective; scopes v2
+through v9 were superseded before effect. Neither v8 nor v9 evidence was
+created. No superseded scope authorizes the PR #10 merge retroactively.
 
-V9 retains the bounded future remediation envelope, preserves the v8 closure,
-and fixes the two remaining deterministic fetch-provenance defects:
+V10 retains the bounded future remediation envelope and every v9 transport
+and pack-helper correction, while closing four definition blockers:
+
+1. Git tree/index modes and POSIX filesystem modes are independent domains;
+2. every action/resource/plane/process/external-operation count anchor agrees
+   with the actual registry;
+3. one closed authorization-stage action governs the exact PR #11
+   title/body update and authenticated readback;
+4. the terminal publication receipt is causally after atomic evidence
+   publication and is not claimed inside the prepublication evidence bytes.
+
+The preserved controls remain:
 
 1. every exact-equality authority array is ASCII-sorted and every action plane
    is rederived from resources, processes, external operations, network and
@@ -49,8 +61,9 @@ publishing remain forbidden.
 
 Before effect, only validation of the six authorization outputs, execution of
 the six public synthetic probes in fresh roots outside the project, creation
-of ignored v9 evidence, and one bounded publication to existing draft PR #11
-are allowed.
+of ignored v10 evidence, terminal receipt construction, and the single exact
+title/body reconciliation of existing draft PR #11 are allowed. The metadata
+operation is unavailable until the terminal receipt passes.
 
 ## 2. Canonical identities
 
@@ -59,15 +72,15 @@ trailing LF. Duplicate keys, floats, `NaN` and Infinity are invalid.
 
 | Artifact | Bytes | Raw SHA-256 |
 |---|---:|---|
-| `registry/m1b/m1b-1a-r1-remediation-scope-v9.json` | `421822` | `df29f40a12e2163afc3e542774d9fdb0fc4542b898880e866c8ecdc4b0a73575` |
-| `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json` | `28971` | `c374f9ebad668fd49692aeb25e58419ebfb7c3539c012d4e714559ec4180ae9e` |
+| `registry/m1b/m1b-1a-r1-remediation-scope-v10.json` | `459346` | `c6d37bcbb2af1c59a5275faadedfd50aa20a40c6e9977756389a9f71f452b547` |
+| `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json` | `30530` | `d5576ca40621163593fd77da7f499280864be948b2959fd256a3f91d7c8b59fd` |
 
 Scope framing is:
 
-`SHA-256("stellaris-m1b-1a-r1-remediation-scope-v9" || NUL || u64be(421822) || canonical_scope_bytes)`
+`SHA-256("stellaris-m1b-1a-r1-remediation-scope-v10" || NUL || u64be(459346) || canonical_scope_bytes)`
 
 The framed SHA-256 is
-`092797ab1729359e18e21ff92ee1b0b1f678ce895debf023f2ab50628fb9c292`.
+`a4a064e2a7ffca15630419b9bd63ee527eced3ae7d98636eaf53966b2803180d`.
 
 ## 3. Historical and PR #11 effect binding
 
@@ -96,32 +109,38 @@ Every publication evidence query rebinds exact `baseRefName=main`, exact head
 branch, head repository name and owner login in addition to the final OID,
 open/draft state and absent auto-merge.
 
+The exact v9-to-v10 transition from initial PR head
+`5e0e024daf86c578ac9e281fe3ff227da5f56f26` contains seven paths: the five
+documentation/owner paths are modified, scope v9 is deleted, and scope v10 is
+added. The final net PR diff against `origin/main` contains exactly six paths:
+`README.md` and `docs/roadmap.md` are modified; owner authorization, owner
+signoff, this contract and scope v10 are added. Rename inference is forbidden
+for both comparisons.
+
 Effect requires one ordinary external owner-controlled two-parent merge. The
-second parent must be the final reviewed PR #11 head. The PR and merge deltas
-must both contain exactly:
+second parent must be the final reviewed PR #11 head. Its net delta must
+contain exactly:
 
 1. `README.md`;
 2. `docs/decisions/M1B-1A-R1-AUTH-owner-authorization.json`;
 3. `docs/decisions/M1B-1A-R1-AUTH-owner-signoff.md`;
 4. `docs/roadmap.md`;
 5. `docs/specs/m1b-1a-r1-remediation-authorization-contract.md`;
-6. `registry/m1b/m1b-1a-r1-remediation-scope-v9.json`.
+6. `registry/m1b/m1b-1a-r1-remediation-scope-v10.json`.
 
-Scopes v1 through v8 must be absent. The four normative artifacts must be
-byte-identical between the final PR head and merge tree. Any base, path,
-parent-order or identity mismatch blocks effect.
+Scopes v1 through v9 must be absent from the final tree. The four normative
+artifacts must be byte-identical between the final PR head and merge tree.
+Any base, path, parent-order or identity mismatch blocks effect.
 
 ## 4. Closed authority model
 
-The machine scope contains:
+The machine scope count closure is exact:
+`actions=31; resources=105; planes=7; processes=66; external_operations=4`.
+Resources are derived from the actual registry. Matrix, recursive evidence
+schema, owner, contract, signoff and actual evidence anchors must all match.
+For every anchor, `-1`, `+1`, missing and wrong-type mutations fail closed.
 
-- `30` unique action records;
-- `101` exact resources;
-- `6` authority planes;
-- `66` normative parent/child process definitions;
-- `3` external GitHub operation definitions.
-
-The governed namespace is exactly `AUTH_V9_*` and `GATE_*`. Declared
+The governed namespace is exactly `AUTH_V10_*` and `GATE_*`. Declared
 `authority_planes` are not an authority source. A validator independently
 derives the plane set from phase, resources, process, network and writes, then
 requires exact sorted equality. Every plane allowlist must contain every and
@@ -130,8 +149,44 @@ missing or extra planes, unresolved process/operation references, phase
 mismatches and observed operations wider or narrower than the declaration fail
 closed.
 
-For `AUTH_V9_COLLECT_EVIDENCE_INPUTS`, action and
-`authorization_evidence_collector_v9` bind exactly:
+### Mode-domain and lifecycle closure
+
+Git identity uses only `git_tree_mode`, `git_tree_type`,
+`git_tree_blob_oid`, `git_index_mode`, `git_index_stage` and
+`git_index_blob_oid`. Filesystem identity uses only
+`worktree_posix_mode`, `worktree_file_type` and `worktree_st_nlink`.
+Bytes and SHA-256 bind the domains; a POSIX value is never converted into a
+Git mode by prefixing digits. An ambiguous bare `mode` key is unauthorized
+and rejected recursively.
+
+The complete governed populations are:
+
+- `6` authorization-stage tracked outputs;
+- `11` historical PR #10 paths with Git tree identity only and no invented
+  filesystem identity;
+- `11` existing tracked future outputs at prewrite, checked independently
+  against the PR #11 merge-base tree, stage-zero index and current worktree;
+- `18` tracked future outputs after write, staging and commit.
+
+Existing tracked paths require regular POSIX mode `0644`, `st_nlink=1`,
+stage-zero Git index mode `100644`, Git tree type `blob`, Git tree mode
+`100644`, and tree/index blob OIDs reproduced from the same stable-read bytes.
+New tracked paths must be absent before write, use POSIX `0644` afterward, and
+receive Git index/tree identity only after staging/commit. Ignored evidence
+uses POSIX `0600`, regular-file type and `st_nlink=1`, and remains absent from
+the Git index and tree. Directories and helper/script identities are POSIX
+only.
+
+The bound `.gitignore` has `733` bytes, SHA-256
+`0f36fee465d056ae9373a2aa702e58740f82c99c0fb25e0f24a326318087a82d`,
+Git tree/index mode `100644`, stage `0`, tree type `blob`, tree/index blob OID
+`a6735caefc0396a4673f461654f61dd8f71bcd30`, POSIX mode `0644`,
+regular-file type and `st_nlink=1`. The stage builder reads the expected Git
+mode from each exact v10 lifecycle row; hard-coding `100644` in that consumer
+is forbidden.
+
+For `AUTH_V10_COLLECT_EVIDENCE_INPUTS`, action and
+`authorization_evidence_collector_v10` bind exactly:
 
 - `sanitized_evidence_collector_results`;
 - `sanitized_probe_observations`;
@@ -154,12 +209,12 @@ byte strings, rejects duplicate keys, requires their common frozen scope raw
 SHA-256 and identical exact six-output path/byte-count/SHA-256 records, and
 compares them with bounded descriptor-stable reads of the current outputs. The
 scope, all six outputs and helper identities are rechecked before and after
-every successful or failed nonterminal child. Immediately before the terminal
-read-only inspector they are rechecked once more; the child rechecks Python
-before reading evidence, and no filesystem read follows that inspection. It
-then binds the canonical result directly to success. The launcher also
-rejects ambient environment or Node options. Before its own first child spawn,
-the
+every successful or failed nonterminal child. All final-head-independent
+checks finish before atomic publication. The canonical main evidence contains
+only observations available before its own publication plus exact publication
+intent; it does not contain or claim its later terminal inspection or receipt.
+The launcher also rejects ambient environment or Node options. Before its own
+first child spawn, the
 validation controller descriptor-stable checks itself, the transient
 scope-validator script, Python and exact system Git against their committed
 current-scope identities. Bootstrap reads
@@ -174,14 +229,14 @@ stable-read, hash-bound script bytes through an exact module eval snapshot,
 self-checks that snapshot, and rechecks the source identity after every exit,
 including failure. A final helper identity pass brackets later Git and GitHub
 reads. The
-childless `AUTH_V9_ASSEMBLE_EVIDENCE` process consumes only that value plus
+childless `AUTH_V10_ASSEMBLE_EVIDENCE` process consumes only that value plus
 the committed outputs, fresh validation workspace metadata and the two frozen
 review records. In the same process it constructs the closed
 `sanitized_validation_results` value and then bounded canonical in-memory
 evidence bytes; no impossible pre-existing validation handoff is claimed.
 There is no standalone evidence-writer action, Node writer mode or cleanup
 process. The launcher first runs a bound prewrite `git check-ignore` and
-index-absence gate. Its bound `authorization_evidence_io_python_v9` child runs
+index-absence gate. Its bound `authorization_evidence_io_python_v10` child runs
 exact `-I -S`, outside the repository cwd, performs no repository, user-site,
 `sitecustomize`, `usercustomize` or candidate code execution, and recomputes
 the committed Python identity inside the child. It descriptor-binds the
@@ -196,20 +251,40 @@ It uses one terminal `fclonefileat` with `CLONE_NOFOLLOW` to create the absent
 descriptor-relative final name exclusively from that descriptor. No staging
 pathname selects the published source.
 
-A separately invoked read-only mode reopens the final target
-descriptor-relative, requires exact evidence bytes, regular mode `0600`,
-`nlink=1`, size, device and inode, rechecks v1–v7 and v8 absence, and binds its
-identity to the publication outcome. Any nonzero publisher status, including
-`EEXIST`, fails closed and is never recoverable. Only a confirmed zero exit
-with lost or malformed stdout may recover from exact final bytes. A second
-bound Git exclusion gate confirms ignored/untracked state, then a fresh
-descriptor-relative full-byte/inode inspection is the last validation before
-success. No final-path unlink, stat-then-unlink cleanup, source-path rename or
-independently invocable writer route is authorized or implemented; direct
-execution of the Python bytes cannot pass parent-launcher authentication.
-Descriptor-relative staging cleanup runs in `finally` on every exit after
-directory creation, including precondition failures, and never targets the
-final path.
+After atomic publication the launcher runs the postwrite ignore/index gate and
+a descriptor-relative terminal reopen. It requires full-EOF byte equality,
+SHA-256 and size, POSIX mode `0600`, regular-file type, `st_nlink=1`, stable
+path/open-descriptor identity, preservation of evidence v1–v7, and absence of
+evidence v8/v9. Private device, inode, uid and gid observations remain only in
+the anonymous parent/child channel.
+
+Only after those checks does the launcher construct the in-memory canonical
+`m1b-1a-r1-terminal-evidence-publication-receipt-v10`. Its digest is SHA-256
+of the strict ASCII sorted compact single-LF receipt payload without the
+digest field. The receipt may expose only its exact positive whitelist,
+including relative evidence path, booleans, counts, evidence bytes/SHA-256,
+POSIX mode and classification. Absolute paths, device/inode, uid/gid and
+private host identifiers are forbidden. The receipt is not embedded in main
+evidence and no second receipt file is authorized.
+
+Any nonzero publisher status, including `EEXIST`, fails closed and is never
+recoverable. Only a confirmed zero exit with lost or malformed stdout may
+recover from exact final bytes. No final-path unlink, stat-then-unlink cleanup,
+source-path rename or independently invocable writer route is authorized or
+implemented; direct execution of the Python bytes cannot pass parent-launcher
+authentication. Descriptor-relative staging cleanup runs in `finally` on
+every exit after directory creation, including precondition failures, and
+never targets the final path.
+
+After the terminal receipt passes,
+`AUTH_V10_UPDATE_AND_RECONCILE_PR11_METADATA` may perform exactly
+`GET_precondition → PATCH_once_maximum → GET_readback` on existing PR #11.
+The PATCH may change only exact UTF-8 `body` and `title` bytes and never draft
+state, base/head, labels, reviewers, milestone, auto-merge, merge/close or
+ready state. Preconditions recheck open/draft state, base `main`, exact branch,
+exact final pushed head and absent auto-merge. A lost PATCH response permits
+GET reconciliation only; a second PATCH is forbidden. Success requires an
+authenticated readback of the immutable state and exact title/body hashes.
 
 Repository content remains default-deny. This is not broad `.git` authority.
 Untracked project content is not readable. Relevant untracked attribute paths
@@ -258,6 +333,13 @@ pack helpers are forbidden. Each dispatch has exactly one resolved child.
 Missing, extra or reordered helpers fail closed.
 Thirty-nine negative cases cover malformed headers/keep values, object/ref
 drift, role/order/identity drift, threshold drift and helper-variant mismatch.
+Their preserved exact ID-set SHA-256 is
+`b16e3a95b50968cda70764a014c937dd99d5b9cdcc180ed584eb1105e4321d5d`.
+The additional `30` v10 negative IDs exercise domain-confused or malformed
+modes, wrong type/OID/stage/link/bytes, builder hard-code and lifecycle drift,
+count-anchor mismatch, missing metadata authority, excess PATCH fields or
+attempts, invalid receipt placement/private fields, stale active v9 identity,
+and premature tracked-document readiness.
 
 The future authenticated push has one `remote-https` dispatch, exactly one
 resolved `git-remote-http` child, two ordered private
@@ -306,7 +388,7 @@ The owner-supplied public identity is:
 | author | `elenandar` | `max.cheba93@gmail.com` |
 | committer | `elenandar` | `max.cheba93@gmail.com` |
 
-These exact literals are part of canonical scope v9 and are corroborated by
+These exact literals are part of canonical scope v10 and are corroborated by
 public PR #11 head commit metadata. They are not credentials. Private config
 is not read and inherited environment is forbidden.
 
@@ -324,7 +406,7 @@ only as public Git commit metadata.
 
 ## 7. Sequential Git side effects
 
-The v9 probe uses public bytes only and a topology with existing history,
+The v10 probe uses public bytes only and a topology with existing history,
 existing `HEAD` reflog, and an existing remote-tracking reflog. Its exact
 sequence is:
 
@@ -345,7 +427,7 @@ sequence is:
 
 All after-success locks and temporary object routes must be absent. The
 historical recovery commit `105858b4b4008bd1961316c17510b0ad6e107881`
-is present in both the real `HEAD` and current branch reflogs; v9 does not make
+is present in both the real `HEAD` and current branch reflogs; v10 does not make
 the false zero-delta claim about that commit.
 
 ## 8. Adversarial matrix
@@ -370,16 +452,16 @@ future per-row execution remains unauthorized.
 
 Common fixture construction SHA-256:
 
-`512cede88ea30872631f07aab0d973a81ae0fff0e7c91c06ee9abbb10e661637`.
+`d69af1008f961440e70c1aad6480c64a4affc0abae9e962e3d0c6aff71b88b2a`.
 
 | Probe | Definition SHA-256 | Observation SHA-256 | Exit |
 |---|---|---|---:|
-| `clean_filter_sentinel_not_executed` | `9a74db5640e190c7c99c1b0e4477fe83c5632860ddce61af8dd0f6b6d63221c4` | `6bc97de77af15f92f87500f13b93a3740be19cc0bae6e5739347fb1f948fa1d3` | `0` |
-| `process_filter_sentinel_not_executed` | `fa7b5868d1b116e58dc6fc4a8a0ca9023e513bb0fd1c70c88a621d17a046ce8b` | `ef579dde15485c8f571e2727c05e07dd3245c4eee8994ab4876c818b169b0167` | `0` |
-| `external_diff_sentinel_not_executed` | `ffdb8040044f9ae8fc14c35663eaa9fe28819bc08993b23cacc62e96d383bd49` | `21c22fca1e791c0154ccb2000db77cb75bb0bdc7ce71ee025cfdd7245c14de86` | `1` |
-| `textconv_sentinel_not_executed` | `68fb859e0458b34837ef4370513969d4e81168855e63fe2f9c18fb7037d2eb49` | `f0fe23aa15fe264ff532d30474f2992d4bac6553fd45812a55375f408252db73` | `1` |
-| `remote_helper_sentinel_not_executed_after_gate` | `b75d4e97fdbd41581862945bff25c8801465f5fd4f420c9f929ec88d4c3945d9` | `f9fd1ec14feb4f303d0da6b4579f06b1179ae9d60248706938b45c8f70a738a2` | `1` |
-| `object_database_unchanged_during_local_closure` | `6d9818ddea11d65a108193c22792091ed6f453e1502b2558346f74c1af78de9b` | `a2360821239e693d9337c7e40267ef79e0926f9cb6413e083d927915114eaaf0` | `0` |
+| `clean_filter_sentinel_not_executed` | `67d754e868a8da0330940935a10cf9a34f40b9e03148de06b0fec951f926838e` | `37257de8ada7eccdd7083857a80014df911688566de8e786138bf1fa90073bed` | `0` |
+| `process_filter_sentinel_not_executed` | `5df49a082efaf999cc39035fa666e13861d12ee863f73c0a8f01e59567d9fe26` | `b97892400773cd5f98bf48fb0d678937a96832d9a3cadcc58adcfb5420b2f8c5` | `0` |
+| `external_diff_sentinel_not_executed` | `058cba3c13d558a861fec2a5d127493932ebe9dc4ed55b235c899024f2706d1e` | `7de4f9630ad7994348aaeacb92dbf3ad5cd097c9e81e22a57953c94b8cfefac9` | `1` |
+| `textconv_sentinel_not_executed` | `48add433df7fc087c7c1c775bcec923a08e8313b8f7daf7bf8890e837ddc05b9` | `0bef614a3547341a9347227bb23d06b829512f813072614eecaf20d2c08b5dfe` | `1` |
+| `remote_helper_sentinel_not_executed_after_gate` | `a0452f1e1dded18fc65ea4985895f74f1b72a6a10a05eebb99903648e1b9b7a4` | `4897ca86958a1dbcb3bcde5958ad385b573f97df7b0a1bad4deef2dd9467eedf` | `1` |
+| `object_database_unchanged_during_local_closure` | `7afa3144ad9821d3c1a0d9e77ca82ed2f41aff2c2519158861558834949dad8b` | `44f06a34beffa2bbb48bd580f6c5d74ddca52dbebe39778195b78ff5ef7f202c` | `0` |
 
 Aggregate result is `TARGETED_HOST_SENTINELS_PASS`: probes `6/6`, helper
 executions `0`, object-database final path/mode/size/content delta `0`,
@@ -410,20 +492,23 @@ any additional branch or PR are forbidden.
 
 Final evidence path:
 
-`artifacts/m1b/m1b-1a-r1/auth-v9-evidence.json`
+`artifacts/m1b/m1b-1a-r1/auth-v10-evidence.json`
 
 It is strict canonical ASCII JSON with one LF, regular mode `0600`,
 `st_nlink=1`, Git-ignored and untracked. It contains final scope/owner and
 publication identities, all `139` exact matrix rows, action/resource/process
 and external-operation closure, six preserved sentinel observations, exact
 hash preimages, sequential fetch/switch/stage/commit identities and deltas,
-helper/process identities, atomic-publication and exact-inode inspection
-proof, 22 validation result preimages and hashes, and only leakage-safe public
-metadata. A committed recursive
+helper/process identities, exact atomic-publication intent, `31` validation
+result preimages and hashes, and only leakage-safe public metadata. It does
+not contain proof of its own final publication or the terminal receipt. A
+committed recursive
 field/type-path digest rejects every unknown nested field or type.
 
 Historical evidence v1 through v7 must remain byte-identical, regular mode
-`0600`, `st_nlink=1`, ignored, untracked and on distinct inodes.
+`0600`, `st_nlink=1`, ignored, untracked and on distinct inodes. Evidence v8
+and v9 must remain absent. The decision-grade result additionally requires the
+sanitized terminal receipt and exact authenticated PR #11 metadata readback.
 
 ## 12. Explicit stop
 
@@ -435,9 +520,14 @@ translation inputs/outputs are not read.
 This contract ends at:
 
 ```text
-REMEDIATION: READY_FOR_REVIEW
-M1B-1A-R1-AUTH-V9: READY_FOR_OWNER_REVIEW
-R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V9_MERGE
+REMEDIATION: DEFINITION_REVIEWABLE
+M1B-1A-R1-AUTH-V9: SUPERSEDED_BEFORE_EFFECT
+M1B-1A-R1-AUTH-V10-DEFINITION: REVIEWABLE
+POSTPUBLICATION_EVIDENCE: REQUIRED
+TERMINAL_PUBLICATION_RECEIPT: REQUIRED
+PR11_METADATA_RECONCILIATION: REQUIRED
+EFFECT: NOT_ACTIVE
+R1_REMEDIATION: NOT_AUTHORIZED_UNTIL_V10_MERGE
 NEW_REPOSITORY_CODE_EXECUTION: NOT_AUTHORIZED
 PROVIDER_EXECUTION: NOT_STARTED
 EXECUTABLE_TCB_ADMISSION: NOT_GRANTED
