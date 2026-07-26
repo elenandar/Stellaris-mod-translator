@@ -12,7 +12,7 @@ import tempfile
 from typing import Callable
 
 from .ollama import OllamaClient, OllamaError
-from .parser import ParseError, ParsedFile, parse_localisation
+from .parser import Entry, ParseError, ParsedFile, parse_localisation
 from .publication import (
     AtomicPublicationUnavailable,
     DestinationExistsError,
@@ -46,24 +46,35 @@ def translate_mod(
     model: str,
     *,
     dry_run: bool = False,
+    max_occurrences_per_file: int | None = None,
     client_factory: Callable[[], OllamaClient] = OllamaClient,
 ) -> dict[str, object]:
+    _validate_occurrence_limit(max_occurrences_per_file)
     source = _validated_source(source_mod)
     output_abs = _validated_output(source, output)
     files = _snapshot(source)
     report = _base_report(source, files)
     report["output"] = str(output_abs)
     report["dry_run"] = dry_run
+    report["max_occurrences_per_file"] = max_occurrences_per_file
     report["model"] = {"tag": model, "digest": None}
+    planned, deferred = _translation_plan_counts(
+        files, max_occurrences_per_file
+    )
+    report["counts"]["planned_translation_occurrences"] = planned
+    report["counts"]["deferred_occurrences"] = deferred
     if dry_run:
+        _validate_count_invariant(report, dry_run=True)
+        report["status"] = (
+            "dry_run_plan_with_fallbacks"
+            if report["counts"]["fallback_occurrences"] or deferred
+            else "dry_run_plan"
+        )
+        report["editorial_status"] = "not_evaluated"
+        report["editorially_approved"] = False
         return report
 
-    needs_model = any(
-        item.parsed is not None
-        and item.parsed.is_english
-        and item.parsed.entries
-        for item in files
-    )
+    needs_model = planned > 0
     client: OllamaClient | None = None
     identity: dict[str, str] | None = None
     if needs_model:
@@ -81,7 +92,9 @@ def translate_mod(
             if parsed is None or not parsed.is_english:
                 continue
             replacements: dict[int, str] = {}
-            for entry in parsed.entries:
+            for entry in _selected_entries(
+                parsed, max_occurrences_per_file
+            ):
                 try:
                     if client is None:
                         raise SafetyError("model_client_unavailable")
@@ -110,6 +123,14 @@ def translate_mod(
         report["counts"]["translated_occurrences"] = translated
         report["counts"]["fallback_occurrences"] += fallback
         report["hashes"]["output_localisation_sha256"] = candidate_hash
+        _validate_count_invariant(report, dry_run=False)
+        report["status"] = (
+            "technical_safe_with_fallbacks"
+            if report["counts"]["fallback_occurrences"] or deferred
+            else "technical_safe"
+        )
+        report["editorial_status"] = "human_review_required"
+        report["editorially_approved"] = False
         report_path = temp / "translation-report.json"
         _write_new(
             report_path,
@@ -134,6 +155,63 @@ def translate_mod(
             shutil.rmtree(temp)
         raise
     return report
+
+
+def _validate_occurrence_limit(value: int | None) -> None:
+    if value is None:
+        return
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value < 1
+        or value > 100
+    ):
+        raise SafetyError(
+            "max_occurrences_per_file_must_be_integer_from_1_to_100"
+        )
+
+
+def _selected_entries(
+    parsed: ParsedFile, max_occurrences_per_file: int | None
+) -> tuple[Entry, ...]:
+    if max_occurrences_per_file is None:
+        return parsed.entries
+    return parsed.entries[:max_occurrences_per_file]
+
+
+def _translation_plan_counts(
+    files: list[SourceFile], max_occurrences_per_file: int | None
+) -> tuple[int, int]:
+    planned = deferred = 0
+    for source_file in files:
+        parsed = source_file.parsed
+        if parsed is None or not parsed.is_english:
+            continue
+        selected = len(_selected_entries(parsed, max_occurrences_per_file))
+        planned += selected
+        deferred += len(parsed.entries) - selected
+    return planned, deferred
+
+
+def _validate_count_invariant(
+    report: dict[str, object], *, dry_run: bool
+) -> None:
+    counts = report["counts"]
+    assert isinstance(counts, dict)
+    if dry_run:
+        accounted = (
+            counts["planned_translation_occurrences"]
+            + counts["fallback_occurrences"]
+            + counts["deferred_occurrences"]
+        )
+    else:
+        accounted = (
+            counts["translated_occurrences"]
+            + counts["fallback_occurrences"]
+            + counts["deferred_occurrences"]
+        )
+    if counts["occurrences"] != accounted:
+        raise SafetyError("occurrence_count_invariant_failed")
 
 
 def _validated_source(path: Path) -> Path:
@@ -260,15 +338,16 @@ def _base_report(source: Path, files: list[SourceFile]) -> dict[str, object]:
                     {"path": item.relative.as_posix(), **diagnostic}
                 )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": str(source),
         "counts": {
             "discovered_yml_files": len(files),
             "english_files": english_files,
             "occurrences": occurrences,
+            "planned_translation_occurrences": 0,
             "translated_occurrences": 0,
             "fallback_occurrences": fallback,
-            "blocked_occurrences": 0,
+            "deferred_occurrences": 0,
             "skipped_files": skipped,
         },
         "hashes": {

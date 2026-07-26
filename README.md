@@ -9,10 +9,15 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-0` — текущий рабочий milestone. Owner decision от 26 июля 2026 года
+`MVP-1` — текущий bounded-pilot milestone поверх рабочего `MVP-0`. Owner
+decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
 исторический evidence и не являются runtime authority для нового CLI.
+
+Bounded mode предназначен для небольшого детерминированного candidate,
+который владелец оценивает вручную. Он не означает полный перевод мода,
+литературную готовность или `editorially_approved`.
 
 ## Установка и quick start
 
@@ -33,7 +38,8 @@ python3 -m stellaris_mod_translator translate-mod \
 python3 -m stellaris_mod_translator translate-mod \
   --source-mod /path/to/mod \
   --output /path/to/new-candidate \
-  --model exact-ollama-tag
+  --model exact-ollama-tag \
+  --max-occurrences-per-file 3
 ```
 
 `--dry-run` не вызывает Ollama и ничего не записывает. Обычный запуск требует
@@ -43,6 +49,15 @@ python3 -m stellaris_mod_translator translate-mod \
 Immediate layer `localisation/replace/**` в MVP-0 не поддерживается: такие
 файлы пропускаются без вызова Ollama и без создания
 `localisation/russian/replace/**`.
+
+Необязательный `--max-occurrences-per-file N` принимает значения от `1` до
+`100` и выбирает первые `N` поддержанных occurrences отдельно в каждом
+English-файле. Unsupported occurrences не расходуют quota. Остальные
+поддержанные occurrences попадают в полный candidate без изменения human text
+и учитываются как `deferred`, отдельно от `fallback`. Без флага CLI сохраняет
+полный режим MVP-0. Report schema v2 различает исходное число occurrences,
+запланированные, переведённые, fallback и deferred occurrences и фиксирует
+bounded limit.
 
 Известная граница MVP-0: атомарная публикация защищает от появления конечного
 destination, но не обещает защиту от злонамеренного конкурирующего процесса

@@ -10,9 +10,16 @@ loopback Ollama и отдельный candidate output. PR №11 и его AUTH/
 ниже остаются историческим evidence, но не переносят сложный authorization
 контур в MVP-0.
 
+После merge MVP-0 владелец отдельно разрешил `MVP-1`: bounded pilot ровно одного
+указанного private мода с read-only source, exact локальной Ollama-моделью и
+отдельным no-clobber candidate. Bounded output служит только материалом для
+human review; он не является полным переводом, active publish или
+литературным approval.
+
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
-| MVP-0 — Safe translate-mod CLI | lossless supported-subset parser, exact local Ollama tag/digest, English fallback и атомарный отдельный RU candidate | явное owner decision | synthetic suite; затем ручной synthetic smoke и только после consent один private mod | **implemented — synthetic suite passed; manual smoke pending** |
+| MVP-1 — Bounded real-mod pilot | детерминированный per-file limit, отдельные deferred/fallback counters и небольшой private candidate для human review | merged MVP-0 и explicit owner consent для exact mod/model/path | synthetic suite, dry-run, source/model identity и candidate safety checks | **implemented in draft PR — live pilot is technically safe with fallbacks; human review required** |
+| MVP-0 — Safe translate-mod CLI | lossless supported-subset parser, exact local Ollama tag/digest, English fallback и атомарный отдельный RU candidate | явное owner decision | synthetic suite; затем ручной synthetic smoke и только после consent один private mod | **implemented — merged in PR #12** |
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
 | M1A — Format & playset evidence | threat model, format/markup specs, corpus, read-only load-order evidence и изолированные export-policy spikes | M0R | verdict `GO` разрешает совместный gate; `BLOCKED` останавливает ветку | **BLOCKED** — evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) и hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) merged as [`9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240) |
