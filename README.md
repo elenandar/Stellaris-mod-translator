@@ -1,12 +1,51 @@
 # Stellaris Mod Translator
 
-Персональный локальный инструмент для качественного и технически безопасного перевода модификаций Stellaris, с которыми владелец проекта играет или планирует играть на macOS.
+Персональный local-only CLI для создания отдельного русского candidate-каталога
+из localisation одного мода Stellaris через уже установленный Ollama.
 
-Основной интерфейс MVP — Rust CLI. Инструмент анализирует выбранные локальные и Workshop-моды только для чтения, хранит состояние переводов в SQLite, использует локальные модели через Ollama и собирает управляемый русский артефакт без изменения оригиналов.
+MVP-0 реализован как небольшой Python-пакет без обязательных внешних
+runtime-зависимостей. Source mod читается без изменений; CLI не регистрирует
+результат в launcher и не пишет в Workshop, Stellaris или active mod paths.
 
 ## Статус
 
-Production-реализация ещё не начата. Персональный local-only baseline `M0R` принят и слит в [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2), merge commit [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2). Evidence [PR #3](https://github.com/elenandar/Stellaris-mod-translator/pull/3) слит как [`2b51879`](https://github.com/elenandar/Stellaris-mod-translator/commit/2b51879d8e358cf5412f3a6792f33c71ae79d863), hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) — как [`9cd10d1`](https://github.com/elenandar/Stellaris-mod-translator/commit/9cd10d1fd3c9b52354ea4a5c181b0ecaf9c05240), M1B protocol proposal [PR #5](https://github.com/elenandar/Stellaris-mod-translator/pull/5) — как [`ed07bcc`](https://github.com/elenandar/Stellaris-mod-translator/commit/ed07bcca96945dbb49206c975908e00c832210b5), external owner-freeze [PR #6](https://github.com/elenandar/Stellaris-mod-translator/pull/6) — как [`9f854da`](https://github.com/elenandar/Stellaris-mod-translator/commit/9f854da7501dec6ec9afc5e4bf71dfaa1ea9ecbc), stable-read hardening [PR #7](https://github.com/elenandar/Stellaris-mod-translator/pull/7) — как [`424a4e4`](https://github.com/elenandar/Stellaris-mod-translator/commit/424a4e45066cfbff3f9b3da2ec2cf6ad62a643fb), а offline executable/TCB contract [PR #8](https://github.com/elenandar/Stellaris-mod-translator/pull/8) head `6a2243ad803bf47056f2577013053b6abc2df020` — как [`bfe3faa`](https://github.com/elenandar/Stellaris-mod-translator/commit/bfe3faaaf1c13021f4ecc62b7c584bc28ba964bc). Текущий verdict остаётся `M1A: BLOCKED`. Это evidence-этап, а не начало product CLI.
+`MVP-0` — текущий рабочий milestone. Owner decision от 26 июля 2026 года
+supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
+продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
+исторический evidence и не являются runtime authority для нового CLI.
+
+## Установка и quick start
+
+Требуется Python 3.9+ и локальный Ollama на `http://127.0.0.1:11434`.
+
+```bash
+python3 -m pip install -e .
+
+python3 -m stellaris_mod_translator inspect \
+  --source-mod /path/to/mod
+
+python3 -m stellaris_mod_translator translate-mod \
+  --source-mod /path/to/mod \
+  --output /path/to/new-candidate \
+  --model exact-ollama-tag \
+  --dry-run
+
+python3 -m stellaris_mod_translator translate-mod \
+  --source-mod /path/to/mod \
+  --output /path/to/new-candidate \
+  --model exact-ollama-tag
+```
+
+`--dry-run` не вызывает Ollama и ничего не записывает. Обычный запуск требует
+новый output path и создаёт `localisation/russian/**` вместе с локальным
+`translation-report.json`. Fallback остаётся на английском и явно учитывается
+в отчёте; candidate не получает `editorially_approved` автоматически.
+
+Для поставляемого с macOS старого `pip`, если editable install запрашивает
+`wheel`, доступен полностью локальный совместимый запуск:
+`python3 setup.py develop`.
+
+## Исторический контекст до MVP-0
 
 После принятия `M0R` разрешены только два доказательных этапа: исследование реального формата и загрузки модов (`M1A`, сейчас `BLOCKED`) и изолированный benchmark качества локальных моделей (`M1B`). Exact proposal v7/generation 108 принят отдельным external owner-freeze record только как declarative basis записанного `M1B-1A local synthetic provider preflight`; после merge PR #6 exact scope действует со state `OWNER_FREEZE: ACCEPTED`, merge PR #7 выставил `STABLE_READ_HARDENING: ACCEPTED`, merge PR #8 — `M1B-1A0 CONTRACT: ACCEPTED/MERGED`, а merge PR #9 — `M1B-1A1-AUTH: ACCEPTED/MERGED`. Executable admission по-прежнему не выдан. Текущая граница: `M1B-1A1 CANDIDATE: READY_FOR_OWNER_REVIEW`, `CANDIDATE CONSTRUCTION: COMPLETE_WITHIN_EXACT_INERT_SCOPE`, `CANDIDATE SOURCE: NOT_PARSED_NOT_COMPILED_NOT_IMPORTED_NOT_EXECUTED`, `PROPOSED EXECUTABLE MANIFEST: REVIEWABLE_PROPOSAL_ONLY_NOT_ADMISSION`, `NEW REPOSITORY CODE EXECUTION: NOT_AUTHORIZED`, `RUNTIME_ENVELOPE_CONSTRUCTION: NOT_AUTHORIZED`, `EXECUTABLE_TCB_ADMISSION: NOT_GRANTED`, `EXECUTABLE_TCB_OWNER_DECISION_REQUIRED: PRESERVED`, `PROVIDER_ENTRYPOINT_SOURCE_ELIGIBILITY_UNPROVEN: PRESERVED`, `EXECUTABLE_IMPLEMENTATION_IDENTITY_UNPROVEN: PRESERVED`. `M1B-1A PROVIDER EXECUTION: NOT_STARTED`, `M1B: NOT_EVALUATED`; benchmark не запускался. Только принятые verdicts `M1A: GO` и `M1B: QUALITY_FEASIBLE` вместе разрешают `M2`; сейчас `M2: FORBIDDEN`, массовый перевод и active publish запрещены.
 
@@ -45,7 +84,7 @@ external owner-controlled trust root и не снимают executable owner blo
 Contract не принимает текущие executable bytes, runtime или invocation state.
 Это contract evidence, а не model call или quality verdict.
 
-## Контракт MVP
+## Исторический целевой контракт до MVP-0
 
 - один владелец, один текущий Mac и выбранные игровые наборы модов;
 - Rust CLI — поддерживаемый интерфейс; графический интерфейс не обязателен;
@@ -116,7 +155,7 @@ Contract не принимает текущие executable bytes, runtime или
 - [Proposed executable manifest M1B-1A1](registry/m1b/m1b-1a1-proposed-executable-manifest-v1.json)
 - [Inert synthetic candidate fixture M1B-1A1](fixtures/m1b/candidate-construction/README.md)
 
-## Следующий шлюз
+## Исторический AUTH-first шлюз (superseded для MVP-0)
 
 Hardening [PR #4](https://github.com/elenandar/Stellaris-mod-translator/pull/4) слит, но исторический report 17 июля и повторная проверка 18 июля честно сохраняют `M1A: BLOCKED`: byte/containment evidence собрано, а atomic cross-file coherence, arbitrary same-UID path-race protection и effective load-order/collision policy недостаточны для `GO`.
 
