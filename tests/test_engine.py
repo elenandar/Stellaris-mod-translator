@@ -41,6 +41,21 @@ class FixedResponseClient(FakeClient):
         return type(self).response
 
 
+class RecordingClient(FakeClient):
+    texts: list[str] = []
+
+    def translate(self, *, tag: str, text: str) -> str:
+        type(self).calls += 1
+        type(self).texts.append(text)
+        return "RU " + text
+
+
+class EchoClient(FakeClient):
+    def translate(self, *, tag: str, text: str) -> str:
+        type(self).calls += 1
+        return text
+
+
 def make_source(tmp_path: Path, data: bytes = SOURCE_BYTES) -> Path:
     source = tmp_path / "source"
     path = source / "localisation" / "english" / "demo_l_english.yml"
@@ -49,11 +64,87 @@ def make_source(tmp_path: Path, data: bytes = SOURCE_BYTES) -> Path:
     return source
 
 
+def assert_inspect_schema_v1(report: dict[str, object]) -> None:
+    assert report["schema_version"] == 1
+    assert set(report) == {
+        "schema_version",
+        "source",
+        "counts",
+        "hashes",
+        "diagnostics",
+    }
+    assert set(report["counts"]) == {
+        "discovered_yml_files",
+        "english_files",
+        "occurrences",
+        "translated_occurrences",
+        "fallback_occurrences",
+        "blocked_occurrences",
+        "skipped_files",
+    }
+
+
+def assert_translation_schema_v2(
+    report: dict[str, object], *, dry_run: bool
+) -> None:
+    assert report["schema_version"] == 2
+    counts = report["counts"]
+    assert set(counts) == {
+        "discovered_yml_files",
+        "english_files",
+        "occurrences",
+        "planned_translation_occurrences",
+        "translated_occurrences",
+        "unchanged_accepted_occurrences",
+        "fallback_occurrences",
+        "deferred_occurrences",
+        "skipped_files",
+    }
+    assert 0 <= counts["unchanged_accepted_occurrences"] <= counts[
+        "translated_occurrences"
+    ]
+    translated_or_planned = (
+        counts["planned_translation_occurrences"]
+        if dry_run
+        else counts["translated_occurrences"]
+    )
+    assert counts["occurrences"] == (
+        translated_or_planned
+        + counts["fallback_occurrences"]
+        + counts["deferred_occurrences"]
+    )
+
+
+def test_inspect_supported_occurrences_keep_schema_v1(tmp_path: Path) -> None:
+    source = make_source(
+        tmp_path,
+        b'l_english:\n first:0 "One"\n second:0 "Two"\n',
+    )
+
+    report = inspect_mod(source)
+
+    assert_inspect_schema_v1(report)
+    assert report["counts"]["occurrences"] == 2
+    assert report["counts"]["blocked_occurrences"] == 0
+
+
+def test_inspect_parser_diagnostics_keep_schema_v1(tmp_path: Path) -> None:
+    source = make_source(tmp_path)
+
+    report = inspect_mod(source)
+
+    assert_inspect_schema_v1(report)
+    assert report["counts"]["occurrences"] == 3
+    assert report["counts"]["fallback_occurrences"] == 1
+    assert report["diagnostics"][0]["code"] == "unsupported_entry"
+
+
 def test_inspect_reports_invalid_file_without_text(tmp_path: Path) -> None:
     source = make_source(tmp_path)
     bad = source / "localisation" / "english" / "bad_l_english.yml"
     bad.write_bytes(b"\xff")
     report = inspect_mod(source)
+    assert_inspect_schema_v1(report)
     assert report["counts"]["skipped_files"] == 1
     assert report["counts"]["english_files"] == 1
     assert "Hello" not in json.dumps(report)
@@ -79,6 +170,11 @@ def test_translation_changes_only_allowed_spans_and_keeps_source(
     assert b' second:1 "Goodbye"\n' in rendered
     assert report["counts"]["translated_occurrences"] == 1
     assert report["counts"]["fallback_occurrences"] == 2
+    assert report["counts"]["planned_translation_occurrences"] == 2
+    assert report["counts"]["unchanged_accepted_occurrences"] == 0
+    assert report["counts"]["deferred_occurrences"] == 0
+    assert_translation_schema_v2(report, dry_run=False)
+    assert FakeClient.calls == 2
     assert (
         hashlib.sha256(
             (source / "localisation/english/demo_l_english.yml").read_bytes()
@@ -114,6 +210,11 @@ def test_versionless_l_prefixed_entries_are_translated(
         ' l_english_name: "Привет name"\n'
     ).encode()
     assert report["counts"]["translated_occurrences"] == 2
+    assert report["counts"]["unchanged_accepted_occurrences"] == 0
+    assert report["counts"]["planned_translation_occurrences"] == 2
+    assert report["max_occurrences_per_file"] is None
+    assert report["status"] == "technical_safe"
+    assert_translation_schema_v2(report, dry_run=False)
     assert FakeClient.calls == 2
     assert source_file.read_bytes() == source_bytes
 
@@ -130,11 +231,288 @@ def test_dry_run_never_calls_provider_or_writes(tmp_path: Path) -> None:
         output,
         "synthetic:1",
         dry_run=True,
+        max_occurrences_per_file=1,
         client_factory=forbidden,
     )
     assert report["dry_run"] is True
+    assert report["counts"]["planned_translation_occurrences"] == 1
+    assert report["counts"]["fallback_occurrences"] == 1
+    assert report["counts"]["deferred_occurrences"] == 1
+    assert report["status"] == "dry_run_partial"
+    assert_translation_schema_v2(report, dry_run=True)
     assert not output.exists()
     assert list(tmp_path.glob(".candidate.tmp-*")) == []
+
+
+@pytest.mark.parametrize("limit", [0, -1, 1.5, "1", 101, True])
+def test_library_rejects_invalid_occurrence_limit(
+    tmp_path: Path, limit: object
+) -> None:
+    source = make_source(tmp_path)
+    with pytest.raises(
+        SafetyError,
+        match="max_occurrences_per_file_must_be_integer_from_1_to_100",
+    ):
+        translate_mod(
+            source,
+            tmp_path / "candidate",
+            "synthetic:1",
+            dry_run=True,
+            max_occurrences_per_file=limit,  # type: ignore[arg-type]
+        )
+
+
+def test_bounded_selection_is_deterministic_across_creation_order(
+    tmp_path: Path,
+) -> None:
+    def build_source(root: Path, order: list[str]) -> Path:
+        source = root / "source"
+        english = source / "localisation/english"
+        english.mkdir(parents=True)
+        payloads = {
+            "a": b'l_english:\n a1:0 "A first"\n a2:0 "A second"\n',
+            "b": b'l_english:\n b1:0 "B first"\n b2:0 "B second"\n',
+        }
+        for name in order:
+            (english / f"{name}_l_english.yml").write_bytes(payloads[name])
+        return source
+
+    source_one = build_source(tmp_path / "one", ["b", "a"])
+    source_two = build_source(tmp_path / "two", ["a", "b"])
+    observed: list[list[str]] = []
+    rendered: list[list[tuple[str, bytes]]] = []
+    for index, source in enumerate((source_one, source_two), start=1):
+        RecordingClient.calls = 0
+        RecordingClient.texts = []
+        output = tmp_path / f"candidate-{index}"
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            max_occurrences_per_file=1,
+            client_factory=RecordingClient,
+        )
+        observed.append(list(RecordingClient.texts))
+        rendered.append(
+            [
+                (path.relative_to(output).as_posix(), path.read_bytes())
+                for path in sorted(output.rglob("*.yml"))
+            ]
+        )
+
+    assert observed == [["A first", "B first"], ["A first", "B first"]]
+    assert rendered[0] == rendered[1]
+
+
+def test_limit_is_per_file_and_deferred_is_not_fallback(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    english = source / "localisation/english"
+    english.mkdir(parents=True)
+    for name in ("a", "b"):
+        (english / f"{name}_l_english.yml").write_bytes(
+            (
+                "l_english:\n"
+                f" {name}1:0 \"{name} first\"\n"
+                f" {name}2:0 \"{name} second\"\n"
+                f" {name}3:0 \"{name} third\"\n"
+            ).encode()
+        )
+    RecordingClient.calls = 0
+    RecordingClient.texts = []
+
+    report = translate_mod(
+        source,
+        tmp_path / "candidate",
+        "synthetic:1",
+        max_occurrences_per_file=2,
+        client_factory=RecordingClient,
+    )
+
+    assert RecordingClient.calls == 4
+    assert report["counts"]["occurrences"] == 6
+    assert report["counts"]["planned_translation_occurrences"] == 4
+    assert report["counts"]["translated_occurrences"] == 4
+    assert report["counts"]["fallback_occurrences"] == 0
+    assert report["counts"]["deferred_occurrences"] == 2
+    assert_translation_schema_v2(report, dry_run=False)
+
+
+def test_unsupported_entry_does_not_consume_quota_and_deferred_is_identical(
+    tmp_path: Path,
+) -> None:
+    source_bytes = (
+        b'l_english:\n'
+        b' unsupported:0 not-quoted\n'
+        b' selected:0 "First supported"\n'
+        b' deferred:0 "Keep exact \\"English\\"\\\\path\\ntext $NAME$"\n'
+    )
+    source = make_source(tmp_path, source_bytes)
+    output = tmp_path / "candidate"
+    RecordingClient.calls = 0
+    RecordingClient.texts = []
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        max_occurrences_per_file=1,
+        client_factory=RecordingClient,
+    )
+
+    assert RecordingClient.texts == ["First supported"]
+    assert (
+        output / "localisation/russian/demo_l_russian.yml"
+    ).read_bytes() == (
+        b'l_russian:\n'
+        b' unsupported:0 not-quoted\n'
+        b' selected:0 "RU First supported"\n'
+        b' deferred:0 "Keep exact \\"English\\"\\\\path\\ntext $NAME$"\n'
+    )
+    assert report["counts"]["occurrences"] == 3
+    assert report["counts"]["planned_translation_occurrences"] == 1
+    assert report["counts"]["translated_occurrences"] == 1
+    assert report["counts"]["fallback_occurrences"] == 1
+    assert report["counts"]["deferred_occurrences"] == 1
+    assert report["status"] == "technical_safe_partial"
+
+
+def test_selected_model_failure_is_fallback_while_later_entry_is_deferred(
+    tmp_path: Path,
+) -> None:
+    source_bytes = (
+        b'l_english:\n'
+        b' selected:0 "Selected"\n'
+        b' deferred:0 "Deferred $NAME$"\n'
+    )
+    source = make_source(tmp_path, source_bytes)
+    output = tmp_path / "candidate"
+
+    class FailingClient(FakeClient):
+        def translate(self, *, tag: str, text: str) -> str:
+            type(self).calls += 1
+            raise OllamaError("selected failure")
+
+    FailingClient.calls = 0
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        max_occurrences_per_file=1,
+        client_factory=FailingClient,
+    )
+
+    assert FailingClient.calls == 1
+    assert (
+        output / "localisation/russian/demo_l_russian.yml"
+    ).read_bytes() == source_bytes.replace(b"l_english:", b"l_russian:", 1)
+    assert report["counts"]["planned_translation_occurrences"] == 1
+    assert report["counts"]["translated_occurrences"] == 0
+    assert report["counts"]["fallback_occurrences"] == 1
+    assert report["counts"]["deferred_occurrences"] == 1
+
+
+def test_bounded_report_schema_identity_and_placeholder_cleanup(
+    tmp_path: Path,
+) -> None:
+    source_bytes = (
+        b'l_english:\n'
+        b' selected:0 "Hello \\"quoted\\"\\\\path\\nnext $NAME$"\n'
+        b' deferred:0 "Deferred [Root.GetName]"\n'
+    )
+    source = make_source(tmp_path, source_bytes)
+    output = tmp_path / "candidate"
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        max_occurrences_per_file=1,
+        client_factory=FakeClient,
+    )
+    candidate = output / "localisation/russian/demo_l_russian.yml"
+    persisted = json.loads((output / "translation-report.json").read_text())
+
+    assert report["schema_version"] == 2
+    assert report["max_occurrences_per_file"] == 1
+    assert report["model"] == {
+        "tag": "synthetic:1",
+        "digest": "sha256:synthetic",
+    }
+    assert report["status"] == "technical_safe_partial"
+    assert report["editorial_status"] == "human_review_required"
+    assert report["editorially_approved"] is False
+    assert persisted == report
+    assert b"__SMT_" not in candidate.read_bytes()
+    assert b'\\"quoted\\"\\\\path\\nnext $NAME$' in candidate.read_bytes()
+
+
+def test_accepted_unchanged_plain_text_is_counted_and_requires_review(
+    tmp_path: Path,
+) -> None:
+    source_bytes = b'l_english:\n key:0 "  Keep Latin Name  "\n'
+    source = make_source(tmp_path, source_bytes)
+    output = tmp_path / "candidate"
+    EchoClient.calls = 0
+
+    report = translate_mod(
+        source, output, "synthetic:1", client_factory=EchoClient
+    )
+
+    assert EchoClient.calls == 1
+    assert report["counts"]["translated_occurrences"] == 1
+    assert report["counts"]["unchanged_accepted_occurrences"] == 1
+    assert report["counts"]["fallback_occurrences"] == 0
+    assert report["editorial_status"] == "human_review_required"
+    assert report["editorially_approved"] is False
+    assert (
+        output / "localisation/russian/demo_l_russian.yml"
+    ).read_bytes() == source_bytes.replace(b"l_english:", b"l_russian:", 1)
+    assert_translation_schema_v2(report, dry_run=False)
+
+
+def test_accepted_unchanged_protected_atoms_are_counted_after_restoration(
+    tmp_path: Path,
+) -> None:
+    source_bytes = (
+        b'l_english:\n'
+        b' key:0 "  Keep $NAME$ [Root.GetName] \\"quoted\\"  "\n'
+    )
+    source = make_source(tmp_path, source_bytes)
+    output = tmp_path / "candidate"
+    EchoClient.calls = 0
+
+    report = translate_mod(
+        source, output, "synthetic:1", client_factory=EchoClient
+    )
+
+    assert EchoClient.calls == 1
+    assert report["counts"]["translated_occurrences"] == 1
+    assert report["counts"]["unchanged_accepted_occurrences"] == 1
+    assert report["counts"]["fallback_occurrences"] == 0
+    assert report["editorial_status"] == "human_review_required"
+    assert (
+        output / "localisation/russian/demo_l_russian.yml"
+    ).read_bytes() == source_bytes.replace(b"l_english:", b"l_russian:", 1)
+    assert_translation_schema_v2(report, dry_run=False)
+
+
+def test_unchanged_accepted_must_be_subset_of_accepted_results(
+    tmp_path: Path,
+) -> None:
+    report = translate_mod(
+        make_source(tmp_path),
+        tmp_path / "candidate",
+        "synthetic:1",
+        dry_run=True,
+    )
+    report["counts"]["unchanged_accepted_occurrences"] = 1
+
+    with pytest.raises(
+        SafetyError, match="unchanged_accepted_count_invariant_failed"
+    ):
+        engine._validate_count_invariant(report, dry_run=True)
 
 
 def test_system_error_never_publishes_partial_output(
@@ -320,6 +698,31 @@ def test_invalid_translation_falls_back_to_exact_english_and_keeps_source(
     assert source_file.read_bytes() == source_bytes
 
 
+def test_bounded_dry_run_with_skipped_file_is_partial(tmp_path: Path) -> None:
+    source = make_source(
+        tmp_path,
+        b'l_english:\n key:0 "Hello"\n',
+    )
+    skipped = source / "localisation/english/skipped_l_english.yml"
+    skipped.write_bytes(b"\xff")
+    output = tmp_path / "candidate"
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        dry_run=True,
+        max_occurrences_per_file=1,
+    )
+
+    assert report["counts"]["skipped_files"] == 1
+    assert report["counts"]["fallback_occurrences"] == 0
+    assert report["counts"]["deferred_occurrences"] == 0
+    assert report["status"] == "dry_run_partial"
+    assert_translation_schema_v2(report, dry_run=True)
+    assert not output.exists()
+
+
 @pytest.mark.parametrize(
     "unsafe_source",
     [
@@ -347,6 +750,7 @@ def test_unsafe_file_is_skipped_without_translation_or_candidate_bytes(
     )
 
     assert report["counts"]["skipped_files"] == 1
+    assert report["status"] == "technical_safe_partial"
     assert FakeClient.calls == 0
     assert not (output / "localisation").exists()
     assert source_file.read_bytes() == unsafe_source
@@ -356,7 +760,9 @@ def test_replace_layer_is_skipped_without_provider_or_source_mutation(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "source"
-    source_file = source / "localisation/replace/demo_l_english.yml"
+    source_file = (
+        source / "localisation/english/replace/demo_l_english.yml"
+    )
     source_file.parent.mkdir(parents=True)
     source_bytes = b'l_english:\n key:0 "Hello"\n'
     source_file.write_bytes(source_bytes)
@@ -374,15 +780,39 @@ def test_replace_layer_is_skipped_without_provider_or_source_mutation(
 
     assert report["counts"]["skipped_files"] == 1
     assert report["counts"]["english_files"] == 0
+    assert report["status"] == "technical_safe_partial"
     assert report["diagnostics"] == [
         {
-            "path": "localisation/replace/demo_l_english.yml",
+            "path": "localisation/english/replace/demo_l_english.yml",
             "code": "replace_layer_unsupported",
         }
     ]
     assert not (output / "localisation").exists()
     assert not (output / "localisation/russian/replace").exists()
     assert source_file.read_bytes() == source_bytes
+
+
+def test_empty_source_has_explicit_no_translatable_content_status(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    dry_output = tmp_path / "dry-candidate"
+    full_output = tmp_path / "full-candidate"
+
+    dry_report = translate_mod(
+        source, dry_output, "synthetic:1", dry_run=True
+    )
+    full_report = translate_mod(source, full_output, "synthetic:1")
+
+    assert dry_report["status"] == "dry_run_no_translatable_content"
+    assert full_report["status"] == "no_translatable_content"
+    assert dry_report["counts"]["occurrences"] == 0
+    assert full_report["counts"]["occurrences"] == 0
+    assert_translation_schema_v2(dry_report, dry_run=True)
+    assert_translation_schema_v2(full_report, dry_run=False)
+    assert not dry_output.exists()
+    assert (full_output / "translation-report.json").is_file()
 
 
 def test_replace_layer_does_not_add_calls_or_candidate_paths(
