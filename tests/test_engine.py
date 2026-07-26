@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -602,6 +603,18 @@ def test_symlink_in_localisation_is_rejected(tmp_path: Path) -> None:
     outside.write_bytes(b'l_english:\n k:0 "x"\n')
     (source / "localisation" / "linked.yml").symlink_to(outside)
     with pytest.raises(SafetyError, match="symlink"):
+        inspect_mod(source)
+
+
+def test_non_regular_localisation_file_fails_without_blocking(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    localisation = source / "localisation/english"
+    localisation.mkdir(parents=True)
+    os.mkfifo(localisation / "fifo.yml")
+
+    with pytest.raises(SafetyError, match="unsafe_localisation_file"):
         inspect_mod(source)
 
 

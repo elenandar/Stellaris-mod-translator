@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import tempfile
 from typing import Callable
 
@@ -275,7 +276,12 @@ def _snapshot(source: Path) -> list[SourceFile]:
     if localisation.is_symlink() or not localisation.is_dir():
         raise SafetyError("unsafe_localisation_root")
     results: list[SourceFile] = []
-    for root, dirs, names in os.walk(localisation, followlinks=False):
+    def fail_walk(error: OSError) -> None:
+        raise SafetyError("localisation_inventory_failed") from error
+
+    for root, dirs, names in os.walk(
+        localisation, followlinks=False, onerror=fail_walk
+    ):
         root_path = Path(root)
         for dirname in dirs:
             if (root_path / dirname).is_symlink():
@@ -287,10 +293,16 @@ def _snapshot(source: Path) -> list[SourceFile]:
             if path.suffix.lower() != ".yml":
                 continue
             relative = path.relative_to(source)
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            flags = (
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0)
+            )
             descriptor = os.open(path, flags)
             try:
                 before = os.fstat(descriptor)
+                if not stat.S_ISREG(before.st_mode):
+                    raise SafetyError("unsafe_localisation_file")
                 chunks: list[bytes] = []
                 while chunk := os.read(descriptor, 1024 * 1024):
                     chunks.append(chunk)

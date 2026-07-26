@@ -16,9 +16,16 @@ loopback Ollama и отдельный candidate output. PR №11 и его AUTH/
 human review; он не является полным переводом, active publish или
 литературным approval.
 
+После merge MVP-1 владелец отдельно разрешил `MVP-2`: автономный локальный
+editorial review pack только для exact immutable pilot candidate. Этот слой
+читает source/candidate только для проверки и review, не вызывает Ollama, не
+применяет решения обратно и не разрешает полный перевод, launcher integration
+или active publish.
+
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
-| MVP-1 — Bounded real-mod pilot | детерминированный per-file limit, отдельные deferred/fallback counters и небольшой private candidate для human review | merged MVP-0 и explicit owner consent для exact mod/model/path | synthetic suite, dry-run, source/model identity и candidate safety checks | **implemented in draft PR — live pilot is technically safe with fallbacks; human review required** |
+| MVP-2 — Local editorial review pack | pinned occurrence alignment, автономный CSP-safe `index.html`, локальные decisions import/export и atomic no-clobber publication | merged MVP-1 и exact immutable pilot identities | synthetic suite, offline/XSS/browser smoke, source/candidate/report identity и immutability recheck | **implemented in draft PR — exact pilot pack remains local and human review is not full-mod approval** |
+| MVP-1 — Bounded real-mod pilot | детерминированный per-file limit, отдельные deferred/fallback counters и небольшой private candidate для human review | merged MVP-0 и explicit owner consent для exact mod/model/path | synthetic suite, dry-run, source/model identity и candidate safety checks | **implemented — merged in PR #13 as `b5c9d942`; live pilot is technically safe with fallbacks and human review remains required** |
 | MVP-0 — Safe translate-mod CLI | lossless supported-subset parser, exact local Ollama tag/digest, English fallback и атомарный отдельный RU candidate | явное owner decision | synthetic suite; затем ручной synthetic smoke и только после consent один private mod | **implemented — merged in PR #12** |
 | M0 — Initial decision baseline | первоначальные стратегия, аудит, архитектура и план | — | исторический baseline слит, но scope пересмотрен | merged / superseded |
 | M0R — Personal local baseline | owner decision, CLI/Ollama-only scope, исправленные каноны и evidence | M0 | документы согласованы и remediation merged | accepted — [PR #2](https://github.com/elenandar/Stellaris-mod-translator/pull/2) / [`8d468b7`](https://github.com/elenandar/Stellaris-mod-translator/commit/8d468b7b8ca1f748dda8c072ce02933b15656dc2) |
@@ -217,7 +224,8 @@ M1A и M1B могут идти параллельно. M4 требует и до
 
 ## Не планируется до M5
 
-- desktop UI и визуальная полировка;
+- общий desktop UI и визуальная полировка за пределами явно разрешённого
+  автономного MVP-2 review pack;
 - Windows/Linux;
 - Steam Workshop publishing;
 - cloud providers, аккаунты или синхронизация;
