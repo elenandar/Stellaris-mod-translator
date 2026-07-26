@@ -241,7 +241,11 @@ def validate_decisions_payload(
         "decisions",
     }:
         raise SafetyError("invalid_decisions_document_fields")
-    if payload["schema_version"] != DECISIONS_SCHEMA_VERSION:
+    schema_version = payload["schema_version"]
+    if (
+        type(schema_version) not in {int, float}
+        or schema_version != DECISIONS_SCHEMA_VERSION
+    ):
         raise SafetyError("invalid_decisions_schema_version")
     if payload["pack_fingerprint"] != pack_data.get("pack_fingerprint"):
         raise SafetyError("decisions_fingerprint_mismatch")
@@ -289,6 +293,9 @@ def validate_decisions_payload(
             raise SafetyError("invalid_decision_enum")
         if not isinstance(item["note"], str):
             raise SafetyError("invalid_decision_note")
+        _validate_unicode_scalar_string(
+            item["note"], "invalid_decision_note_unicode"
+        )
         tags = item["tags"]
         if (
             not isinstance(tags, list)
@@ -784,6 +791,9 @@ def _split_edited_translation(
 
 
 def _validate_editorial_text(value: str) -> None:
+    _validate_unicode_scalar_string(
+        value, "edited_translation_contains_invalid_unicode"
+    )
     if any(
         ord(char) < 0x20
         or ord(char) == 0x7F
@@ -793,6 +803,15 @@ def _validate_editorial_text(value: str) -> None:
         for char in value
     ):
         raise SafetyError("edited_translation_contains_unsafe_control")
+
+
+def _validate_unicode_scalar_string(value: str, error: str) -> None:
+    if any(0xD800 <= ord(char) <= 0xDFFF for char in value):
+        raise SafetyError(error)
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise SafetyError(error) from exc
 
 
 def _validate_unprotected_segment(value: str) -> None:
@@ -1038,11 +1057,13 @@ const allowedTags=new Set(["terminology","lore","meaning","style","grammar","lef
 const storageKey="stellaris-review-pack:"+pack.pack_fingerprint;
 const byId=new Map(pack.entries.map(entry=>[entry.id,entry]));
 let state=new Map();
+const drafts=new Map();
 let visible=[];
 let currentId=pack.entries.length?pack.entries[0].id:null;
 const el=id=>document.getElementById(id);
 const defaults=record=>({decision:"unreviewed",edited_segments:record.candidate_segments.slice(),note:"",tags:[],glossary_candidate:false});
 const currentState=record=>state.get(record.id)||defaults(record);
+const cloneItem=item=>({decision:item.decision,edited_segments:item.edited_segments.slice(),note:item.note,tags:item.tags.slice(),glossary_candidate:item.glossary_candidate});
 function appendSpan(container,segments,atoms){
   container.replaceChildren();
   segments.forEach((segment,index)=>{
@@ -1051,8 +1072,22 @@ function appendSpan(container,segments,atoms){
   });
 }
 function fullTranslation(record,item){let result="";item.edited_segments.forEach((segment,index)=>{result+=segment;if(index<record.protected_atoms.length)result+=record.protected_atoms[index]});return result}
-function validateText(value){if(typeof value!=="string"||/[\u0000-\u001f\u007f-\u009f\u2028\u2029\ufeff]/u.test(value)||/\p{Cf}/u.test(value))throw new Error("edited_translation contains unsafe control")}
+function validateUnicodeScalars(value,label){
+  if(typeof value!=="string")throw new Error(label+" must be a string");
+  for(let index=0;index<value.length;index++){
+    const code=value.charCodeAt(index);
+    if(code>=0xd800&&code<=0xdbff){
+      const next=value.charCodeAt(index+1);
+      if(!(next>=0xdc00&&next<=0xdfff))throw new Error(label+" contains invalid Unicode scalar");
+      index++;
+    }else if(code>=0xdc00&&code<=0xdfff){
+      throw new Error(label+" contains invalid Unicode scalar");
+    }
+  }
+}
+function validateText(value){validateUnicodeScalars(value,"edited_translation");if(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\ufeff]/u.test(value)||/\p{Cf}/u.test(value))throw new Error("edited_translation contains unsafe control")}
 function validateSegment(value){validateText(value);if(/[$\[\]£§\\\\"]/u.test(value))throw new Error("edited_translation introduces protected syntax")}
+function validateNote(value){validateUnicodeScalars(value,"note")}
 function splitEdited(record,value){
   validateText(value);const segments=[];let cursor=0;
   for(const atom of record.protected_atoms){const position=value.indexOf(atom,cursor);if(position<0)throw new Error("protected atom mismatch");const segment=value.slice(cursor,position);validateSegment(segment);segments.push(segment);cursor=position+atom.length}
@@ -1060,9 +1095,17 @@ function splitEdited(record,value){
   let rebuilt="";segments.forEach((segment,index)=>{rebuilt+=segment;if(index<record.protected_atoms.length)rebuilt+=record.protected_atoms[index]});
   if(rebuilt!==value)throw new Error("protected atom mismatch");return segments
 }
-function exportDocument(){
+function validateStoredItem(record,item){
+  if(!item||typeof item!=="object"||!allowedDecisions.has(item.decision)||typeof item.glossary_candidate!=="boolean"||!Array.isArray(item.tags)||new Set(item.tags).size!==item.tags.length||item.tags.some(tag=>!allowedTags.has(tag)))throw new Error("invalid saved decision state");
+  validateNote(item.note);
+  if(!Array.isArray(item.edited_segments)||item.edited_segments.length!==record.protected_atoms.length+1)throw new Error("invalid saved edited segments");
+  item.edited_segments.forEach(validateSegment);
+  if(item.decision==="edit")splitEdited(record,fullTranslation(record,item));
+}
+function exportDocument(stateValue=state,rejectDrafts=true){
+  if(rejectDrafts&&drafts.size)throw new Error("исправьте невалидную редакцию перед экспортом");
   return {schema_version:1,pack_fingerprint:pack.pack_fingerprint,decisions:pack.entries.map(record=>{
-    const item=currentState(record);const result={occurrence_id:record.id,decision:item.decision,note:item.note,tags:item.tags.slice().sort(),glossary_candidate:item.glossary_candidate,source_span_sha256:record.source_span_sha256,candidate_span_sha256:record.candidate_span_sha256};
+    const item=stateValue.get(record.id)||defaults(record);validateStoredItem(record,item);const result={occurrence_id:record.id,decision:item.decision,note:item.note,tags:item.tags.slice().sort(),glossary_candidate:item.glossary_candidate,source_span_sha256:record.source_span_sha256,candidate_span_sha256:record.candidate_span_sha256};
     if(item.decision==="edit")result.edited_translation=fullTranslation(record,item);return result
   })}
 }
@@ -1080,13 +1123,15 @@ function validateDocument(documentValue){
     const fields=["occurrence_id","decision","note","tags","glossary_candidate","source_span_sha256","candidate_span_sha256"];if(item.decision==="edit")fields.push("edited_translation");
     if(!exactFields(item,fields))throw new Error("invalid decision fields");
     if(typeof item.note!=="string"||typeof item.glossary_candidate!=="boolean"||!Array.isArray(item.tags)||new Set(item.tags).size!==item.tags.length||item.tags.some(tag=>!allowedTags.has(tag)))throw new Error("invalid decision values");
+    validateNote(item.note);
     if(item.source_span_sha256!==record.source_span_sha256||item.candidate_span_sha256!==record.candidate_span_sha256)throw new Error("span identity mismatch");
     const editedSegments=item.decision==="edit"?splitEdited(record,item.edited_translation):record.candidate_segments.slice();
     next.set(record.id,{decision:item.decision,edited_segments:editedSegments,note:item.note,tags:item.tags.slice(),glossary_candidate:item.glossary_candidate});
   }
   return next
 }
-function save(){localStorage.setItem(storageKey,JSON.stringify(exportDocument()))}
+function save(nextState=state){const documentValue=exportDocument(nextState,false);validateDocument(documentValue);localStorage.setItem(storageKey,JSON.stringify(documentValue))}
+function persistRecord(record,item){const nextState=new Map(state);nextState.set(record.id,item);save(nextState);state=nextState}
 function showError(message){el("error").textContent=message}
 function updateProgress(){const reviewed=pack.entries.filter(record=>currentState(record).decision!=="unreviewed").length;el("progressText").textContent=reviewed+" / "+pack.entries.length+" reviewed";el("progressBar").style.width=(pack.entries.length?reviewed/pack.entries.length*100:0)+"%"}
 function searchable(record){return [record.path,record.status,...record.source_segments,...record.candidate_segments].join("\\n").toLocaleLowerCase()}
@@ -1101,7 +1146,13 @@ function renderList(){
 }
 function renderEditor(record,item){
   const editor=el("editor");editor.replaceChildren();
-  item.edited_segments.forEach((segment,index)=>{const area=document.createElement("textarea");area.value=segment;area.setAttribute("aria-label","Editable human segment "+(index+1));area.addEventListener("input",()=>{item.edited_segments[index]=area.value;state.set(record.id,item);save()});editor.append(area);if(index<record.protected_atoms.length){const atom=document.createElement("span");atom.className="atom";atom.textContent=record.protected_atoms[index];editor.append(atom)}})
+  const renderedSegments=drafts.get(record.id)||item.edited_segments;
+  renderedSegments.forEach((segment,index)=>{const area=document.createElement("textarea");area.value=segment;area.setAttribute("aria-label","Editable human segment "+(index+1));area.addEventListener("input",()=>{
+    const nextSegments=(drafts.get(record.id)||currentState(record).edited_segments).slice();nextSegments[index]=area.value;drafts.set(record.id,nextSegments);
+    try{nextSegments.forEach(validateSegment)}catch(error){showError("Редактирование отклонено: "+error.message);return}
+    const nextItem=cloneItem(currentState(record));nextItem.edited_segments=nextSegments;
+    try{persistRecord(record,nextItem);drafts.delete(record.id);showError("")}catch(error){showError("Изменение не сохранено: "+error.message)}
+  });editor.append(area);if(index<record.protected_atoms.length){const atom=document.createElement("span");atom.className="atom";atom.textContent=record.protected_atoms[index];editor.append(atom)}})
 }
 function render(){
   renderList();updateProgress();const record=byId.get(currentId);el("empty").classList.toggle("hidden",Boolean(record));el("review").classList.toggle("hidden",!record);if(!record)return;
@@ -1109,20 +1160,20 @@ function render(){
   appendSpan(el("sourceText"),record.source_segments,record.protected_atoms);appendSpan(el("candidateText"),record.candidate_segments,record.protected_atoms);
   const atoms=el("atoms");atoms.replaceChildren();if(!record.protected_atoms.length)atoms.textContent="Нет";record.protected_atoms.forEach(value=>{const chip=document.createElement("span");chip.className="atom";chip.textContent=value;atoms.append(chip)});
   el("decision").value=item.decision;el("note").value=item.note;el("glossary").checked=item.glossary_candidate;el("editorField").classList.toggle("hidden",item.decision!=="edit");renderEditor(record,item);
-  for(const input of el("tags").querySelectorAll("input"))input.checked=item.tags.includes(input.value);showError("")
+  for(const input of el("tags").querySelectorAll("input"))input.checked=item.tags.includes(input.value)
 }
 function move(delta){const index=visible.findIndex(record=>record.id===currentId);if(index>=0&&visible.length){currentId=visible[(index+delta+visible.length)%visible.length].id;render()}}
 for(const file of [...new Set(pack.entries.map(record=>record.path))].sort()){const option=document.createElement("option");option.value=file;option.textContent=file;el("fileFilter").append(option)}
-for(const tag of allowedTags){const label=document.createElement("label");const input=document.createElement("input");input.type="checkbox";input.value=tag;input.addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=currentState(record);item.tags=[...el("tags").querySelectorAll("input:checked")].map(node=>node.value);state.set(record.id,item);save()});label.append(input,document.createTextNode(" "+tag));el("tags").append(label)}
+for(const tag of allowedTags){const label=document.createElement("label");const input=document.createElement("input");input.type="checkbox";input.value=tag;input.addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.tags=[...el("tags").querySelectorAll("input:checked")].map(node=>node.value);try{persistRecord(record,item);showError("")}catch(error){render();showError("Изменение не сохранено: "+error.message)}});label.append(input,document.createTextNode(" "+tag));el("tags").append(label)}
 for(const id of ["search","fileFilter","statusFilter","decisionFilter"])el(id).addEventListener(id==="search"?"input":"change",applyFilters);
-el("decision").addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=currentState(record);item.decision=el("decision").value;state.set(record.id,item);save();applyFilters()});
-el("note").addEventListener("input",()=>{const record=byId.get(currentId);if(!record)return;const item=currentState(record);item.note=el("note").value;state.set(record.id,item);save()});
-el("glossary").addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=currentState(record);item.glossary_candidate=el("glossary").checked;state.set(record.id,item);save()});
+el("decision").addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.decision=el("decision").value;try{persistRecord(record,item);if(item.decision!=="edit")drafts.delete(record.id);applyFilters();showError("")}catch(error){render();showError("Изменение не сохранено: "+error.message)}});
+el("note").addEventListener("input",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.note=el("note").value;try{validateNote(item.note);persistRecord(record,item);showError("")}catch(error){el("note").value=currentState(record).note;showError("Комментарий отклонён: "+error.message)}});
+el("glossary").addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.glossary_candidate=el("glossary").checked;try{persistRecord(record,item);showError("")}catch(error){render();showError("Изменение не сохранено: "+error.message)}});
 el("previous").addEventListener("click",()=>move(-1));el("next").addEventListener("click",()=>move(1));
-el("export").addEventListener("click",()=>{try{const blob=new Blob([JSON.stringify(exportDocument(),null,2)+"\n"],{type:"application/json"});const link=document.createElement("a");link.download="review-decisions-"+pack.pack_fingerprint.slice(0,12)+".json";link.href=URL.createObjectURL(blob);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0);showError("")}catch(error){showError(error.message)}});
+el("export").addEventListener("click",()=>{try{const blob=new Blob([JSON.stringify(exportDocument(),null,2)+"\n"],{type:"application/json"});const link=document.createElement("a");link.download="review-decisions-"+pack.pack_fingerprint.slice(0,12)+".json";link.href=URL.createObjectURL(blob);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0);showError("")}catch(error){showError("Экспорт отклонён: "+error.message)}});
 el("importButton").addEventListener("click",()=>el("importFile").click());
-el("importFile").addEventListener("change",async event=>{try{const file=event.target.files[0];if(!file)return;const documentValue=JSON.parse(await file.text());state=validateDocument(documentValue);save();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
-el("clear").addEventListener("click",()=>{if(confirm("Удалить все локальные решения для этого pack?")){state=new Map();localStorage.removeItem(storageKey);applyFilters()}});
+el("importFile").addEventListener("change",async event=>{try{const file=event.target.files[0];if(!file)return;const documentValue=JSON.parse(await file.text());const nextState=validateDocument(documentValue);save(nextState);state=nextState;drafts.clear();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
+el("clear").addEventListener("click",()=>{if(confirm("Удалить все локальные решения для этого pack?")){try{localStorage.removeItem(storageKey);state=new Map();drafts.clear();applyFilters();showError("")}catch(error){showError("Очистка отклонена: "+error.message)}}});
 try{const saved=localStorage.getItem(storageKey);if(saved)state=validateDocument(JSON.parse(saved))}catch(error){state=new Map();showError("Локальное сохранение отклонено: "+error.message)}
 applyFilters();
 </script>

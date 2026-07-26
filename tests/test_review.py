@@ -559,6 +559,9 @@ class StubElement {
     }
   }
   click() {
+    if (this.tagName === "A") {
+      globalThis.downloadCount = (globalThis.downloadCount || 0) + 1;
+    }
     return this.fire("click", {target: this});
   }
 }
@@ -617,30 +620,109 @@ vm.runInThisContext(`
   editItemForTest.note = "Синтетический комментарий";
   editItemForTest.tags = ["style", "terminology"];
   state.set(editRecordForTest.id, editItemForTest);
+  save();
+  currentId = editRecordForTest.id;
+  render();
 `);
 (async () => {
+  const invalidValues = [
+    'нельзя "кавычку',
+    "нельзя\nстроку",
+    "нельзя\\слеш",
+    "нельзя $OTHER$",
+    "нельзя \ud800"
+  ];
+  const invalidResults = [];
+  const safeSegment = "Отредактировано 😀 ";
+  for (let index = 0; index < invalidValues.length; index++) {
+    const before = localStorage.getItem(storageKey);
+    let area = elements.get("editor").children.find(
+      child => child.tagName === "TEXTAREA"
+    );
+    area.value = invalidValues[index];
+    globalThis.capturedBlob = undefined;
+    globalThis.downloadCount = 0;
+    await area.fire("input", {target: area});
+    const inputError = elements.get("error").textContent;
+    render();
+    const renderError = elements.get("error").textContent;
+    area = elements.get("editor").children.find(
+      child => child.tagName === "TEXTAREA"
+    );
+    await elements.get("export").fire(
+      "click",
+      {target: elements.get("export")}
+    );
+    invalidResults.push({
+      storage_unchanged: localStorage.getItem(storageKey) === before,
+      draft_visible: area.value === invalidValues[index],
+      render_preserved_error: inputError !== "" && renderError === inputError,
+      export_blocked: globalThis.capturedBlob === undefined
+        && globalThis.downloadCount === 0,
+      export_error_visible: elements.get("error").textContent.startsWith(
+        "Экспорт отклонён:"
+      )
+    });
+    if (index + 1 < invalidValues.length) {
+      area.value = safeSegment;
+      await area.fire("input", {target: area});
+      render();
+    }
+  }
+  const persistedBeforeReload = localStorage.getItem(storageKey);
+  state = validateDocument(JSON.parse(persistedBeforeReload));
+  drafts.clear();
+  render();
+  const restoredArea = elements.get("editor").children.find(
+    child => child.tagName === "TEXTAREA"
+  );
+  const restoredEdit = state.get(editRecordForTest.id);
+  const restoredAccept = state.get(acceptRecordForTest.id);
+  const restored = {
+    accept: restoredAccept.decision,
+    edit: restoredEdit.decision,
+    edited_segment: restoredArea.value,
+    note: restoredEdit.note,
+    tags: restoredEdit.tags.slice().sort()
+  };
+  const boolDocument = exportDocument();
+  boolDocument.schema_version = true;
+  let booleanSchemaRejected = false;
+  try {
+    validateDocument(boolDocument);
+  } catch (error) {
+    booleanSchemaRejected = error.message === "invalid decisions schema";
+  }
+  globalThis.capturedBlob = undefined;
+  globalThis.downloadCount = 0;
   await elements.get("export").fire("click", {target: elements.get("export")});
   const bytes = Buffer.from(await globalThis.capturedBlob.arrayBuffer());
   fs.writeFileSync(process.argv[3], bytes);
   const documentValue = JSON.parse(bytes.toString("utf8"));
   vm.runInThisContext("state = validateDocument(" + JSON.stringify(documentValue) + ")");
-  const result = vm.runInThisContext(`(() => {
-    const restoredAccept = state.get(acceptRecordForTest.id);
-    const restoredEdit = state.get(editRecordForTest.id);
+  const roundTrip = vm.runInThisContext(`(() => {
+    const roundTripAccept = state.get(acceptRecordForTest.id);
+    const roundTripEdit = state.get(editRecordForTest.id);
     const roundTrip = exportDocument();
     const editDecision = roundTrip.decisions.find(
       item => item.occurrence_id === editRecordForTest.id
     );
     return {
-      accept: restoredAccept.decision,
-      edit: restoredEdit.decision,
+      accept: roundTripAccept.decision,
+      edit: roundTripEdit.decision,
       edited_translation: editDecision.edited_translation,
-      expected_translation: fullTranslation(editRecordForTest, restoredEdit),
-      note: restoredEdit.note,
-      tags: restoredEdit.tags.slice().sort()
+      expected_translation: fullTranslation(editRecordForTest, roundTripEdit),
+      note: roundTripEdit.note,
+      tags: roundTripEdit.tags.slice().sort()
     };
   })()`);
-  process.stdout.write(JSON.stringify(result));
+  process.stdout.write(JSON.stringify({
+    invalidResults,
+    restored,
+    booleanSchemaRejected,
+    downloadCount: globalThis.downloadCount,
+    roundTrip
+  }));
 })().catch(error => {
   process.stderr.write(String(error.stack || error));
   process.exitCode = 1;
@@ -672,11 +754,31 @@ vm.runInThisContext(`
     assert exported_bytes.endswith(b"\n")
     assert not exported_bytes.endswith(b"\\n")
     assert exported_document["schema_version"] == 1
-    assert restored == {
+    assert all(
+        result
+        == {
+            "storage_unchanged": True,
+            "draft_visible": True,
+            "render_preserved_error": True,
+            "export_blocked": True,
+            "export_error_visible": True,
+        }
+        for result in restored["invalidResults"]
+    )
+    assert restored["restored"] == {
         "accept": "accept",
         "edit": "edit",
-        "edited_translation": restored["expected_translation"],
-        "expected_translation": restored["expected_translation"],
+        "edited_segment": "Отредактировано 😀 ",
+        "note": "Синтетический комментарий",
+        "tags": ["style", "terminology"],
+    }
+    assert restored["booleanSchemaRejected"] is True
+    assert restored["downloadCount"] == 1
+    assert restored["roundTrip"] == {
+        "accept": "accept",
+        "edit": "edit",
+        "edited_translation": restored["roundTrip"]["expected_translation"],
+        "expected_translation": restored["roundTrip"]["expected_translation"],
         "note": "Синтетический комментарий",
         "tags": ["style", "terminology"],
     }
@@ -701,6 +803,102 @@ def valid_decisions(pack: dict[str, object]) -> dict[str, object]:
             }
         ],
     }
+
+
+def valid_edit_decisions(
+    pack: dict[str, object], edited_translation: str
+) -> dict[str, object]:
+    record = next(
+        item for item in pack["entries"] if item["protected_atoms"]
+    )
+    return {
+        "schema_version": 1,
+        "pack_fingerprint": pack["pack_fingerprint"],
+        "decisions": [
+            {
+                "occurrence_id": record["id"],
+                "decision": "edit",
+                "edited_translation": edited_translation,
+                "note": "synthetic",
+                "tags": ["style"],
+                "glossary_candidate": True,
+                "source_span_sha256": record["source_span_sha256"],
+                "candidate_span_sha256": record[
+                    "candidate_span_sha256"
+                ],
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("schema_version", "accepted"),
+    [(True, False), (1.0, True)],
+)
+def test_python_schema_version_matches_javascript_numeric_contract(
+    tmp_path: Path, schema_version: object, accepted: bool
+) -> None:
+    source, candidate, identity = make_review_inputs(tmp_path)
+    output = tmp_path / "review"
+    build_review_pack(
+        source, candidate, output, expected_identity=identity
+    )
+    pack = extract_pack(output)
+    payload = valid_decisions(pack)
+    payload["schema_version"] = schema_version
+
+    if accepted:
+        assert validate_decisions_payload(payload, pack)
+    else:
+        with pytest.raises(SafetyError, match="schema_version"):
+            validate_decisions_payload(payload, pack)
+
+
+@pytest.mark.parametrize(
+    "unsafe_segment",
+    ['нельзя "кавычку', "нельзя\nстроку", "нельзя\\слеш", "$OTHER$", "\ud800"],
+)
+def test_python_validator_rejects_unsafe_or_non_scalar_edited_segments(
+    tmp_path: Path, unsafe_segment: str
+) -> None:
+    source, candidate, identity = make_review_inputs(tmp_path)
+    output = tmp_path / "review"
+    build_review_pack(
+        source, candidate, output, expected_identity=identity
+    )
+    pack = extract_pack(output)
+    record = next(
+        item for item in pack["entries"] if item["protected_atoms"]
+    )
+    payload = valid_edit_decisions(
+        pack, unsafe_segment + record["protected_atoms"][0]
+    )
+
+    with pytest.raises(SafetyError):
+        validate_decisions_payload(payload, pack)
+
+
+def test_python_validator_accepts_emoji_and_rejects_non_scalar_note(
+    tmp_path: Path,
+) -> None:
+    source, candidate, identity = make_review_inputs(tmp_path)
+    output = tmp_path / "review"
+    build_review_pack(
+        source, candidate, output, expected_identity=identity
+    )
+    pack = extract_pack(output)
+    record = next(
+        item for item in pack["entries"] if item["protected_atoms"]
+    )
+    payload = valid_edit_decisions(
+        pack, "Корректный emoji 😀 " + record["protected_atoms"][0]
+    )
+    json_round_trip = json.loads(json.dumps(payload, ensure_ascii=True))
+
+    assert validate_decisions_payload(json_round_trip, pack)
+    json_round_trip["decisions"][0]["note"] = "\udfff"
+    with pytest.raises(SafetyError, match="note_unicode"):
+        validate_decisions_payload(json_round_trip, pack)
 
 
 @pytest.mark.parametrize(
