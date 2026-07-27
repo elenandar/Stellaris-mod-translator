@@ -87,10 +87,19 @@ def parser() -> argparse.ArgumentParser:
 
     apply_review = commands.add_parser(
         "apply-review-decisions",
-        help="apply a complete MVP-2 decision set to a new reviewed candidate",
+        help="apply a complete decision set to a new reviewed candidate",
     )
     apply_review.add_argument("--source-mod", required=True, type=Path)
     apply_review.add_argument("--candidate", required=True, type=Path)
+    apply_review.add_argument(
+        "--candidate-report-sha256",
+        type=_sha256_pin,
+        metavar="SHA256",
+        help=(
+            "required exact translation-report.json pin for schema-v3 "
+            "full candidates; omit for the legacy exact pilot"
+        ),
+    )
     apply_review.add_argument("--decisions", required=True, type=Path)
     apply_review.add_argument("--output", required=True, type=Path)
     return root
@@ -124,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.candidate,
                 args.decisions,
                 args.output,
+                candidate_report_sha256=args.candidate_report_sha256,
             )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0

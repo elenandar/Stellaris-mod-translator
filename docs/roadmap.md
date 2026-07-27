@@ -58,9 +58,19 @@ occurrences остаются только summary residue без редакти�
 launcher и не выставляет `editorially_approved=true`; full application остаётся
 отдельным MVP-5C.
 
+После merge MVP-5B в PR №17 владелец отдельно разрешил `MVP-5C`: обобщение
+`apply-review-decisions` на полный schema-v3 candidate с exact report pin,
+полным exact-set decisions contract, lossless human-span application и
+атомарной no-clobber публикацией нового reviewed candidate. Этап synthetic-only:
+private localisation/review artifacts, реальный decisions JSON, Ollama,
+launcher и active mod paths не читаются и не изменяются. Live application
+требует отдельного следующего разрешения после review/merge механизма и
+локального final export.
+
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
-| MVP-5B — Full-candidate editorial review pack | strict schema-v3/report-pin validation, pack schema v2, warning flags, paginated UI, sparse persistence и draft/final decisions schema v1 export | merged MVP-4 at `81c9593` and exact immutable full candidate/report | full synthetic suite, browser smoke, exact private input recheck и local-only no-clobber pack | **implemented for review; full decisions application remains MVP-5C, no active installation or launcher** |
+| MVP-5C — Full-candidate decision application | exact schema-v3 report pin, shared review validation, complete decisions set, lossless accept/edit/reject и full application report schema v2 | merged MVP-5B in PR №17 and schema-v3/full-pack contracts | full synthetic suite, adversarial semantic review; после review/merge — local final export и отдельное owner authorization для live application | **implemented for review; synthetic-only, no private decisions read, no live application, active installation or launcher** |
+| MVP-5B — Full-candidate editorial review pack | strict schema-v3/report-pin validation, pack schema v2, warning flags, paginated UI, sparse persistence и draft/final decisions schema v1 export | merged MVP-4 at `81c9593` and exact immutable full candidate/report | full synthetic suite, browser smoke, exact private input recheck и local-only no-clobber pack | **merged in PR №17; no active installation or launcher** |
 | MVP-4 — Resumable full-mod translation | private SQLite workspace, immutable job/model/source provenance, SQLite-authoritative hot-journal rollback after structural preflight, run-wide lease, in-memory logical output identity, offline post-intent recovery, stable two-pass reconciliation, write-free completed resume и crash-recoverable exact-tree atomic no-clobber finalization | merged MVP-3 at `4dc79f9c` | full synthetic suite; затем отдельное owner authorization для любого private/live full-mod run | **final remediation validated for synthetic data — 266 tests; commit-phase rollback/offline intent/read-only completion covered; same-UID limitation documented; no private reads, live Ollama calls or active publication** |
 | MVP-3 — Apply editorial review decisions | complete decisions validation, occurrence-identity application, lossless human-span edits и atomic no-clobber reviewed candidate | merged MVP-2 and exact pilot-02 source/candidate/report identity | synthetic suite; затем completed human decisions JSON и отдельное owner authorization для live application | **mechanism implemented for synthetic review; private decisions not applied and output is not active** |
 | MVP-2 — Local editorial review pack | pinned occurrence alignment, автономный CSP-safe `index.html`, локальные decisions import/export и atomic no-clobber publication | merged MVP-1 и exact immutable pilot identities | synthetic suite, offline/XSS/browser smoke, source/candidate/report identity и immutability recheck | **implemented — merged in PR №14 as `c6788aab`; pilot-02 remains local and human review is not full-mod approval** |

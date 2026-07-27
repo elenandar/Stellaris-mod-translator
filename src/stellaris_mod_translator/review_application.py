@@ -25,8 +25,10 @@ from .publication import (
     atomic_publish_directory_no_replace,
 )
 from .review import (
+    FULL_REVIEW_PACK_SCHEMA_VERSION,
     MVP2_PILOT_IDENTITY,
     ReviewIdentity,
+    SHA256_RE,
     _paths_overlap,
     _read_stable_file,
     _segments_and_atoms,
@@ -42,6 +44,7 @@ from .review import (
 
 
 REVIEW_APPLICATION_SCHEMA_VERSION = 1
+FULL_REVIEW_APPLICATION_SCHEMA_VERSION = 2
 MAX_DECISIONS_BYTES = 4 * 1024 * 1024
 
 
@@ -51,9 +54,20 @@ def apply_review_decisions(
     decisions: Path,
     output: Path,
     *,
-    expected_identity: ReviewIdentity = MVP2_PILOT_IDENTITY,
+    expected_identity: ReviewIdentity | None = None,
+    candidate_report_sha256: str | None = None,
 ) -> dict[str, object]:
-    """Apply one complete decision per exact bounded-pilot occurrence."""
+    """Apply one complete decision per exact reviewable occurrence."""
+    if (
+        candidate_report_sha256 is not None
+        and (
+            not isinstance(candidate_report_sha256, str)
+            or SHA256_RE.fullmatch(candidate_report_sha256) is None
+        )
+    ):
+        raise SafetyError("invalid_candidate_report_sha256")
+    if candidate_report_sha256 is not None and expected_identity is not None:
+        raise SafetyError("candidate_report_pin_incompatible_with_legacy_identity")
     source = _validated_input_root(source_mod, "source")
     candidate_root = _validated_input_root(candidate, "candidate")
     if _paths_overlap(source, candidate_root):
@@ -66,7 +80,15 @@ def apply_review_decisions(
     inputs = _validated_review_inputs(
         source,
         candidate_root,
-        expected_identity,
+        (
+            None
+            if candidate_report_sha256 is not None
+            else expected_identity or MVP2_PILOT_IDENTITY
+        ),
+        candidate_report_sha256,
+    )
+    full_candidate = (
+        inputs.pack_schema_version == FULL_REVIEW_PACK_SCHEMA_VERSION
     )
     decisions_file = _read_stable_file(
         decisions_path,
@@ -84,7 +106,11 @@ def apply_review_decisions(
         if isinstance(entry, dict) and isinstance(entry.get("id"), str)
     }
     if (
-        len(entries) != expected_identity.review_entries
+        (
+            not full_candidate
+            and len(entries)
+            != (expected_identity or MVP2_PILOT_IDENTITY).review_entries
+        )
         or len(occurrence_ids) != len(entries)
         or set(normalized) != occurrence_ids
     ):
@@ -99,12 +125,24 @@ def apply_review_decisions(
         label="decisions",
         max_bytes=MAX_DECISIONS_BYTES,
     )
-    replacements, decision_counts, changed_spans = _planned_replacements(
+    (
+        replacements,
+        decision_counts,
+        changed_spans,
+        restored_english_spans,
+    ) = _planned_replacements(
         inputs.source_files,
         inputs.candidate_files,
         inputs.report,
         entries,
         normalized,
+    )
+    _verify_review_inputs(inputs)
+    _verify_stable_file(
+        decisions_file,
+        "decisions_generation_changed",
+        label="decisions",
+        max_bytes=MAX_DECISIONS_BYTES,
     )
 
     temp = Path(
@@ -132,42 +170,111 @@ def apply_review_decisions(
             or not isinstance(model.get("digest"), str)
         ):
             raise SafetyError("invalid_candidate_model_identity")
-        report = {
-            "schema_version": REVIEW_APPLICATION_SCHEMA_VERSION,
-            "status": "bounded_pilot_review_applied",
-            "editorial_status": "human_review_complete_for_bounded_pilot",
-            "editorially_approved": False,
+        common_report: dict[str, object] = {
             "source_mod": str(source),
             "base_candidate": str(candidate_root),
             "decisions": str(decisions_file.path),
             "output": str(output_abs),
             "pack_fingerprint": fingerprint,
-            "hashes": {
-                "source_localisation_sha256": (
-                    inputs.source_localisation_sha256
-                ),
-                "base_candidate_localisation_sha256": (
-                    inputs.candidate_localisation_sha256
-                ),
-                "base_translation_report_sha256": inputs.report_file.sha256,
-                "decisions_file_sha256": decisions_file.sha256,
-                "final_output_localisation_sha256": final_hash,
-            },
             "model": {"tag": model["tag"], "digest": model["digest"]},
-            "counts": {
-                "total_decisions": len(normalized),
-                "accept": decision_counts["accept"],
-                "edit": decision_counts["edit"],
-                "reject": decision_counts["reject"],
-                "actually_changed_spans": changed_spans,
-                "restored_english_spans": decision_counts["reject"],
-            },
             "source_mutations": 0,
             "candidate_mutations": 0,
             "protected_atom_mismatches": 0,
             "ollama_calls": 0,
             "network_calls": 0,
         }
+        if full_candidate:
+            summary = inputs.summary
+            unsupported = summary.get("unsupported")
+            skipped_files = summary.get("skipped_files")
+            if (
+                isinstance(unsupported, bool)
+                or not isinstance(unsupported, int)
+                or isinstance(skipped_files, bool)
+                or not isinstance(skipped_files, int)
+            ):
+                raise SafetyError("invalid_full_review_summary")
+            base_counts = inputs.report.get("counts")
+            base_status = inputs.report.get("status")
+            if not isinstance(base_counts, dict) or not isinstance(
+                base_status, str
+            ):
+                raise SafetyError("invalid_candidate_report_summary")
+            report = {
+                "schema_version": FULL_REVIEW_APPLICATION_SCHEMA_VERSION,
+                "status": "full_candidate_review_applied",
+                "review_scope": "full_candidate",
+                "review_pack_schema_version": (
+                    FULL_REVIEW_PACK_SCHEMA_VERSION
+                ),
+                "candidate_report_schema_version": 3,
+                "editorial_status": (
+                    "human_review_complete_for_reviewable_occurrences"
+                ),
+                "editorially_approved": (
+                    unsupported == 0 and skipped_files == 0
+                ),
+                "base_candidate_status": base_status,
+                "base_candidate_counts": dict(base_counts),
+                "review_summary": dict(summary),
+                "technical_residue": {
+                    "unsupported_occurrences": unsupported,
+                    "skipped_files": skipped_files,
+                },
+                "counts": {
+                    "total_decisions": len(normalized),
+                    "accept": decision_counts["accept"],
+                    "edit": decision_counts["edit"],
+                    "reject": decision_counts["reject"],
+                    "actually_changed_spans": changed_spans,
+                    "restored_english_spans": restored_english_spans,
+                },
+                "hashes": {
+                    "source_localisation_sha256": (
+                        inputs.source_localisation_sha256
+                    ),
+                    "base_candidate_localisation_sha256": (
+                        inputs.candidate_localisation_sha256
+                    ),
+                    "pinned_translation_report_sha256": (
+                        inputs.report_file.sha256
+                    ),
+                    "decisions_file_sha256": decisions_file.sha256,
+                    "final_output_localisation_sha256": final_hash,
+                },
+                **common_report,
+            }
+        else:
+            report = {
+                "schema_version": REVIEW_APPLICATION_SCHEMA_VERSION,
+                "status": "bounded_pilot_review_applied",
+                "editorial_status": (
+                    "human_review_complete_for_bounded_pilot"
+                ),
+                "editorially_approved": False,
+                "counts": {
+                    "total_decisions": len(normalized),
+                    "accept": decision_counts["accept"],
+                    "edit": decision_counts["edit"],
+                    "reject": decision_counts["reject"],
+                    "actually_changed_spans": changed_spans,
+                    "restored_english_spans": decision_counts["reject"],
+                },
+                "hashes": {
+                    "source_localisation_sha256": (
+                        inputs.source_localisation_sha256
+                    ),
+                    "base_candidate_localisation_sha256": (
+                        inputs.candidate_localisation_sha256
+                    ),
+                    "base_translation_report_sha256": (
+                        inputs.report_file.sha256
+                    ),
+                    "decisions_file_sha256": decisions_file.sha256,
+                    "final_output_localisation_sha256": final_hash,
+                },
+                **common_report,
+            }
         _write_new(
             temp / "review-application-report.json",
             (
@@ -258,15 +365,18 @@ def _planned_replacements(
     report: dict[str, object],
     entries: list[object],
     decisions: dict[str, dict[str, object]],
-) -> tuple[dict[Path, dict[int, str]], Counter[str], int]:
+) -> tuple[dict[Path, dict[int, str]], Counter[str], int, int]:
     limit = report.get("max_occurrences_per_file")
-    if isinstance(limit, bool) or not isinstance(limit, int):
+    if limit is not None and (
+        isinstance(limit, bool) or not isinstance(limit, int)
+    ):
         raise SafetyError("invalid_report_occurrence_limit")
     source_by_path = {item.relative.as_posix(): item for item in source_files}
     candidate_by_path = {item.relative: item for item in candidate_files}
     replacements: dict[Path, dict[int, str]] = {}
     decision_counts: Counter[str] = Counter()
     changed_spans = 0
+    restored_english_spans = 0
     for raw_record in entries:
         if not isinstance(raw_record, dict):
             raise SafetyError("invalid_pack_entry")
@@ -286,7 +396,11 @@ def _planned_replacements(
         source_file = source_by_path.get(path)
         if source_file is None or source_file.parsed is None:
             raise SafetyError("invalid_pack_source_path")
-        selected = source_file.parsed.entries[:limit]
+        selected = (
+            source_file.parsed.entries
+            if limit is None
+            else source_file.parsed.entries[:limit]
+        )
         if (
             ordinal < 0
             or ordinal >= len(selected)
@@ -335,7 +449,14 @@ def _planned_replacements(
                 candidate_entry.line_index
             ] = final_value
             changed_spans += 1
-    return replacements, decision_counts, changed_spans
+            if decision == "reject":
+                restored_english_spans += 1
+    return (
+        replacements,
+        decision_counts,
+        changed_spans,
+        restored_english_spans,
+    )
 
 
 def _join_segments_atoms(segments: list[str], atoms: list[str]) -> str:
@@ -357,7 +478,9 @@ def _render_output_files(
     replacements: dict[Path, dict[int, str]],
 ) -> list[tuple[Path, bytes]]:
     limit = report.get("max_occurrences_per_file")
-    if isinstance(limit, bool) or not isinstance(limit, int):
+    if limit is not None and (
+        isinstance(limit, bool) or not isinstance(limit, int)
+    ):
         raise SafetyError("invalid_report_occurrence_limit")
     source_by_candidate = {
         _candidate_relative(item.relative): item
