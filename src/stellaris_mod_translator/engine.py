@@ -8,21 +8,43 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import stat
 import tempfile
 from typing import Callable
 
-from .ollama import OllamaClient, OllamaError
+from . import ollama
+from .ollama import (
+    OllamaClient,
+    OllamaError,
+    OllamaResultError,
+    OllamaSystemError,
+)
 from .parser import Entry, ParseError, ParsedFile, parse_localisation
 from .publication import (
     AtomicPublicationUnavailable,
     DestinationExistsError,
     atomic_publish_directory_no_replace,
 )
+from .workspace import (
+    InventoryRow,
+    OccurrenceRow,
+    WorkspaceError,
+    WorkspaceRunLock,
+    WorkspaceSnapshot,
+    WorkspaceWriter,
+    create_workspace,
+    load_workspace,
+    mark_workspace_completed,
+    set_finalization_intent,
+)
 
 
 class SafetyError(RuntimeError):
     pass
+
+
+PARSER_ORDER_VERSION = "mvp4-lossless-parser-order-v1"
 
 
 @dataclass(frozen=True)
@@ -33,6 +55,43 @@ class SourceFile:
     stat_identity: tuple[int, int, int, int]
     parsed: ParsedFile | None
     error: str | None
+
+
+@dataclass(frozen=True)
+class PlannedOccurrence:
+    sequence: int
+    relative_path: str
+    line_number: int
+    ordinal: int
+    source_span_sha256: str
+    entry: Entry
+
+
+@dataclass(frozen=True)
+class OutputTreeIdentity:
+    sha256: str
+    file_count: int
+    directory_count: int
+
+
+@dataclass(frozen=True)
+class _LogicalOutputTree:
+    directories: tuple[Path, ...]
+    files: tuple[tuple[Path, bytes], ...]
+
+
+@dataclass(frozen=True)
+class _OutputManifestEntry:
+    relative_path: str
+    kind: str
+    stat_identity: tuple[int, int, int, int, int, int, int]
+    content_sha256: str | None
+
+
+@dataclass(frozen=True)
+class _OutputTreeManifest:
+    identity: OutputTreeIdentity
+    entries: tuple[_OutputManifestEntry, ...]
 
 
 def inspect_mod(source_mod: Path) -> dict[str, object]:
@@ -48,7 +107,45 @@ def translate_mod(
     *,
     dry_run: bool = False,
     max_occurrences_per_file: int | None = None,
+    workspace: Path | None = None,
+    resume: bool = False,
     client_factory: Callable[[], OllamaClient] = OllamaClient,
+) -> dict[str, object]:
+    if resume and workspace is None:
+        raise SafetyError("resume_requires_workspace")
+    if workspace is not None:
+        if dry_run:
+            raise SafetyError("workspace_mode_incompatible_with_dry_run")
+        if max_occurrences_per_file is not None:
+            raise SafetyError(
+                "workspace_mode_incompatible_with_max_occurrences_per_file"
+            )
+        return _translate_mod_resumable(
+            source_mod,
+            output,
+            model,
+            workspace=workspace,
+            resume=resume,
+            client_factory=client_factory,
+        )
+    return _translate_mod_single_pass(
+        source_mod,
+        output,
+        model,
+        dry_run=dry_run,
+        max_occurrences_per_file=max_occurrences_per_file,
+        client_factory=client_factory,
+    )
+
+
+def _translate_mod_single_pass(
+    source_mod: Path,
+    output: Path,
+    model: str,
+    *,
+    dry_run: bool,
+    max_occurrences_per_file: int | None,
+    client_factory: Callable[[], OllamaClient],
 ) -> dict[str, object]:
     _validate_occurrence_limit(max_occurrences_per_file)
     source = _validated_source(source_mod)
@@ -152,6 +249,1076 @@ def translate_mod(
             shutil.rmtree(temp)
         raise
     return report
+
+
+def _translate_mod_resumable(
+    source_mod: Path,
+    output: Path,
+    model: str,
+    *,
+    workspace: Path,
+    resume: bool,
+    client_factory: Callable[[], OllamaClient],
+) -> dict[str, object]:
+    source = _validated_source(source_mod)
+    output_abs = _normalized_output(source, output)
+    workspace_abs = _normalized_workspace(workspace, resume=resume)
+    _validate_workspace_path_relationships(source, output_abs, workspace_abs)
+    try:
+        with WorkspaceRunLock(workspace_abs):
+            return _translate_mod_resumable_locked(
+                source,
+                output_abs,
+                model,
+                workspace=workspace_abs,
+                resume=resume,
+                client_factory=client_factory,
+            )
+    except WorkspaceError as exc:
+        raise SafetyError(str(exc)) from exc
+
+
+def _translate_mod_resumable_locked(
+    source: Path,
+    output_abs: Path,
+    model: str,
+    *,
+    workspace: Path,
+    resume: bool,
+    client_factory: Callable[[], OllamaClient],
+) -> dict[str, object]:
+    workspace_abs = workspace
+    reused = 0
+
+    if resume:
+        initial_workspace = _load_workspace(workspace_abs)
+    else:
+        if workspace_abs.exists() or workspace_abs.is_symlink():
+            raise SafetyError("first_run_requires_absent_workspace")
+        initial_workspace = None
+    output_exists = output_abs.exists() or output_abs.is_symlink()
+    if not resume and output_exists:
+        raise SafetyError("output_must_not_exist")
+    if (
+        resume
+        and output_exists
+        and initial_workspace is not None
+        and initial_workspace.job.finalization_state != "intent"
+    ):
+        raise SafetyError("output_exists_without_finalization_intent")
+
+    files = _snapshot(source)
+    inventory, plan, source_tree_hash, inventory_hash = _workspace_inputs(files)
+    prompt_profile_hash = ollama.translation_prompt_profile_hash()
+
+    if initial_workspace is not None:
+        _validate_workspace_semantics(
+            initial_workspace,
+            source=source,
+            output=output_abs,
+            model=model,
+            files=files,
+            inventory=inventory,
+            plan=plan,
+            source_tree_hash=source_tree_hash,
+            inventory_hash=inventory_hash,
+            prompt_profile_hash=prompt_profile_hash,
+        )
+        reused = initial_workspace.job.completed_count
+
+    if output_exists:
+        assert initial_workspace is not None
+        identity = _validated_model_identity(
+            {
+                "tag": initial_workspace.job.model_tag,
+                "digest": initial_workspace.job.model_digest,
+            },
+            model,
+        )
+        _verify_snapshot(source, files)
+        report_run_count = initial_workspace.job.report_run_count
+        report_reused = initial_workspace.job.report_reused_count
+        report_calls = initial_workspace.job.report_calls_count
+        if (
+            report_run_count is None
+            or report_reused is None
+            or report_calls is None
+        ):
+            raise SafetyError("workspace_finalization_report_counters_missing")
+        (
+            expected_report,
+            _,
+            expected_output,
+        ) = _build_workspace_candidate_tree(
+            source=source,
+            output=output_abs,
+            workspace=workspace_abs,
+            model_identity=identity,
+            files=files,
+            plan=plan,
+            workspace_snapshot=initial_workspace,
+            report_run_count=report_run_count,
+            reused=report_reused,
+            calls_in_final_run=report_calls,
+            prompt_profile_hash=prompt_profile_hash,
+        )
+        _validate_intended_output_identity(initial_workspace, expected_output)
+        actual_output = _output_tree_identity(output_abs)
+        if actual_output != expected_output:
+            raise SafetyError("finalization_output_identity_mismatch")
+        _verify_snapshot(source, files)
+        if initial_workspace.job.state == "in_progress":
+            _complete_workspace(
+                workspace_abs,
+                output_identity=actual_output,
+            )
+        completed = _load_workspace(workspace_abs)
+        if completed.job.state != "completed":
+            raise SafetyError("workspace_completion_not_persisted")
+        return expected_report
+
+    if (
+        initial_workspace is not None
+        and initial_workspace.job.state == "completed"
+    ):
+        raise SafetyError("completed_workspace_output_missing")
+
+    client: OllamaClient | None = None
+    if (
+        initial_workspace is not None
+        and initial_workspace.job.finalization_state == "intent"
+    ):
+        identity = _validated_model_identity(
+            {
+                "tag": initial_workspace.job.model_tag,
+                "digest": initial_workspace.job.model_digest,
+            },
+            model,
+        )
+    else:
+        client = client_factory()
+        identity = _validated_model_identity(client.exact_model(model), model)
+    _verify_snapshot(source, files)
+
+    if initial_workspace is None:
+        try:
+            create_workspace(
+                workspace_abs,
+                source_path=str(source),
+                output_path=str(output_abs),
+                source_tree_sha256=source_tree_hash,
+                inventory_sha256=inventory_hash,
+                parser_order_version=PARSER_ORDER_VERSION,
+                model_tag=model,
+                model_digest=identity["digest"],
+                prompt_profile_hash=prompt_profile_hash,
+                inventory=inventory,
+                occurrences=tuple(
+                    OccurrenceRow(
+                        sequence=item.sequence,
+                        relative_path=item.relative_path,
+                        line_number=item.line_number,
+                        ordinal=item.ordinal,
+                        source_span_sha256=item.source_span_sha256,
+                    )
+                    for item in plan
+                ),
+            )
+        except FileExistsError as exc:
+            raise SafetyError("workspace_appeared_before_creation") from exc
+        except (WorkspaceError, sqlite3.Error) as exc:
+            raise SafetyError(str(exc)) from exc
+        initial_workspace = _load_workspace(workspace_abs)
+        _validate_workspace_semantics(
+            initial_workspace,
+            source=source,
+            output=output_abs,
+            model=model,
+            files=files,
+            inventory=inventory,
+            plan=plan,
+            source_tree_hash=source_tree_hash,
+            inventory_hash=inventory_hash,
+            prompt_profile_hash=prompt_profile_hash,
+        )
+        reused = 0
+    elif (
+        initial_workspace.job.finalization_state == "none"
+        and identity["digest"] != initial_workspace.job.model_digest
+    ):
+        raise SafetyError("workspace_model_digest_drift")
+    _verify_snapshot(source, files)
+
+    calls_in_final_run = 0
+    plan_by_sequence = {item.sequence: item for item in plan}
+    translating = initial_workspace.job.finalization_state == "none"
+    if translating:
+        try:
+            with WorkspaceWriter(workspace_abs) as writer:
+                if resume:
+                    writer.start_resume_run()
+                for row in initial_workspace.occurrences:
+                    if row.state != "pending":
+                        continue
+                    assert client is not None
+                    item = plan_by_sequence[row.sequence]
+                    calls_in_final_run += 1
+                    try:
+                        result = client.translate(
+                            tag=model, text=item.entry.model_text()
+                        )
+                        restored = item.entry.restore_translation(result)
+                        if (
+                            restored.encode("utf-8")
+                            == item.entry.value.encode("utf-8")
+                        ):
+                            state = "accepted_unchanged"
+                            saved_result = None
+                        else:
+                            state = "accepted_changed"
+                            saved_result = result
+                        writer.checkpoint(
+                            item.sequence,
+                            state=state,
+                            model_result=saved_result,
+                            error_code=None,
+                        )
+                    except OllamaResultError:
+                        writer.checkpoint(
+                            item.sequence,
+                            state="model_fallback",
+                            model_result=None,
+                            error_code="model_result_invalid",
+                        )
+                    except ValueError:
+                        writer.checkpoint(
+                            item.sequence,
+                            state="model_fallback",
+                            model_result=None,
+                            error_code="renderer_validation_failed",
+                        )
+        except (WorkspaceError, sqlite3.Error) as exc:
+            raise SafetyError(str(exc)) from exc
+
+    completed_workspace = _load_workspace(workspace_abs)
+    _validate_workspace_semantics(
+        completed_workspace,
+        source=source,
+        output=output_abs,
+        model=model,
+        files=files,
+        inventory=inventory,
+        plan=plan,
+        source_tree_hash=source_tree_hash,
+        inventory_hash=inventory_hash,
+        prompt_profile_hash=prompt_profile_hash,
+    )
+    if any(row.state == "pending" for row in completed_workspace.occurrences):
+        raise SafetyError("workspace_pending_occurrences_remain")
+
+    final_files = _snapshot(source)
+    if _snapshot_identity(final_files) != _snapshot_identity(files):
+        raise SafetyError("source_generation_changed")
+    (
+        final_inventory,
+        final_plan,
+        final_source_tree_hash,
+        final_inventory_hash,
+    ) = _workspace_inputs(final_files)
+    _validate_workspace_semantics(
+        completed_workspace,
+        source=source,
+        output=output_abs,
+        model=model,
+        files=final_files,
+        inventory=final_inventory,
+        plan=final_plan,
+        source_tree_hash=final_source_tree_hash,
+        inventory_hash=final_inventory_hash,
+        prompt_profile_hash=prompt_profile_hash,
+    )
+
+    if completed_workspace.job.finalization_state == "intent":
+        report_run_count = completed_workspace.job.report_run_count
+        report_reused = completed_workspace.job.report_reused_count
+        report_calls = completed_workspace.job.report_calls_count
+        if (
+            report_run_count is None
+            or report_reused is None
+            or report_calls is None
+        ):
+            raise SafetyError("workspace_finalization_report_counters_missing")
+    else:
+        report_run_count = completed_workspace.job.run_count
+        report_reused = reused
+        report_calls = calls_in_final_run
+
+    report, logical_tree, output_identity = _build_workspace_candidate_tree(
+        source=source,
+        output=output_abs,
+        workspace=workspace_abs,
+        model_identity=identity,
+        files=final_files,
+        plan=final_plan,
+        workspace_snapshot=completed_workspace,
+        report_run_count=report_run_count,
+        reused=report_reused,
+        calls_in_final_run=report_calls,
+        prompt_profile_hash=prompt_profile_hash,
+    )
+    _verify_snapshot(source, final_files)
+    if completed_workspace.job.finalization_state == "none":
+        assert client is not None
+        final_identity = _validated_model_identity(
+            client.exact_model(model), model
+        )
+        if final_identity != identity:
+            raise SafetyError("model_identity_changed")
+        _verify_snapshot(source, final_files)
+
+        try:
+            set_finalization_intent(
+                workspace_abs,
+                output_tree_sha256=output_identity.sha256,
+                output_file_count=output_identity.file_count,
+                output_directory_count=output_identity.directory_count,
+                report_run_count=report_run_count,
+                report_reused_count=report_reused,
+                report_calls_count=report_calls,
+            )
+        except (WorkspaceError, sqlite3.Error) as exc:
+            raise SafetyError(str(exc)) from exc
+        intent_workspace = _load_workspace(workspace_abs)
+        _validate_intended_output_identity(intent_workspace, output_identity)
+    else:
+        _validate_intended_output_identity(
+            completed_workspace, output_identity
+        )
+
+    temp = Path(
+        tempfile.mkdtemp(prefix=f".{output_abs.name}.tmp-", dir=output_abs.parent)
+    )
+    try:
+        _materialize_logical_output_tree(temp, logical_tree)
+        if _output_tree_identity(temp) != output_identity:
+            raise SafetyError("finalization_materialized_identity_mismatch")
+        _verify_snapshot(source, final_files)
+        _require_output_absent(output_abs)
+        try:
+            atomic_publish_directory_no_replace(temp, output_abs)
+        except DestinationExistsError as exc:
+            raise SafetyError("output_appeared_before_publication") from exc
+        except AtomicPublicationUnavailable as exc:
+            raise SafetyError("atomic_no_replace_unavailable") from exc
+        published_identity = _output_tree_identity(output_abs)
+        if published_identity != output_identity:
+            raise SafetyError("finalization_output_identity_mismatch")
+        published_workspace = _load_workspace(workspace_abs)
+        _validate_intended_output_identity(
+            published_workspace, published_identity
+        )
+        _complete_workspace(
+            workspace_abs,
+            output_identity=published_identity,
+        )
+    except BaseException:
+        if temp.exists():
+            shutil.rmtree(temp)
+        raise
+    return report
+
+
+def _workspace_inputs(
+    files: list[SourceFile],
+) -> tuple[
+    tuple[InventoryRow, ...],
+    tuple[PlannedOccurrence, ...],
+    str,
+    str,
+]:
+    inventory: list[InventoryRow] = []
+    plan: list[PlannedOccurrence] = []
+    for file_sequence, source_file in enumerate(files):
+        parsed = source_file.parsed
+        if source_file.error is not None:
+            parse_status = "skipped"
+            occurrence_count = unsupported_count = 0
+        elif parsed is not None and parsed.is_english:
+            parse_status = "english"
+            occurrence_count = len(parsed.entries)
+            unsupported_count = len(parsed.diagnostics)
+            relative_path = source_file.relative.as_posix()
+            for ordinal, entry in enumerate(parsed.entries):
+                plan.append(
+                    PlannedOccurrence(
+                        sequence=len(plan),
+                        relative_path=relative_path,
+                        line_number=entry.line_index + 1,
+                        ordinal=ordinal,
+                        source_span_sha256=hashlib.sha256(
+                            entry.value.encode("utf-8")
+                        ).hexdigest(),
+                        entry=entry,
+                    )
+                )
+        else:
+            parse_status = "non_english"
+            occurrence_count = unsupported_count = 0
+        inventory.append(
+            InventoryRow(
+                sequence=file_sequence,
+                relative_path=source_file.relative.as_posix(),
+                sha256=source_file.sha256,
+                byte_count=len(source_file.data),
+                parse_status=parse_status,
+                occurrence_count=occurrence_count,
+                unsupported_count=unsupported_count,
+            )
+        )
+    source_tree_hash = _tree_hash(
+        [(item.relative, item.data) for item in files]
+    )
+    inventory_payload = [
+        {
+            "sequence": row.sequence,
+            "relative_path": row.relative_path,
+            "sha256": row.sha256,
+            "byte_count": row.byte_count,
+            "parse_status": row.parse_status,
+            "occurrence_count": row.occurrence_count,
+            "unsupported_count": row.unsupported_count,
+        }
+        for row in inventory
+    ]
+    inventory_hash = hashlib.sha256(
+        json.dumps(
+            inventory_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return tuple(inventory), tuple(plan), source_tree_hash, inventory_hash
+
+
+def _validate_workspace_semantics(
+    snapshot: WorkspaceSnapshot,
+    *,
+    source: Path,
+    output: Path,
+    model: str,
+    files: list[SourceFile],
+    inventory: tuple[InventoryRow, ...],
+    plan: tuple[PlannedOccurrence, ...],
+    source_tree_hash: str,
+    inventory_hash: str,
+    prompt_profile_hash: str,
+) -> None:
+    job = snapshot.job
+    expected_job = {
+        "source_path": str(source),
+        "output_path": str(output),
+        "source_tree_sha256": source_tree_hash,
+        "inventory_sha256": inventory_hash,
+        "parser_order_version": PARSER_ORDER_VERSION,
+        "model_tag": model,
+        "prompt_profile_hash": prompt_profile_hash,
+        "occurrence_count": len(plan),
+    }
+    for field, expected in expected_job.items():
+        if getattr(job, field) != expected:
+            raise SafetyError(f"workspace_{field}_drift")
+    if snapshot.inventory != inventory:
+        raise SafetyError("workspace_source_inventory_drift")
+    if len(snapshot.occurrences) != len(plan):
+        raise SafetyError("workspace_occurrence_count_drift")
+
+    for row, item in zip(snapshot.occurrences, plan):
+        expected_identity = (
+            item.sequence,
+            item.relative_path,
+            item.line_number,
+            item.ordinal,
+            item.source_span_sha256,
+        )
+        actual_identity = (
+            row.sequence,
+            row.relative_path,
+            row.line_number,
+            row.ordinal,
+            row.source_span_sha256,
+        )
+        if actual_identity != expected_identity:
+            raise SafetyError("workspace_occurrence_identity_drift")
+        if row.state == "accepted_changed":
+            if row.model_result is None:
+                raise SafetyError("workspace_saved_result_missing")
+            try:
+                restored = item.entry.restore_translation(row.model_result)
+            except ValueError as exc:
+                raise SafetyError(
+                    "workspace_saved_translation_invalid"
+                ) from exc
+            unchanged = (
+                restored.encode("utf-8") == item.entry.value.encode("utf-8")
+            )
+            expected_state = (
+                "accepted_unchanged" if unchanged else "accepted_changed"
+            )
+            if row.state != expected_state:
+                raise SafetyError("workspace_saved_result_state_mismatch")
+        elif row.state == "accepted_unchanged":
+            if row.model_result is not None:
+                raise SafetyError("workspace_unchanged_result_must_be_absent")
+        elif row.state == "model_fallback":
+            if not row.error_code:
+                raise SafetyError("workspace_fallback_reason_missing")
+        elif row.state != "pending":
+            raise SafetyError("workspace_occurrence_state_invalid")
+
+    expected_tree_hash = _tree_hash(
+        [(item.relative, item.data) for item in files]
+    )
+    if expected_tree_hash != source_tree_hash:
+        raise SafetyError("workspace_source_tree_hash_internal_mismatch")
+
+
+def _workspace_translation_report(
+    *,
+    source: Path,
+    output: Path,
+    workspace: Path,
+    model_identity: dict[str, str],
+    files: list[SourceFile],
+    workspace_snapshot: WorkspaceSnapshot,
+    report_run_count: int,
+    reused: int,
+    calls_in_final_run: int,
+    prompt_profile_hash: str,
+) -> dict[str, object]:
+    report = _translation_report(source, files)
+    report["schema_version"] = 3
+    report["output"] = str(output)
+    report["dry_run"] = False
+    report["max_occurrences_per_file"] = None
+    report["model"] = model_identity
+    counts = report["counts"]
+    assert isinstance(counts, dict)
+    accepted = sum(
+        row.state in {"accepted_changed", "accepted_unchanged"}
+        for row in workspace_snapshot.occurrences
+    )
+    unchanged = sum(
+        row.state == "accepted_unchanged"
+        for row in workspace_snapshot.occurrences
+    )
+    model_fallback = sum(
+        row.state == "model_fallback"
+        for row in workspace_snapshot.occurrences
+    )
+    pending = sum(
+        row.state == "pending" for row in workspace_snapshot.occurrences
+    )
+    unsupported = sum(
+        len(item.parsed.diagnostics)
+        for item in files
+        if item.parsed is not None and item.parsed.is_english
+    )
+    counts["planned_translation_occurrences"] = len(
+        workspace_snapshot.occurrences
+    )
+    counts["translated_occurrences"] = accepted
+    counts["unchanged_accepted_occurrences"] = unchanged
+    counts["fallback_occurrences"] = unsupported + model_fallback
+    counts["deferred_occurrences"] = 0
+    counts["total_occurrences"] = counts["occurrences"]
+    counts["completed_occurrences"] = counts["occurrences"] - pending
+    counts["unsupported_occurrences"] = unsupported
+    counts["pending_occurrences"] = pending
+    counts["reused_from_workspace_occurrences"] = reused
+    counts["calls_in_final_run"] = calls_in_final_run
+    counts["total"] = counts["occurrences"]
+    counts["completed"] = counts["occurrences"] - pending
+    counts["translated"] = accepted
+    counts["accepted_unchanged"] = unchanged
+    counts["fallback"] = unsupported + model_fallback
+    counts["unsupported"] = unsupported
+    counts["pending"] = pending
+    counts["reused_from_workspace"] = reused
+    for row in workspace_snapshot.occurrences:
+        if row.state == "model_fallback":
+            report["diagnostics"].append(
+                {
+                    "path": row.relative_path,
+                    "line": row.line_number,
+                    "code": "translation_fallback",
+                    "reason": row.error_code,
+                }
+            )
+    report["resumability"] = {
+        "mode": "sqlite_workspace",
+        "workspace": str(workspace),
+        "workspace_schema_version": 2,
+        "parser_order_version": PARSER_ORDER_VERSION,
+        "prompt_profile_hash": prompt_profile_hash,
+        "finalization_protocol": "intent_then_no_clobber_publish_then_complete_v1",
+        "workspace_state_at_report_creation": "in_progress",
+        "completion_attested_by_report": False,
+        "output_identity_scope": "all_paths_types_and_bytes_including_report",
+        "run_count": report_run_count,
+        "reused_from_workspace": reused,
+        "calls_in_final_run": calls_in_final_run,
+        "checkpoint_boundary": "committed_after_each_finished_occurrence",
+    }
+    return report
+
+
+def _build_workspace_candidate_tree(
+    *,
+    source: Path,
+    output: Path,
+    workspace: Path,
+    model_identity: dict[str, str],
+    files: list[SourceFile],
+    plan: tuple[PlannedOccurrence, ...],
+    workspace_snapshot: WorkspaceSnapshot,
+    report_run_count: int,
+    reused: int,
+    calls_in_final_run: int,
+    prompt_profile_hash: str,
+) -> tuple[dict[str, object], _LogicalOutputTree, OutputTreeIdentity]:
+    report = _workspace_translation_report(
+        source=source,
+        output=output,
+        workspace=workspace,
+        model_identity=model_identity,
+        files=files,
+        workspace_snapshot=workspace_snapshot,
+        report_run_count=report_run_count,
+        reused=reused,
+        calls_in_final_run=calls_in_final_run,
+        prompt_profile_hash=prompt_profile_hash,
+    )
+    candidates = _render_workspace_candidates(
+        files,
+        plan,
+        workspace_snapshot,
+    )
+    report["hashes"]["output_localisation_sha256"] = _tree_hash(candidates)
+    _validate_count_invariant(report, dry_run=False)
+    report["status"] = _translation_status(report, dry_run=False)
+    report["editorial_status"] = "human_review_required"
+    report["editorially_approved"] = False
+    report_bytes = (
+        (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode(
+            "utf-8"
+        )
+    )
+    logical_tree = _logical_output_tree(
+        [*candidates, (Path("translation-report.json"), report_bytes)]
+    )
+    return report, logical_tree, _logical_output_tree_identity(logical_tree)
+
+
+def _render_workspace_candidates(
+    files: list[SourceFile],
+    plan: tuple[PlannedOccurrence, ...],
+    workspace_snapshot: WorkspaceSnapshot,
+) -> list[tuple[Path, bytes]]:
+    rows = {row.sequence: row for row in workspace_snapshot.occurrences}
+    plan_by_path: dict[str, list[PlannedOccurrence]] = {}
+    for item in plan:
+        plan_by_path.setdefault(item.relative_path, []).append(item)
+
+    candidates: list[tuple[Path, bytes]] = []
+    for source_file in files:
+        parsed = source_file.parsed
+        if parsed is None or not parsed.is_english:
+            continue
+        replacements: dict[int, str] = {}
+        for item in plan_by_path.get(source_file.relative.as_posix(), []):
+            row = rows[item.sequence]
+            if row.state == "accepted_changed":
+                assert row.model_result is not None
+                try:
+                    replacements[item.entry.line_index] = (
+                        item.entry.restore_translation(row.model_result)
+                    )
+                except ValueError as exc:
+                    raise SafetyError(
+                        "workspace_saved_translation_invalid"
+                    ) from exc
+        relative = _candidate_relative(source_file.relative)
+        rendered = parsed.render(replacements, russian_header=True)
+        candidates.append((relative, rendered))
+    return candidates
+
+
+def _logical_output_tree(
+    files: list[tuple[Path, bytes]],
+) -> _LogicalOutputTree:
+    directories = {Path(".")}
+    seen_files: set[Path] = set()
+    ordered_files: list[tuple[Path, bytes]] = []
+    for relative, data in files:
+        if (
+            relative.is_absolute()
+            or relative == Path(".")
+            or ".." in relative.parts
+            or relative in seen_files
+        ):
+            raise SafetyError("logical_output_path_invalid")
+        seen_files.add(relative)
+        ordered_files.append((relative, data))
+        for parent in relative.parents:
+            directories.add(parent)
+            if parent == Path("."):
+                break
+    if any(relative in directories for relative in seen_files):
+        raise SafetyError("logical_output_path_conflict")
+    return _LogicalOutputTree(
+        directories=tuple(
+            sorted(
+                directories,
+                key=lambda path: (len(path.parts), path.as_posix()),
+            )
+        ),
+        files=tuple(
+            sorted(ordered_files, key=lambda item: item[0].as_posix())
+        ),
+    )
+
+
+def _logical_output_tree_identity(
+    tree: _LogicalOutputTree,
+) -> OutputTreeIdentity:
+    digest = hashlib.sha256()
+    digest.update(b"stellaris-mod-translator-output-tree-v1\0")
+    _update_output_identity_entry(digest, Path("."), b"D", None)
+    directories_by_parent: dict[Path, list[Path]] = {}
+    for directory in tree.directories:
+        if directory == Path("."):
+            continue
+        directories_by_parent.setdefault(directory.parent, []).append(directory)
+    files_by_parent: dict[Path, list[tuple[Path, bytes]]] = {}
+    for relative, data in tree.files:
+        files_by_parent.setdefault(relative.parent, []).append((relative, data))
+
+    def update_directory(directory: Path) -> None:
+        child_directories = sorted(
+            directories_by_parent.get(directory, []),
+            key=lambda path: path.name,
+        )
+        child_files = sorted(
+            files_by_parent.get(directory, []),
+            key=lambda item: item[0].name,
+        )
+        for child in child_directories:
+            _update_output_identity_entry(digest, child, b"D", None)
+        for relative, data in child_files:
+            _update_output_identity_entry(digest, relative, b"F", len(data))
+            digest.update(data)
+        for child in child_directories:
+            update_directory(child)
+
+    update_directory(Path("."))
+    if not tree.files:
+        raise SafetyError("finalization_output_has_no_files")
+    return OutputTreeIdentity(
+        sha256=digest.hexdigest(),
+        file_count=len(tree.files),
+        directory_count=len(tree.directories),
+    )
+
+
+def _materialize_logical_output_tree(
+    root: Path, tree: _LogicalOutputTree
+) -> None:
+    for directory in tree.directories:
+        if directory != Path("."):
+            (root / directory).mkdir()
+    for relative, data in tree.files:
+        _write_new(root / relative, data)
+
+
+def _output_tree_identity(root: Path) -> OutputTreeIdentity:
+    first = _scan_output_tree_once(root)
+    second = _scan_output_tree_once(root)
+    if first != second:
+        raise SafetyError("finalization_output_tree_unstable")
+    return second.identity
+
+
+def _scan_output_tree_once(root: Path) -> _OutputTreeManifest:
+    try:
+        root_before = _output_directory_manifest_entry(root, Path("."))
+    except FileNotFoundError as exc:
+        raise SafetyError("finalization_output_missing") from exc
+
+    digest = hashlib.sha256()
+    digest.update(b"stellaris-mod-translator-output-tree-v1\0")
+    _update_output_identity_entry(digest, Path("."), b"D", None)
+    directory_count = 1
+    file_count = 0
+    entries = [root_before]
+
+    def fail_walk(error: OSError) -> None:
+        raise SafetyError("finalization_output_inventory_failed") from error
+
+    try:
+        for current, directories, names in os.walk(
+            root, followlinks=False, onerror=fail_walk
+        ):
+            current_path = Path(current)
+            directories.sort()
+            names.sort()
+            for name in directories:
+                path = current_path / name
+                value = path.lstat()
+                if stat.S_ISLNK(value.st_mode) or not stat.S_ISDIR(
+                    value.st_mode
+                ):
+                    raise SafetyError(
+                        "finalization_output_directory_type_invalid"
+                    )
+                relative = path.relative_to(root)
+                _update_output_identity_entry(
+                    digest, relative, b"D", None
+                )
+                entries.append(
+                    _output_directory_manifest_entry(path, relative)
+                )
+                directory_count += 1
+            for name in names:
+                path = current_path / name
+                value = path.lstat()
+                if stat.S_ISLNK(value.st_mode):
+                    raise SafetyError("finalization_output_symlink")
+                if not stat.S_ISREG(value.st_mode):
+                    raise SafetyError("finalization_output_special_file")
+                if value.st_nlink != 1:
+                    raise SafetyError("finalization_output_hardlink")
+                relative = path.relative_to(root)
+                entries.append(_hash_output_file(digest, relative, path))
+                file_count += 1
+    except SafetyError:
+        raise
+    except OSError as exc:
+        raise SafetyError("finalization_output_inventory_failed") from exc
+
+    root_after = _output_directory_manifest_entry(root, Path("."))
+    if root_after != root_before:
+        raise SafetyError("finalization_output_changed_during_read")
+    if file_count < 1:
+        raise SafetyError("finalization_output_has_no_files")
+    return _OutputTreeManifest(
+        identity=OutputTreeIdentity(
+            sha256=digest.hexdigest(),
+            file_count=file_count,
+            directory_count=directory_count,
+        ),
+        entries=tuple(entries),
+    )
+
+
+def _update_output_identity_entry(
+    digest: object,
+    relative: Path,
+    kind: bytes,
+    byte_count: int | None,
+) -> None:
+    encoded = os.fsencode(relative.as_posix())
+    digest.update(len(encoded).to_bytes(8, "big"))
+    digest.update(encoded)
+    digest.update(kind)
+    if byte_count is not None:
+        digest.update(byte_count.to_bytes(8, "big"))
+
+
+def _hash_output_file(
+    digest: object, relative: Path, path: Path
+) -> _OutputManifestEntry:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise SafetyError("finalization_output_file_type_invalid")
+        _update_output_identity_entry(
+            digest, relative, b"F", before.st_size
+        )
+        content_digest = hashlib.sha256()
+        bytes_read = 0
+        while chunk := os.read(descriptor, 1024 * 1024):
+            bytes_read += len(chunk)
+            digest.update(chunk)
+            content_digest.update(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    if bytes_read != before.st_size or _stat_identity(before) != _stat_identity(
+        after
+    ):
+        raise SafetyError("finalization_output_file_changed_during_read")
+    path_after = path.lstat()
+    if _output_stat_identity(path_after) != _output_stat_identity(after):
+        raise SafetyError("finalization_output_file_replaced_during_read")
+    return _OutputManifestEntry(
+        relative_path=relative.as_posix(),
+        kind="file",
+        stat_identity=_output_stat_identity(after),
+        content_sha256=content_digest.hexdigest(),
+    )
+
+
+def _output_directory_manifest_entry(
+    path: Path, relative: Path
+) -> _OutputManifestEntry:
+    before = path.lstat()
+    if stat.S_ISLNK(before.st_mode) or not stat.S_ISDIR(before.st_mode):
+        if relative == Path("."):
+            raise SafetyError("finalization_output_root_not_directory")
+        raise SafetyError("finalization_output_directory_type_invalid")
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = os.open(path, flags)
+    try:
+        opened = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    after = path.lstat()
+    identity = _output_stat_identity(opened)
+    if (
+        not stat.S_ISDIR(opened.st_mode)
+        or _output_stat_identity(before) != identity
+        or _output_stat_identity(after) != identity
+    ):
+        raise SafetyError("finalization_output_directory_changed_during_read")
+    return _OutputManifestEntry(
+        relative_path=relative.as_posix(),
+        kind="directory",
+        stat_identity=identity,
+        content_sha256=None,
+    )
+
+
+def _output_stat_identity(
+    value: os.stat_result,
+) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_nlink,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _validate_intended_output_identity(
+    snapshot: WorkspaceSnapshot, actual: OutputTreeIdentity
+) -> None:
+    job = snapshot.job
+    if job.finalization_state != "intent":
+        raise SafetyError("workspace_finalization_intent_missing")
+    if (
+        job.output_tree_sha256,
+        job.output_file_count,
+        job.output_directory_count,
+    ) != (
+        actual.sha256,
+        actual.file_count,
+        actual.directory_count,
+    ):
+        raise SafetyError("finalization_output_identity_mismatch")
+
+
+def _complete_workspace(
+    workspace: Path, *, output_identity: OutputTreeIdentity
+) -> None:
+    try:
+        mark_workspace_completed(
+            workspace,
+            output_tree_sha256=output_identity.sha256,
+            output_file_count=output_identity.file_count,
+            output_directory_count=output_identity.directory_count,
+        )
+    except (WorkspaceError, sqlite3.Error) as exc:
+        raise SafetyError(str(exc)) from exc
+
+
+def _normalized_workspace(path: Path, *, resume: bool) -> Path:
+    lexical = path.absolute()
+    if path.is_symlink():
+        raise SafetyError("workspace_symlink")
+    if resume:
+        try:
+            return lexical.resolve(strict=True)
+        except FileNotFoundError as exc:
+            raise SafetyError("resume_requires_existing_workspace") from exc
+    if lexical.exists() or lexical.is_symlink():
+        raise SafetyError("first_run_requires_absent_workspace")
+    parent = lexical.parent.resolve(strict=True)
+    if not parent.is_dir():
+        raise SafetyError("workspace_parent_not_directory")
+    return parent / lexical.name
+
+
+def _normalized_output(source: Path, output: Path) -> Path:
+    lexical = output.absolute()
+    resolved = lexical.resolve(strict=False)
+    if resolved == source or source in resolved.parents or resolved in source.parents:
+        raise SafetyError("source_output_overlap")
+    parent = lexical.parent.resolve(strict=True)
+    if not parent.is_dir():
+        raise SafetyError("output_parent_not_directory")
+    return parent / lexical.name
+
+
+def _require_output_absent(output: Path) -> None:
+    if output.exists() or output.is_symlink():
+        raise SafetyError("output_must_not_exist")
+
+
+def _validate_workspace_path_relationships(
+    source: Path, output: Path, workspace: Path
+) -> None:
+    if _paths_overlap(source, workspace):
+        raise SafetyError("source_workspace_overlap")
+    if _paths_overlap(output, workspace):
+        raise SafetyError("workspace_output_overlap")
+
+
+def _paths_overlap(first: Path, second: Path) -> bool:
+    return (
+        first == second
+        or first in second.parents
+        or second in first.parents
+    )
+
+
+def _load_workspace(path: Path) -> WorkspaceSnapshot:
+    try:
+        return load_workspace(path)
+    except WorkspaceError as exc:
+        raise SafetyError(str(exc)) from exc
+
+
+def _snapshot_identity(
+    files: list[SourceFile],
+) -> list[tuple[Path, str, tuple[int, int, int, int]]]:
+    return [
+        (item.relative, item.sha256, item.stat_identity) for item in files
+    ]
 
 
 def _validate_occurrence_limit(value: int | None) -> None:
@@ -492,7 +1659,7 @@ def _validated_model_identity(
         or not isinstance(identity.get("digest"), str)
         or not identity["digest"]
     ):
-        raise OllamaError("invalid exact model identity")
+        raise OllamaSystemError("invalid exact model identity")
     return {"tag": requested_tag, "digest": identity["digest"]}
 
 

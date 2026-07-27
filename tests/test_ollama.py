@@ -8,7 +8,11 @@ import pytest
 
 import stellaris_mod_translator.ollama as ollama
 from stellaris_mod_translator.engine import SafetyError, translate_mod
-from stellaris_mod_translator.ollama import OllamaClient, OllamaError
+from stellaris_mod_translator.ollama import (
+    OllamaClient,
+    OllamaError,
+    OllamaSystemError,
+)
 
 
 _ABSENT = object()
@@ -223,7 +227,7 @@ def test_wrong_model_or_incomplete_terminal_result_is_rejected(
         ("synthetic:1", None),
     ],
 )
-def test_terminal_provenance_error_is_per_entry_english_fallback(
+def test_terminal_provenance_error_is_legacy_per_entry_fallback(
     fake_ollama, tmp_path, outer_model: str, done: object
 ) -> None:
     Handler.generate_model = outer_model
@@ -248,7 +252,7 @@ def test_terminal_provenance_error_is_per_entry_english_fallback(
 
 
 @pytest.mark.parametrize("done_reason", ["length", "future_reason"])
-def test_terminal_reason_error_is_per_entry_english_fallback(
+def test_terminal_reason_error_is_legacy_per_entry_fallback(
     fake_ollama, tmp_path, done_reason: str
 ) -> None:
     Handler.generate_done_reason = done_reason

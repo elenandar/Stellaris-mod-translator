@@ -9,10 +9,11 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-3` — текущий synthetic-only механизм применения editorial decisions
-поверх immutable bounded pilot. MVP-2 слит в PR №14; `pilot-01` superseded,
-а `pilot-02` остаётся единственным review source. Private decisions ещё не
-применялись. Owner decision от 26 июля 2026 года
+`MVP-4` — текущий synthetic-only механизм возобновляемого полного перевода
+через private local SQLite workspace. MVP-3 слит в PR №15; `pilot-01`
+superseded, а `pilot-02` остаётся единственным review source. Private decisions
+ещё не применялись, private mods и live Ollama в MVP-4 не читались и не
+вызывались. Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
 исторический evidence и не являются runtime authority для нового CLI.
@@ -42,6 +43,19 @@ python3 -m stellaris_mod_translator translate-mod \
   --output /path/to/new-candidate \
   --model exact-ollama-tag \
   --max-occurrences-per-file 3
+
+python3 -m stellaris_mod_translator translate-mod \
+  --source-mod /path/to/read-only-mod \
+  --output /path/to/new-full-candidate \
+  --model exact-ollama-tag \
+  --workspace /path/to/job.smt-workspace.sqlite3
+
+python3 -m stellaris_mod_translator translate-mod \
+  --source-mod /path/to/read-only-mod \
+  --output /path/to/new-full-candidate \
+  --model exact-ollama-tag \
+  --workspace /path/to/job.smt-workspace.sqlite3 \
+  --resume
 
 python3 -m stellaris_mod_translator build-review-pack \
   --source-mod /path/to/read-only-source-mod \
@@ -88,6 +102,121 @@ deferred — поддержанный occurrence, который bounded run н�
 Accepted unchanged не превращается во fallback и, как весь candidate, требует
 human review. Наличие кириллицы не является техническим условием принятия:
 имена и термины могут законно остаться латиницей.
+
+## Возобновляемый полный перевод
+
+Опциональный `--workspace PATH` включает full-mod режим MVP-4. Первый запуск
+требует отсутствующий workspace, а продолжение — тот же существующий файл и
+флаг `--resume`. Workspace-режим несовместим с `--dry-run` и
+`--max-occurrences-per-file`; source, workspace и intended output не могут
+пересекаться. Пока хотя бы один поддержанный occurrence остаётся `pending`,
+output отсутствует. `--resume` завершённого workspace работает только как
+идемпотентное read-only подтверждение уже опубликованного exact output и
+никогда не вызывает модель или повторную публикацию. Expected tree и report
+для такой проверки строятся только в памяти: рядом с output не создаются
+candidate/recovery/temp paths, поэтому writable output parent не требуется.
+
+Workspace — private local data: он содержит сохранённые переводы и не должен
+попадать в Git, backup общего доступа, issue или PR. Файл создаётся с mode
+`0600`; `.gitignore` отдельно покрывает `*.smt-workspace.sqlite3` и его SQLite
+sidecars. В БД не копируются raw source files или полный English corpus:
+сохраняются identities/inventory, source-span hashes, exact model provenance и
+только изменивший span проверенный model result. Для `accepted_unchanged`
+model result всегда `NULL`, а финальный render воспроизводит original source
+span; model echo не создаёт скрытую копию английского корпуса в workspace.
+Соседний mode-`0600` файл `<workspace>.lock` хранит process-lifetime advisory
+lease. Lease захватывается до SQLite recovery/preflight, `run_count`, создания
+клиента, model call и finalization и удерживается до возврата или исключения.
+Конкурирующий процесс немедленно получает `workspace_already_in_use`; kernel
+автоматически снимает lease при обычном exit и при kill/crash. Сам lock-файл
+может безопасно остаться на диске и повторно используется следующим процессом.
+
+После каждого законченного occurrence terminal state
+`accepted_changed`, `accepted_unchanged` или `model_fallback` фиксируется
+отдельной durable SQLite transaction. `--resume` заново проверяет integrity и
+точную schema v2 БД, включая constraints, indexes и foreign keys; после этого
+строго проверяются SQLite/Python types, ranges и известные states/error codes.
+Также проверяются source bytes/inventory/order, occurrence identities, output
+path, parser/order version, prompt profile и exact model tag/digest до первого
+нового translation call. Уже committed occurrences модели повторно не
+отправляются. Если остановка произошла после model call, но до SQLite commit,
+только этот незафиксированный вызов может повториться.
+
+До любого SQLite open preflight проверяет БД и возможные `-journal`, `-wal`,
+`-shm` через `lstat` и descriptors с `O_NOFOLLOW`/`O_NONBLOCK`. Для
+DELETE-journal workspace любой `-wal` или `-shm` запрещён. Journal должен быть
+одиночным regular mode-`0600` файлом и structurally valid hot rollback
+journal: проверяются SQLite/database headers, допустимая page geometry,
+исходный ненулевой page count и первый journal header. Исходный page count
+journal намеренно не сравнивается с потенциально частично записанным current
+DB header/размером crash-state файла; padding, record count (`-1` включительно),
+records и checksums интерпретирует сама SQLite. FIFO, socket, device, symlink,
+hardlink, неверный mode, empty, zero-filled и structurally malformed header
+отклоняются до SQLite и не удаляются. Обычный resume затем открывает workspace
+read-only с `query_only`; единственное разрешённое изменение до успешной
+валидации — authoritative SQLite rollback прошедшего structural preflight hot
+`DELETE` journal. Физическая identity БД и journal повторно проверяется вокруг
+recovery, а после rollback заново выполняются полные strict
+schema/integrity/type/counter проверки.
+
+Сохранённые результаты не считаются доверенными: перед resume и финальным
+render каждый `accepted_changed` повторно проходит текущий
+`restore_translation` и protected-atom validation, а `accepted_unchanged`
+воспроизводится из проверенного immutable source. В workspace-режиме
+transport/timeout/inventory failure, malformed provider envelope и model
+identity/digest drift немедленно останавливают запуск с сохранением committed
+progress. Malformed или unsafe human result одной строки даёт ровно один
+`model_fallback`, оставляет английский span и не блокирует остальные
+occurrences. В legacy режиме без workspace любой `OllamaError` остаётся
+per-entry fallback, чтобы не менять принятую семантику bounded/single-pass CLI.
+
+После `pending=0` CLI заново читает immutable source snapshot, воспроизводит
+принятые results, проверяет hashes/counters/source generation и model identity,
+строит в памяти logical tree вместе с `translation-report.json` и вычисляет
+точную identity всего output: relative paths, file/directory types и file
+bytes. После durable finalization intent logical tree отдельно materialize-ится
+во временном каталоге только когда действительно нужна новая публикация.
+Затем выполняется atomic no-clobber rename, а отдельная завершающая transaction
+переводит workspace в `completed`. Перед этой transaction уже опубликованный
+tree читается двумя независимыми полными descriptor-checked проходами.
+Path/type/bytes и stat identities обоих manifests должны полностью совпасть;
+только стабильная logical identity сравнивается с durable intent.
+
+Если процесс остановлен после intent, но до rename, `--resume` без новых model
+calls использует durable `model_tag`/`model_digest`, не создаёт Ollama client,
+не выполняет inventory/translation calls, заново строит и проверяет тот же
+tree, публикует его и завершает workspace. Если rename уже произошёл, resume
+независимо воспроизводит expected tree из проверенных source и checkpoints,
+требует точного совпадения expected, intent и уже опубликованного tree, не
+обращается к Ollama, не публикует его повторно и выполняет только completion
+transaction. Missing/extra/changed file, symlink, special file или hardlink
+означает fail-closed без изменения output/workspace. Если completion
+transaction уже закоммитилась, но успешный ответ процесса потерян, следующий
+`--resume` выполняет те же read-only source/config/provenance и stable-tree
+проверки, возвращает существующий truthful report как успешный идемпотентный
+результат и не меняет `run_count`.
+
+Отчёт честно фиксирует, что в момент создания workspace был `in_progress` и
+сам отчёт не аттестует более поздний completion; он содержит resumability
+provenance, total/completed/translated/unchanged/fallback/unsupported/pending
+counters, число reused occurrences и model calls соответствующего запуска.
+Fallback, unsupported syntax или skipped files сохраняют честный partial
+status.
+
+MVP-4 пока подтверждён только synthetic data: private mods и live Ollama не
+использовались. Candidate остаётся отдельным от active game paths, не
+регистрируется в launcher и всегда требует human review. Применение реального
+`pilot-02` — отдельный будущий live gate с новым явным разрешением владельца.
+Advisory lease и два manifest-прохода закрывают нормальную process concurrency
+и обнаруживаемые изменения дерева, но не являются абсолютной защитой от
+hostile same-UID процесса, который сознательно обходит lease и успевает
+подменять и восстанавливать paths/bytes/stat между проверками.
+
+Текущий synthetic validation baseline: `266 passed` при полном
+`python3 -m pytest -W error`; отдельные regressions покрывают unsafe SQLite
+sidecars, pre-commit и настоящий commit-phase hot journal, offline post-intent
+recovery, read-only completed resume при non-writable parent, parallel resume,
+crash/finalization, stable-tree reconciliation и legacy single-pass semantics.
 
 ## Локальный editorial review pack
 
