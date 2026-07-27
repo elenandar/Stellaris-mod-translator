@@ -1189,12 +1189,147 @@ async function fireDocument(type, event) {
   vm.runInThisContext(`
     state=new Map();drafts.clear();selected.clear();undoState=null;
     resetFilters();currentId=pack.entries[0].id;pageIndex=0;
+    {
+      const record=pack.entries[0];
+      const item=defaults(record);
+      item.note="multi-tag metadata";
+      item.tags=["terminology","lore"];
+      item.glossary_candidate=true;
+      setStateMemory(record,item)
+    }
+    applyFilters()
+  `);
+  firstCheckbox = elements.get("entryList").children[0].children[0];
+  firstCheckbox.checked = true;
+  await firstCheckbox.fire("change");
+  await elements.get("batchAccept").fire("click");
+  const multiTagCanonicalization = vm.runInThisContext(
+    "JSON.stringify(currentState(pack.entries[0]).tags)"
+    + '===JSON.stringify(["lore","terminology"])'
+  );
+  const batchReloadUndo = vm.runInThisContext(
+    "(()=>{const restored=validateStorageDocument(JSON.parse("
+    + "localStorage.getItem(storageKey)));"
+    + "return restored.state.get(pack.entries[0].id).decision==='accept'"
+    + "&&restored.undo!==null&&restored.undoDiscarded===false"
+    + "&&JSON.stringify(restored.state.get(pack.entries[0].id).tags)"
+    + '===JSON.stringify(["lore","terminology"])})()'
+  );
+  const legacyV2UnsortedUndoCompatible = vm.runInThisContext(`
+    (()=>{
+      const legacy=JSON.parse(localStorage.getItem(storageKey));
+      const entry=legacy.last_batch_undo.entries.find(
+        item=>item.occurrence_id===pack.entries[0].id
+      );
+      entry.before.tags=["terminology","lore"];
+      entry.after.tags=["terminology","lore"];
+      const restored=validateStorageDocument(
+        JSON.parse(JSON.stringify(legacy))
+      );
+      return restored.undo!==null&&restored.undoDiscarded===false
+        &&JSON.stringify(restored.state.get(pack.entries[0].id).tags)
+          ===JSON.stringify(["lore","terminology"])
+    })()
+  `);
+  const repeatedSaveReloadUndo = vm.runInThisContext(`
+    (()=>{
+      for(let index=0;index<2;index++){
+        const restored=validateStorageDocument(JSON.parse(
+          localStorage.getItem(storageKey)
+        ));
+        if(restored.undo===null||restored.undoDiscarded)return false;
+        state=restored.state;undoState=restored.undo;persistSparse()
+      }
+      const restored=validateStorageDocument(JSON.parse(
+        localStorage.getItem(storageKey)
+      ));
+      state=restored.state;undoState=restored.undo;
+      return restored.undo!==null&&restored.undoDiscarded===false
+    })()
+  `);
+  vm.runInThisContext("undoLastBatch()");
+  const exactMultiTagMetadataRestoration = vm.runInThisContext(
+    "currentState(pack.entries[0]).decision==='unreviewed'"
+    + "&&currentState(pack.entries[0]).note==='multi-tag metadata'"
+    + "&&JSON.stringify(currentState(pack.entries[0]).tags)"
+    + '===JSON.stringify(["lore","terminology"])'
+    + "&&currentState(pack.entries[0]).glossary_candidate===true"
+    + "&&undoState===null"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;
+    {
+      const record=pack.entries[0];
+      const item=defaults(record);
+      item.tags=["terminology","lore"];
+      setStateMemory(record,item)
+    }
+    applyFilters()
+  `);
+  firstCheckbox = elements.get("entryList").children[0].children[0];
+  firstCheckbox.checked = true;
+  await firstCheckbox.fire("change");
+  await elements.get("batchAccept").fire("click");
+  vm.runInThisContext(
+    "updateDraftAwareField(pack.entries[0],'tags',['lore'],true)"
+  );
+  const affectedTagMutationClearsUndo = vm.runInThisContext(
+    "currentState(pack.entries[0]).decision==='accept'"
+    + "&&JSON.stringify(currentState(pack.entries[0]).tags)"
+    + '===JSON.stringify(["lore"])&&undoState===null'
+    + "&&validateStorageDocument(JSON.parse(localStorage.getItem(storageKey)))"
+    + ".undo===null"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;
     applyFilters();persistSparse()
   `);
   const legacySparseV1Compatible = vm.runInThisContext(
     "validateStorageDocument(sparseDocument()).state.size===0"
     + "&&validateStorageDocument(sparseDocument()).undo===null"
   );
+  const legacyStorageV1UnsortedTags = vm.runInThisContext(`
+    (()=>{
+      const record=pack.entries[0];
+      const item=decisionRecord(record,defaults(record));
+      item.note="legacy storage metadata";
+      item.tags=["terminology","lore"];
+      const restored=validateStorageDocument({
+        storage_schema_version:1,
+        pack_fingerprint:pack.pack_fingerprint,
+        changes:[item]
+      });
+      return restored.undo===null&&restored.undoDiscarded===false
+        &&JSON.stringify(restored.state.get(record.id).tags)
+          ===JSON.stringify(["lore","terminology"])
+    })()
+  `);
+  const legacyDraftV1UnsortedTags = vm.runInThisContext(`
+    (()=>{
+      const draft=exportDocument(new Map(),false,false);
+      draft.decisions[0].note="legacy draft metadata";
+      draft.decisions[0].tags=["terminology","lore"];
+      const restored=validateDocument(draft);
+      return JSON.stringify(restored.get(pack.entries[0].id).tags)
+        ===JSON.stringify(["lore","terminology"])
+    })()
+  `);
+  const duplicateTagRejected = vm.runInThisContext(`
+    (()=>{
+      const draft=exportDocument(new Map(),false,false);
+      draft.decisions[0].tags=["lore","lore"];
+      try{validateDocument(draft);return false}catch(error){return true}
+    })()
+  `);
+  const unknownTagRejected = vm.runInThisContext(`
+    (()=>{
+      const draft=exportDocument(new Map(),false,false);
+      draft.decisions[0].tags=["unknown"];
+      try{validateDocument(draft);return false}catch(error){return true}
+    })()
+  `);
   const persistedBeforeStorageFailure = localStorage.getItem(
     vm.runInThisContext("storageKey")
   );
@@ -1998,7 +2133,17 @@ async function fireDocument(type, event) {
     batchRejectExact,
     reviewedCheckboxDisabled,
     clearResetsUndo,
+    multiTagCanonicalization,
+    batchReloadUndo,
+    legacyV2UnsortedUndoCompatible,
+    repeatedSaveReloadUndo,
+    exactMultiTagMetadataRestoration,
+    affectedTagMutationClearsUndo,
     legacySparseV1Compatible,
+    legacyStorageV1UnsortedTags,
+    legacyDraftV1UnsortedTags,
+    duplicateTagRejected,
+    unknownTagRejected,
     storageFailureKeepsMemoryExport,
     storageEnvelopeFailureCoherent,
     newBatchReplacesUndo,
@@ -2118,7 +2263,17 @@ async function fireDocument(type, event) {
         "batchRejectExact": True,
         "reviewedCheckboxDisabled": True,
         "clearResetsUndo": True,
+        "multiTagCanonicalization": True,
+        "batchReloadUndo": True,
+        "legacyV2UnsortedUndoCompatible": True,
+        "repeatedSaveReloadUndo": True,
+        "exactMultiTagMetadataRestoration": True,
+        "affectedTagMutationClearsUndo": True,
         "legacySparseV1Compatible": True,
+        "legacyStorageV1UnsortedTags": True,
+        "legacyDraftV1UnsortedTags": True,
+        "duplicateTagRejected": True,
+        "unknownTagRejected": True,
         "storageFailureKeepsMemoryExport": True,
         "storageEnvelopeFailureCoherent": True,
         "newBatchReplacesUndo": True,

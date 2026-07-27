@@ -193,11 +193,13 @@ let selected=new Set();
 let undoState=null;
 const el=id=>document.getElementById(id);
 const defaults=record=>({decision:"unreviewed",edited_segments:record.candidate_segments.slice(),note:"",tags:[],glossary_candidate:false});
-const cloneItem=item=>({decision:item.decision,edited_segments:item.edited_segments.slice(),note:item.note,tags:item.tags.slice(),glossary_candidate:item.glossary_candidate});
+const canonicalTags=tags=>tags.slice().sort();
+const cloneItem=item=>({decision:item.decision,edited_segments:item.edited_segments.slice(),note:item.note,tags:canonicalTags(item.tags),glossary_candidate:item.glossary_candidate});
 const currentState=record=>state.get(record.id)||defaults(record);
 const renderedState=record=>drafts.has(record.id)?drafts.get(record.id).item:currentState(record);
 function arraysEqual(left,right){return left.length===right.length&&left.every((value,index)=>value===right[index])}
-function itemsEqual(left,right){return left.decision===right.decision&&arraysEqual(left.edited_segments,right.edited_segments)&&left.note===right.note&&arraysEqual(left.tags,right.tags)&&left.glossary_candidate===right.glossary_candidate}
+function tagsEqual(left,right){return arraysEqual(canonicalTags(left),canonicalTags(right))}
+function itemsEqual(left,right){return left.decision===right.decision&&arraysEqual(left.edited_segments,right.edited_segments)&&left.note===right.note&&tagsEqual(left.tags,right.tags)&&left.glossary_candidate===right.glossary_candidate}
 function isDefaultItem(record,item){const baseline=defaults(record);return item.decision===baseline.decision&&arraysEqual(item.edited_segments,baseline.edited_segments)&&item.note===""&&item.tags.length===0&&item.glossary_candidate===false}
 function normalizeSparseMap(value){const result=new Map();for(const [id,item] of value){const record=byId.get(id);if(!record)throw new Error("unknown occurrence ID");validateStoredItem(record,item);if(!isDefaultItem(record,item))result.set(id,cloneItem(item))}return result}
 function undoDocument(value=undoState){
@@ -214,7 +216,7 @@ function validateUndoDocument(value,stateValue=null){
     if(!entry.before||typeof entry.before!=="object"||Array.isArray(entry.before)||!exactFields(entry.before,["decision","edited_segments","note","tags","glossary_candidate"]))throw new Error("invalid batch undo prior state");
     if(!entry.after||typeof entry.after!=="object"||Array.isArray(entry.after)||!exactFields(entry.after,["decision","edited_segments","note","tags","glossary_candidate"]))throw new Error("invalid batch undo resulting state");
     validateStoredItem(record,entry.before);validateStoredItem(record,entry.after);
-    if(entry.before.decision!=="unreviewed"||entry.after.decision!==value.decision||!arraysEqual(entry.after.edited_segments,record.candidate_segments)||entry.after.note!==entry.before.note||!arraysEqual(entry.after.tags,entry.before.tags)||entry.after.glossary_candidate!==entry.before.glossary_candidate)throw new Error("invalid batch undo transition");
+    if(entry.before.decision!=="unreviewed"||entry.after.decision!==value.decision||!arraysEqual(entry.after.edited_segments,record.candidate_segments)||entry.after.note!==entry.before.note||!tagsEqual(entry.after.tags,entry.before.tags)||entry.after.glossary_candidate!==entry.before.glossary_candidate)throw new Error("invalid batch undo transition");
     if(stateValue!==null&&!itemsEqual(stateValue.get(record.id)||defaults(record),entry.after))throw new Error("batch undo no longer matches current state");
     seen.add(record.id);entries.push({occurrence_id:record.id,before:cloneItem(entry.before),after:cloneItem(entry.after)})
   }
@@ -257,7 +259,7 @@ function validateStoredItem(record,item){
 function exactFields(object,fields){return Object.keys(object).sort().join("\n")===fields.slice().sort().join("\n")}
 function decisionRecord(record,item){
   validateStoredItem(record,item);
-  const result={occurrence_id:record.id,decision:item.decision,note:item.note,tags:item.tags.slice().sort(),glossary_candidate:item.glossary_candidate,source_span_sha256:record.source_span_sha256,candidate_span_sha256:record.candidate_span_sha256};
+  const result={occurrence_id:record.id,decision:item.decision,note:item.note,tags:canonicalTags(item.tags),glossary_candidate:item.glossary_candidate,source_span_sha256:record.source_span_sha256,candidate_span_sha256:record.candidate_span_sha256};
   if(item.decision==="edit")result.edited_translation=fullTranslation(record,item);
   return result
 }
@@ -271,7 +273,7 @@ function validateDecisionRecord(item){
   validateNote(item.note);
   if(item.source_span_sha256!==record.source_span_sha256||item.candidate_span_sha256!==record.candidate_span_sha256)throw new Error("span identity mismatch");
   const editedSegments=item.decision==="edit"?splitEdited(record,item.edited_translation):record.candidate_segments.slice();
-  const normalized={decision:item.decision,edited_segments:editedSegments,note:item.note,tags:item.tags.slice(),glossary_candidate:item.glossary_candidate};
+  const normalized={decision:item.decision,edited_segments:editedSegments,note:item.note,tags:canonicalTags(item.tags),glossary_candidate:item.glossary_candidate};
   validateStoredItem(record,normalized);return [record,normalized]
 }
 function exportDocument(stateValue=state,rejectDrafts=true,requireComplete=false){
