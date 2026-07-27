@@ -16,6 +16,7 @@ from typing import Callable
 from . import ollama
 from .ollama import (
     OllamaClient,
+    OllamaError,
     OllamaResultError,
     OllamaSystemError,
 )
@@ -34,6 +35,7 @@ from .workspace import (
     create_workspace,
     load_workspace,
     mark_workspace_completed,
+    set_finalization_intent,
 )
 
 
@@ -62,6 +64,13 @@ class PlannedOccurrence:
     ordinal: int
     source_span_sha256: str
     entry: Entry
+
+
+@dataclass(frozen=True)
+class OutputTreeIdentity:
+    sha256: str
+    file_count: int
+    directory_count: int
 
 
 def inspect_mod(source_mod: Path) -> dict[str, object]:
@@ -168,7 +177,7 @@ def _translate_mod_single_pass(
                     translated += 1
                     if restored.encode("utf-8") == entry.value.encode("utf-8"):
                         unchanged += 1
-                except (OllamaResultError, ValueError) as exc:
+                except (OllamaError, ValueError) as exc:
                     fallback += 1
                     report["diagnostics"].append(
                         {
@@ -243,7 +252,16 @@ def _translate_mod_resumable(
         if workspace_abs.exists() or workspace_abs.is_symlink():
             raise SafetyError("first_run_requires_absent_workspace")
         initial_workspace = None
-    _require_output_absent(output_abs)
+    output_exists = output_abs.exists() or output_abs.is_symlink()
+    if not resume and output_exists:
+        raise SafetyError("output_must_not_exist")
+    if (
+        resume
+        and output_exists
+        and initial_workspace is not None
+        and initial_workspace.job.finalization_state != "intent"
+    ):
+        raise SafetyError("output_exists_without_finalization_intent")
 
     files = _snapshot(source)
     inventory, plan, source_tree_hash, inventory_hash = _workspace_inputs(files)
@@ -263,6 +281,65 @@ def _translate_mod_resumable(
             prompt_profile_hash=prompt_profile_hash,
         )
         reused = initial_workspace.job.completed_count
+
+    if output_exists:
+        assert initial_workspace is not None
+        identity = _validated_model_identity(
+            {
+                "tag": initial_workspace.job.model_tag,
+                "digest": initial_workspace.job.model_digest,
+            },
+            model,
+        )
+        _verify_snapshot(source, files)
+        report_run_count = initial_workspace.job.report_run_count
+        report_reused = initial_workspace.job.report_reused_count
+        report_calls = initial_workspace.job.report_calls_count
+        if (
+            report_run_count is None
+            or report_reused is None
+            or report_calls is None
+        ):
+            raise SafetyError("workspace_finalization_report_counters_missing")
+        recovery_temp = Path(
+            tempfile.mkdtemp(
+                prefix=f".{output_abs.name}.recover-",
+                dir=output_abs.parent,
+            )
+        )
+        try:
+            expected_report, expected_output = _build_workspace_candidate_tree(
+                temp=recovery_temp,
+                source=source,
+                output=output_abs,
+                workspace=workspace_abs,
+                model_identity=identity,
+                files=files,
+                plan=plan,
+                workspace_snapshot=initial_workspace,
+                report_run_count=report_run_count,
+                reused=report_reused,
+                calls_in_final_run=report_calls,
+                prompt_profile_hash=prompt_profile_hash,
+            )
+            _validate_intended_output_identity(
+                initial_workspace, expected_output
+            )
+            actual_output = _output_tree_identity(output_abs)
+            if actual_output != expected_output:
+                raise SafetyError("finalization_output_identity_mismatch")
+            _verify_snapshot(source, files)
+            _complete_workspace(
+                workspace_abs,
+                output_identity=actual_output,
+            )
+            completed = _load_workspace(workspace_abs)
+            if completed.job.state != "completed":
+                raise SafetyError("workspace_completion_not_persisted")
+            return expected_report
+        finally:
+            if recovery_temp.exists():
+                shutil.rmtree(recovery_temp)
 
     client = client_factory()
     identity = _validated_model_identity(client.exact_model(model), model)
@@ -316,39 +393,53 @@ def _translate_mod_resumable(
 
     calls_in_final_run = 0
     plan_by_sequence = {item.sequence: item for item in plan}
-    try:
-        with WorkspaceWriter(workspace_abs) as writer:
-            if resume:
-                writer.start_resume_run()
-            for row in initial_workspace.occurrences:
-                if row.state != "pending":
-                    continue
-                item = plan_by_sequence[row.sequence]
-                calls_in_final_run += 1
-                try:
-                    result = client.translate(
-                        tag=model, text=item.entry.model_text()
-                    )
-                    restored = item.entry.restore_translation(result)
-                    if restored.encode("utf-8") == item.entry.value.encode("utf-8"):
-                        state = "accepted_unchanged"
-                    else:
-                        state = "accepted_changed"
-                    writer.checkpoint(
-                        item.sequence,
-                        state=state,
-                        model_result=result,
-                        error_code=None,
-                    )
-                except (OllamaResultError, ValueError) as exc:
-                    writer.checkpoint(
-                        item.sequence,
-                        state="model_fallback",
-                        model_result=None,
-                        error_code=type(exc).__name__,
-                    )
-    except WorkspaceError as exc:
-        raise SafetyError(str(exc)) from exc
+    translating = initial_workspace.job.finalization_state == "none"
+    if translating:
+        try:
+            with WorkspaceWriter(workspace_abs) as writer:
+                if resume:
+                    writer.start_resume_run()
+                for row in initial_workspace.occurrences:
+                    if row.state != "pending":
+                        continue
+                    item = plan_by_sequence[row.sequence]
+                    calls_in_final_run += 1
+                    try:
+                        result = client.translate(
+                            tag=model, text=item.entry.model_text()
+                        )
+                        restored = item.entry.restore_translation(result)
+                        if (
+                            restored.encode("utf-8")
+                            == item.entry.value.encode("utf-8")
+                        ):
+                            state = "accepted_unchanged"
+                            saved_result = None
+                        else:
+                            state = "accepted_changed"
+                            saved_result = result
+                        writer.checkpoint(
+                            item.sequence,
+                            state=state,
+                            model_result=saved_result,
+                            error_code=None,
+                        )
+                    except OllamaResultError:
+                        writer.checkpoint(
+                            item.sequence,
+                            state="model_fallback",
+                            model_result=None,
+                            error_code="model_result_invalid",
+                        )
+                    except ValueError:
+                        writer.checkpoint(
+                            item.sequence,
+                            state="model_fallback",
+                            model_result=None,
+                            error_code="renderer_validation_failed",
+                        )
+        except (WorkspaceError, sqlite3.Error) as exc:
+            raise SafetyError(str(exc)) from exc
 
     completed_workspace = _load_workspace(workspace_abs)
     _validate_workspace_semantics(
@@ -388,38 +479,38 @@ def _translate_mod_resumable(
         prompt_profile_hash=prompt_profile_hash,
     )
 
-    report = _workspace_translation_report(
-        source=source,
-        output=output_abs,
-        workspace=workspace_abs,
-        model_identity=identity,
-        files=final_files,
-        workspace_snapshot=completed_workspace,
-        reused=reused,
-        calls_in_final_run=calls_in_final_run,
-        prompt_profile_hash=prompt_profile_hash,
-    )
+    if completed_workspace.job.finalization_state == "intent":
+        report_run_count = completed_workspace.job.report_run_count
+        report_reused = completed_workspace.job.report_reused_count
+        report_calls = completed_workspace.job.report_calls_count
+        if (
+            report_run_count is None
+            or report_reused is None
+            or report_calls is None
+        ):
+            raise SafetyError("workspace_finalization_report_counters_missing")
+    else:
+        report_run_count = completed_workspace.job.run_count
+        report_reused = reused
+        report_calls = calls_in_final_run
+
     temp = Path(
         tempfile.mkdtemp(prefix=f".{output_abs.name}.tmp-", dir=output_abs.parent)
     )
     try:
-        candidates = _render_workspace_candidates(
-            temp,
-            final_files,
-            final_plan,
-            completed_workspace,
-        )
-        candidate_hash = _tree_hash(candidates)
-        report["hashes"]["output_localisation_sha256"] = candidate_hash
-        _validate_count_invariant(report, dry_run=False)
-        report["status"] = _translation_status(report, dry_run=False)
-        report["editorial_status"] = "human_review_required"
-        report["editorially_approved"] = False
-        _write_new(
-            temp / "translation-report.json",
-            (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode(
-                "utf-8"
-            ),
+        report, output_identity = _build_workspace_candidate_tree(
+            temp=temp,
+            source=source,
+            output=output_abs,
+            workspace=workspace_abs,
+            model_identity=identity,
+            files=final_files,
+            plan=final_plan,
+            workspace_snapshot=completed_workspace,
+            report_run_count=report_run_count,
+            reused=report_reused,
+            calls_in_final_run=report_calls,
+            prompt_profile_hash=prompt_profile_hash,
         )
         _verify_snapshot(source, final_files)
         final_identity = _validated_model_identity(
@@ -428,6 +519,30 @@ def _translate_mod_resumable(
         if final_identity != identity:
             raise SafetyError("model_identity_changed")
         _verify_snapshot(source, final_files)
+
+        if completed_workspace.job.finalization_state == "none":
+            try:
+                set_finalization_intent(
+                    workspace_abs,
+                    output_tree_sha256=output_identity.sha256,
+                    output_file_count=output_identity.file_count,
+                    output_directory_count=output_identity.directory_count,
+                    report_run_count=report_run_count,
+                    report_reused_count=report_reused,
+                    report_calls_count=report_calls,
+                )
+            except (WorkspaceError, sqlite3.Error) as exc:
+                raise SafetyError(str(exc)) from exc
+            intent_workspace = _load_workspace(workspace_abs)
+            _validate_intended_output_identity(
+                intent_workspace, output_identity
+            )
+        else:
+            _validate_intended_output_identity(
+                completed_workspace, output_identity
+            )
+
+        _verify_snapshot(source, final_files)
         _require_output_absent(output_abs)
         try:
             atomic_publish_directory_no_replace(temp, output_abs)
@@ -435,10 +550,10 @@ def _translate_mod_resumable(
             raise SafetyError("output_appeared_before_publication") from exc
         except AtomicPublicationUnavailable as exc:
             raise SafetyError("atomic_no_replace_unavailable") from exc
-        try:
-            mark_workspace_completed(workspace_abs)
-        except WorkspaceError as exc:
-            raise SafetyError(str(exc)) from exc
+        _complete_workspace(
+            workspace_abs,
+            output_identity=output_identity,
+        )
     except BaseException:
         if temp.exists():
             shutil.rmtree(temp)
@@ -567,7 +682,7 @@ def _validate_workspace_semantics(
         )
         if actual_identity != expected_identity:
             raise SafetyError("workspace_occurrence_identity_drift")
-        if row.state in {"accepted_changed", "accepted_unchanged"}:
+        if row.state == "accepted_changed":
             if row.model_result is None:
                 raise SafetyError("workspace_saved_result_missing")
             try:
@@ -584,6 +699,9 @@ def _validate_workspace_semantics(
             )
             if row.state != expected_state:
                 raise SafetyError("workspace_saved_result_state_mismatch")
+        elif row.state == "accepted_unchanged":
+            if row.model_result is not None:
+                raise SafetyError("workspace_unchanged_result_must_be_absent")
         elif row.state == "model_fallback":
             if not row.error_code:
                 raise SafetyError("workspace_fallback_reason_missing")
@@ -605,6 +723,7 @@ def _workspace_translation_report(
     model_identity: dict[str, str],
     files: list[SourceFile],
     workspace_snapshot: WorkspaceSnapshot,
+    report_run_count: int,
     reused: int,
     calls_in_final_run: int,
     prompt_profile_hash: str,
@@ -671,16 +790,66 @@ def _workspace_translation_report(
     report["resumability"] = {
         "mode": "sqlite_workspace",
         "workspace": str(workspace),
-        "workspace_schema_version": 1,
+        "workspace_schema_version": 2,
         "parser_order_version": PARSER_ORDER_VERSION,
         "prompt_profile_hash": prompt_profile_hash,
-        "workspace_state": "completed",
-        "run_count": workspace_snapshot.job.run_count,
+        "finalization_protocol": "intent_then_no_clobber_publish_then_complete_v1",
+        "workspace_state_at_report_creation": "in_progress",
+        "completion_attested_by_report": False,
+        "output_identity_scope": "all_paths_types_and_bytes_including_report",
+        "run_count": report_run_count,
         "reused_from_workspace": reused,
         "calls_in_final_run": calls_in_final_run,
         "checkpoint_boundary": "committed_after_each_finished_occurrence",
     }
     return report
+
+
+def _build_workspace_candidate_tree(
+    *,
+    temp: Path,
+    source: Path,
+    output: Path,
+    workspace: Path,
+    model_identity: dict[str, str],
+    files: list[SourceFile],
+    plan: tuple[PlannedOccurrence, ...],
+    workspace_snapshot: WorkspaceSnapshot,
+    report_run_count: int,
+    reused: int,
+    calls_in_final_run: int,
+    prompt_profile_hash: str,
+) -> tuple[dict[str, object], OutputTreeIdentity]:
+    report = _workspace_translation_report(
+        source=source,
+        output=output,
+        workspace=workspace,
+        model_identity=model_identity,
+        files=files,
+        workspace_snapshot=workspace_snapshot,
+        report_run_count=report_run_count,
+        reused=reused,
+        calls_in_final_run=calls_in_final_run,
+        prompt_profile_hash=prompt_profile_hash,
+    )
+    candidates = _render_workspace_candidates(
+        temp,
+        files,
+        plan,
+        workspace_snapshot,
+    )
+    report["hashes"]["output_localisation_sha256"] = _tree_hash(candidates)
+    _validate_count_invariant(report, dry_run=False)
+    report["status"] = _translation_status(report, dry_run=False)
+    report["editorial_status"] = "human_review_required"
+    report["editorially_approved"] = False
+    _write_new(
+        temp / "translation-report.json",
+        (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode(
+            "utf-8"
+        ),
+    )
+    return report, _output_tree_identity(temp)
 
 
 def _render_workspace_candidates(
@@ -702,7 +871,7 @@ def _render_workspace_candidates(
         replacements: dict[int, str] = {}
         for item in plan_by_path.get(source_file.relative.as_posix(), []):
             row = rows[item.sequence]
-            if row.state in {"accepted_changed", "accepted_unchanged"}:
+            if row.state == "accepted_changed":
                 assert row.model_result is not None
                 try:
                     replacements[item.entry.line_index] = (
@@ -719,6 +888,173 @@ def _render_workspace_candidates(
         _write_new(target, rendered)
         candidates.append((relative, rendered))
     return candidates
+
+
+def _output_tree_identity(root: Path) -> OutputTreeIdentity:
+    try:
+        root_before = root.lstat()
+    except FileNotFoundError as exc:
+        raise SafetyError("finalization_output_missing") from exc
+    if stat.S_ISLNK(root_before.st_mode) or not stat.S_ISDIR(
+        root_before.st_mode
+    ):
+        raise SafetyError("finalization_output_root_not_directory")
+
+    digest = hashlib.sha256()
+    digest.update(b"stellaris-mod-translator-output-tree-v1\0")
+    _update_output_identity_entry(digest, Path("."), b"D", None)
+    directory_count = 1
+    file_count = 0
+
+    def fail_walk(error: OSError) -> None:
+        raise SafetyError("finalization_output_inventory_failed") from error
+
+    try:
+        for current, directories, names in os.walk(
+            root, followlinks=False, onerror=fail_walk
+        ):
+            current_path = Path(current)
+            directories.sort()
+            names.sort()
+            for name in directories:
+                path = current_path / name
+                value = path.lstat()
+                if stat.S_ISLNK(value.st_mode) or not stat.S_ISDIR(
+                    value.st_mode
+                ):
+                    raise SafetyError(
+                        "finalization_output_directory_type_invalid"
+                    )
+                relative = path.relative_to(root)
+                _update_output_identity_entry(
+                    digest, relative, b"D", None
+                )
+                directory_count += 1
+            for name in names:
+                path = current_path / name
+                value = path.lstat()
+                if stat.S_ISLNK(value.st_mode):
+                    raise SafetyError("finalization_output_symlink")
+                if not stat.S_ISREG(value.st_mode):
+                    raise SafetyError("finalization_output_special_file")
+                if value.st_nlink != 1:
+                    raise SafetyError("finalization_output_hardlink")
+                relative = path.relative_to(root)
+                _hash_output_file(digest, relative, path)
+                file_count += 1
+    except SafetyError:
+        raise
+    except OSError as exc:
+        raise SafetyError("finalization_output_inventory_failed") from exc
+
+    root_after = root.lstat()
+    if (
+        root_after.st_dev,
+        root_after.st_ino,
+        root_after.st_mtime_ns,
+    ) != (
+        root_before.st_dev,
+        root_before.st_ino,
+        root_before.st_mtime_ns,
+    ):
+        raise SafetyError("finalization_output_changed_during_read")
+    if file_count < 1:
+        raise SafetyError("finalization_output_has_no_files")
+    return OutputTreeIdentity(
+        sha256=digest.hexdigest(),
+        file_count=file_count,
+        directory_count=directory_count,
+    )
+
+
+def _update_output_identity_entry(
+    digest: object,
+    relative: Path,
+    kind: bytes,
+    byte_count: int | None,
+) -> None:
+    encoded = os.fsencode(relative.as_posix())
+    digest.update(len(encoded).to_bytes(8, "big"))
+    digest.update(encoded)
+    digest.update(kind)
+    if byte_count is not None:
+        digest.update(byte_count.to_bytes(8, "big"))
+
+
+def _hash_output_file(
+    digest: object, relative: Path, path: Path
+) -> None:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise SafetyError("finalization_output_file_type_invalid")
+        _update_output_identity_entry(
+            digest, relative, b"F", before.st_size
+        )
+        bytes_read = 0
+        while chunk := os.read(descriptor, 1024 * 1024):
+            bytes_read += len(chunk)
+            digest.update(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    if bytes_read != before.st_size or _stat_identity(before) != _stat_identity(
+        after
+    ):
+        raise SafetyError("finalization_output_file_changed_during_read")
+    path_after = path.lstat()
+    if (
+        path_after.st_dev,
+        path_after.st_ino,
+        path_after.st_size,
+        path_after.st_mtime_ns,
+        path_after.st_nlink,
+    ) != (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+        after.st_nlink,
+    ):
+        raise SafetyError("finalization_output_file_replaced_during_read")
+
+
+def _validate_intended_output_identity(
+    snapshot: WorkspaceSnapshot, actual: OutputTreeIdentity
+) -> None:
+    job = snapshot.job
+    if job.finalization_state != "intent":
+        raise SafetyError("workspace_finalization_intent_missing")
+    if (
+        job.output_tree_sha256,
+        job.output_file_count,
+        job.output_directory_count,
+    ) != (
+        actual.sha256,
+        actual.file_count,
+        actual.directory_count,
+    ):
+        raise SafetyError("finalization_output_identity_mismatch")
+
+
+def _complete_workspace(
+    workspace: Path, *, output_identity: OutputTreeIdentity
+) -> None:
+    try:
+        mark_workspace_completed(
+            workspace,
+            output_tree_sha256=output_identity.sha256,
+            output_file_count=output_identity.file_count,
+            output_directory_count=output_identity.directory_count,
+        )
+    except (WorkspaceError, sqlite3.Error) as exc:
+        raise SafetyError(str(exc)) from exc
 
 
 def _normalized_workspace(path: Path, *, resume: bool) -> Path:

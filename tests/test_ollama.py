@@ -227,7 +227,7 @@ def test_wrong_model_or_incomplete_terminal_result_is_rejected(
         ("synthetic:1", None),
     ],
 )
-def test_terminal_provenance_error_stops_run_without_candidate(
+def test_terminal_provenance_error_is_legacy_per_entry_fallback(
     fake_ollama, tmp_path, outer_model: str, done: object
 ) -> None:
     Handler.generate_model = outer_model
@@ -240,16 +240,19 @@ def test_terminal_provenance_error_stops_run_without_candidate(
     source_file.write_bytes(source_bytes)
     output = tmp_path / "candidate"
 
-    with pytest.raises(OllamaSystemError):
-        translate_mod(tmp_path / "source", output, "synthetic:1")
+    report = translate_mod(tmp_path / "source", output, "synthetic:1")
 
-    assert not output.exists()
-    assert list(tmp_path.glob(".candidate.tmp-*")) == []
+    candidate = output / "localisation/russian/demo_l_russian.yml"
+    assert candidate.read_bytes() == (
+        b'l_russian:\n key:0 "Hello $NAME$"\n'
+    )
+    assert report["counts"]["translated_occurrences"] == 0
+    assert report["counts"]["fallback_occurrences"] == 1
     assert source_file.read_bytes() == source_bytes
 
 
 @pytest.mark.parametrize("done_reason", ["length", "future_reason"])
-def test_terminal_reason_error_stops_run_without_candidate(
+def test_terminal_reason_error_is_legacy_per_entry_fallback(
     fake_ollama, tmp_path, done_reason: str
 ) -> None:
     Handler.generate_done_reason = done_reason
@@ -261,11 +264,14 @@ def test_terminal_reason_error_stops_run_without_candidate(
     source_file.write_bytes(source_bytes)
     output = tmp_path / "candidate"
 
-    with pytest.raises(OllamaSystemError):
-        translate_mod(tmp_path / "source", output, "synthetic:1")
+    report = translate_mod(tmp_path / "source", output, "synthetic:1")
 
-    assert not output.exists()
-    assert list(tmp_path.glob(".candidate.tmp-*")) == []
+    candidate = output / "localisation/russian/demo_l_russian.yml"
+    assert candidate.read_bytes() == (
+        b'l_russian:\n key:0 "Hello $NAME$"\n'
+    )
+    assert report["counts"]["translated_occurrences"] == 0
+    assert report["counts"]["fallback_occurrences"] == 1
     assert source_file.read_bytes() == source_bytes
 
 

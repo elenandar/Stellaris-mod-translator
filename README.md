@@ -118,33 +118,63 @@ Workspace — private local data: он содержит сохранённые �
 `0600`; `.gitignore` отдельно покрывает `*.smt-workspace.sqlite3` и его SQLite
 sidecars. В БД не копируются raw source files или полный English corpus:
 сохраняются identities/inventory, source-span hashes, exact model provenance и
-проверенный model result, необходимый для lossless replay.
+только изменивший span проверенный model result. Для `accepted_unchanged`
+model result всегда `NULL`, а финальный render воспроизводит original source
+span; model echo не создаёт скрытую копию английского корпуса в workspace.
 
 После каждого законченного occurrence terminal state
 `accepted_changed`, `accepted_unchanged` или `model_fallback` фиксируется
 отдельной durable SQLite transaction. `--resume` заново проверяет integrity и
-schema БД, source bytes/inventory/order, occurrence identities, output path,
-parser/order version, prompt profile и exact model tag/digest до первого нового
-translation call. Уже committed occurrences модели повторно не отправляются.
-Если остановка произошла после model call, но до SQLite commit, только этот
-незафиксированный вызов может повториться.
+точную schema v2 БД, включая constraints, indexes и foreign keys; после этого
+строго проверяются SQLite/Python types, ranges и известные states/error codes.
+Также проверяются source bytes/inventory/order, occurrence identities, output
+path, parser/order version, prompt profile и exact model tag/digest до первого
+нового translation call. Уже committed occurrences модели повторно не
+отправляются. Если остановка произошла после model call, но до SQLite commit,
+только этот незафиксированный вызов может повториться.
+
+Обычный resume preflight открывает workspace read-only и включает SQLite
+`query_only`. Единственное разрешённое изменение до успешной валидации —
+необходимый SQLite rollback hot `DELETE` journal после отдельной проверки, что
+БД и journal являются одиночными regular files с ожидаемыми mode/link count.
+После rollback весь strict read-only preflight выполняется заново. Любой другой
+sidecar, link/type/mode/schema mismatch или SQLite failure останавливает запуск
+контролируемой ошибкой.
 
 Сохранённые результаты не считаются доверенными: перед resume и финальным
-render каждый из них повторно проходит текущий `restore_translation` и
-protected-atom validation. Transport/timeout/inventory failure, malformed
-provider envelope и model identity/digest drift немедленно останавливают запуск
-с сохранением committed progress. Malformed или unsafe результат одной строки
-даёт ровно один `model_fallback`, оставляет английский span и не блокирует
-остальные occurrences.
+render каждый `accepted_changed` повторно проходит текущий
+`restore_translation` и protected-atom validation, а `accepted_unchanged`
+воспроизводится из проверенного immutable source. В workspace-режиме
+transport/timeout/inventory failure, malformed provider envelope и model
+identity/digest drift немедленно останавливают запуск с сохранением committed
+progress. Malformed или unsafe human result одной строки даёт ровно один
+`model_fallback`, оставляет английский span и не блокирует остальные
+occurrences. В legacy режиме без workspace любой `OllamaError` остаётся
+per-entry fallback, чтобы не менять принятую семантику bounded/single-pass CLI.
 
 После `pending=0` CLI заново читает immutable source snapshot, воспроизводит
 принятые results, проверяет hashes/counters/source generation и model identity,
-а затем использует прежнюю atomic no-clobber публикацию. Только после успешной
-публикации workspace получает state `completed`. `translation-report.json`
-содержит resumability provenance, total/completed/translated/unchanged/
-fallback/unsupported/pending counters, число reused occurrences и calls
-финального запуска. Fallback, unsupported syntax или skipped files сохраняют
-честный partial status.
+полностью строит candidate вместе с `translation-report.json` во временном
+каталоге и сохраняет durable finalization intent с точной identity всего output
+tree: relative paths, file/directory types и file bytes. Только после этого
+выполняется atomic no-clobber rename, а отдельная завершающая transaction
+переводит workspace в `completed`.
+
+Если процесс остановлен после intent, но до rename, `--resume` без новых model
+calls заново строит и проверяет тот же tree, публикует его и завершает
+workspace. Если rename уже произошёл, resume независимо воспроизводит expected
+tree из проверенных source и checkpoints, требует точного совпадения expected,
+intent и уже опубликованного tree, не обращается к Ollama, не публикует его
+повторно и выполняет только completion transaction. Missing/extra/changed file,
+symlink, special file или hardlink означает fail-closed без изменения
+output/workspace.
+
+Отчёт честно фиксирует, что в момент создания workspace был `in_progress` и
+сам отчёт не аттестует более поздний completion; он содержит resumability
+provenance, total/completed/translated/unchanged/fallback/unsupported/pending
+counters, число reused occurrences и model calls соответствующего запуска.
+Fallback, unsupported syntax или skipped files сохраняют честный partial
+status.
 
 MVP-4 пока подтверждён только synthetic data: private mods и live Ollama не
 использовались. Candidate остаётся отдельным от active game paths, не

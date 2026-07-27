@@ -139,7 +139,11 @@ def test_uninterrupted_workspace_run_completes_and_publishes_once(
     assert report["counts"]["reused_from_workspace_occurrences"] == 0
     assert report["counts"]["calls_in_final_run"] == 3
     assert report["counts"]["deferred_occurrences"] == 0
-    assert report["resumability"]["workspace_state"] == "completed"
+    assert (
+        report["resumability"]["workspace_state_at_report_creation"]
+        == "in_progress"
+    )
+    assert report["resumability"]["completion_attested_by_report"] is False
     assert report["resumability"]["run_count"] == 1
     assert client.inventory_calls == 2
     assert len(client.calls) == 3
@@ -791,7 +795,9 @@ def test_existing_output_blocks_incomplete_resume_without_workspace_mutation(
     workspace_before = hashlib.sha256(workspace.read_bytes()).hexdigest()
     client = SyntheticClient()
 
-    with pytest.raises(SafetyError, match="output_must_not_exist"):
+    with pytest.raises(
+        SafetyError, match="output_exists_without_finalization_intent"
+    ):
         translate_mod(
             source,
             output,

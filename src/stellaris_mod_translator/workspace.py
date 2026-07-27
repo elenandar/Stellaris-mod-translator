@@ -4,23 +4,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sqlite3
 import stat
 from urllib.parse import quote
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+KNOWN_ERROR_CODES = frozenset(
+    {"model_result_invalid", "renderer_validation_failed"}
+)
 _TERMINAL_STATES = frozenset(
     {"accepted_changed", "accepted_unchanged", "model_fallback"}
 )
 _ALL_STATES = _TERMINAL_STATES | {"pending"}
+_HEX = frozenset("0123456789abcdef")
 
 _SCHEMA = """
 CREATE TABLE job (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL,
+    schema_version INTEGER NOT NULL CHECK (schema_version = 2),
     state TEXT NOT NULL CHECK (state IN ('in_progress', 'completed')),
     source_path TEXT NOT NULL,
     output_path TEXT NOT NULL,
@@ -36,7 +41,60 @@ CREATE TABLE job (
     run_count INTEGER NOT NULL CHECK (run_count >= 1),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    completed_at TEXT
+    completed_at TEXT,
+    finalization_state TEXT NOT NULL
+        CHECK (finalization_state IN ('none', 'intent')),
+    output_tree_sha256 TEXT,
+    output_file_count INTEGER CHECK (
+        output_file_count IS NULL OR output_file_count >= 1
+    ),
+    output_directory_count INTEGER CHECK (
+        output_directory_count IS NULL OR output_directory_count >= 1
+    ),
+    report_run_count INTEGER CHECK (
+        report_run_count IS NULL OR report_run_count >= 1
+    ),
+    report_reused_count INTEGER CHECK (
+        report_reused_count IS NULL OR report_reused_count >= 0
+    ),
+    report_calls_count INTEGER CHECK (
+        report_calls_count IS NULL OR report_calls_count >= 0
+    ),
+    finalization_started_at TEXT,
+    CHECK (
+        (
+            finalization_state = 'none'
+            AND output_tree_sha256 IS NULL
+            AND output_file_count IS NULL
+            AND output_directory_count IS NULL
+            AND report_run_count IS NULL
+            AND report_reused_count IS NULL
+            AND report_calls_count IS NULL
+            AND finalization_started_at IS NULL
+        )
+        OR (
+            finalization_state = 'intent'
+            AND output_tree_sha256 IS NOT NULL
+            AND output_file_count IS NOT NULL
+            AND output_directory_count IS NOT NULL
+            AND report_run_count IS NOT NULL
+            AND report_reused_count IS NOT NULL
+            AND report_calls_count IS NOT NULL
+            AND finalization_started_at IS NOT NULL
+        )
+    ),
+    CHECK (
+        (
+            state = 'in_progress'
+            AND completed_at IS NULL
+        )
+        OR (
+            state = 'completed'
+            AND completed_at IS NOT NULL
+            AND finalization_state = 'intent'
+            AND completed_count = occurrence_count
+        )
+    )
 );
 
 CREATE TABLE inventory (
@@ -65,13 +123,21 @@ CREATE TABLE occurrences (
         )
     ),
     model_result TEXT,
-    error_code TEXT,
+    error_code TEXT CHECK (
+        error_code IS NULL
+        OR error_code IN ('model_result_invalid', 'renderer_validation_failed')
+    ),
     FOREIGN KEY (relative_path) REFERENCES inventory(relative_path),
     UNIQUE (relative_path, line_number, ordinal, source_span_sha256),
     CHECK (
         (
-            state IN ('accepted_changed', 'accepted_unchanged')
+            state = 'accepted_changed'
             AND model_result IS NOT NULL
+            AND error_code IS NULL
+        )
+        OR (
+            state = 'accepted_unchanged'
+            AND model_result IS NULL
             AND error_code IS NULL
         )
         OR (
@@ -88,50 +154,22 @@ CREATE TABLE occurrences (
 );
 """
 
-_EXPECTED_COLUMNS = {
-    "job": (
-        ("singleton", "INTEGER", 0, 1),
-        ("schema_version", "INTEGER", 1, 0),
-        ("state", "TEXT", 1, 0),
-        ("source_path", "TEXT", 1, 0),
-        ("output_path", "TEXT", 1, 0),
-        ("source_tree_sha256", "TEXT", 1, 0),
-        ("inventory_sha256", "TEXT", 1, 0),
-        ("parser_order_version", "TEXT", 1, 0),
-        ("model_tag", "TEXT", 1, 0),
-        ("model_digest", "TEXT", 1, 0),
-        ("prompt_profile_hash", "TEXT", 1, 0),
-        ("occurrence_count", "INTEGER", 1, 0),
-        ("completed_count", "INTEGER", 1, 0),
-        ("run_count", "INTEGER", 1, 0),
-        ("created_at", "TEXT", 1, 0),
-        ("updated_at", "TEXT", 1, 0),
-        ("completed_at", "TEXT", 0, 0),
-    ),
-    "inventory": (
-        ("sequence", "INTEGER", 0, 1),
-        ("relative_path", "TEXT", 1, 0),
-        ("sha256", "TEXT", 1, 0),
-        ("byte_count", "INTEGER", 1, 0),
-        ("parse_status", "TEXT", 1, 0),
-        ("occurrence_count", "INTEGER", 1, 0),
-        ("unsupported_count", "INTEGER", 1, 0),
-    ),
-    "occurrences": (
-        ("sequence", "INTEGER", 0, 1),
-        ("relative_path", "TEXT", 1, 0),
-        ("line_number", "INTEGER", 1, 0),
-        ("ordinal", "INTEGER", 1, 0),
-        ("source_span_sha256", "TEXT", 1, 0),
-        ("state", "TEXT", 1, 0),
-        ("model_result", "TEXT", 0, 0),
-        ("error_code", "TEXT", 0, 0),
-    ),
-}
-
 
 class WorkspaceError(RuntimeError):
     """A workspace is unsafe, inconsistent, or incompatible."""
+
+
+class _HotJournalRecoveryRequired(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class _FileIdentity:
+    device: int
+    inode: int
+    size: int
+    modified_ns: int
+    link_count: int
 
 
 @dataclass(frozen=True)
@@ -174,6 +212,14 @@ class JobRow:
     created_at: str
     updated_at: str
     completed_at: str | None
+    finalization_state: str
+    output_tree_sha256: str | None
+    output_file_count: int | None
+    output_directory_count: int | None
+    report_run_count: int | None
+    report_reused_count: int | None
+    report_calls_count: int | None
+    finalization_started_at: str | None
 
 
 @dataclass(frozen=True)
@@ -210,6 +256,8 @@ def create_workspace(
 
     connection: sqlite3.Connection | None = None
     try:
+        if _require_workspace_file(path) != created_identity:
+            raise WorkspaceError("workspace_replaced_during_creation")
         connection = sqlite3.connect(path)
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA journal_mode = DELETE")
@@ -219,8 +267,28 @@ def create_workspace(
         now = _timestamp()
         connection.execute(
             """
-            INSERT INTO job VALUES (
-                1, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, NULL
+            INSERT INTO job (
+                singleton,
+                schema_version,
+                state,
+                source_path,
+                output_path,
+                source_tree_sha256,
+                inventory_sha256,
+                parser_order_version,
+                model_tag,
+                model_digest,
+                prompt_profile_hash,
+                occurrence_count,
+                completed_count,
+                run_count,
+                created_at,
+                updated_at,
+                finalization_state
+            )
+            VALUES (
+                1, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?,
+                'none'
             )
             """,
             (
@@ -274,6 +342,16 @@ def create_workspace(
             ],
         )
         connection.commit()
+    except WorkspaceError:
+        if connection is not None:
+            connection.close()
+        _unlink_if_identity(path, created_identity)
+        raise
+    except sqlite3.Error as exc:
+        if connection is not None:
+            connection.close()
+        _unlink_if_identity(path, created_identity)
+        raise WorkspaceError("workspace_creation_failed") from exc
     except BaseException:
         if connection is not None:
             connection.close()
@@ -281,10 +359,23 @@ def create_workspace(
         raise
     else:
         connection.close()
-    _require_workspace_file(path)
+    final_identity = _require_workspace_file(path)
+    if (final_identity.device, final_identity.inode) != (
+        created_identity.device,
+        created_identity.inode,
+    ):
+        raise WorkspaceError("workspace_replaced_during_creation")
 
 
 def load_workspace(path: Path) -> WorkspaceSnapshot:
+    try:
+        return _load_workspace_read_only(path)
+    except _HotJournalRecoveryRequired:
+        _recover_hot_delete_journal(path)
+        return _load_workspace_read_only(path)
+
+
+def _load_workspace_read_only(path: Path) -> WorkspaceSnapshot:
     before = _require_workspace_file(path)
     connection: sqlite3.Connection | None = None
     try:
@@ -292,37 +383,38 @@ def load_workspace(path: Path) -> WorkspaceSnapshot:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA query_only = ON")
         _validate_database(connection)
-        job_rows = connection.execute(
+        raw_job_rows = connection.execute(
             "SELECT * FROM job ORDER BY singleton"
         ).fetchall()
-        if len(job_rows) != 1:
+        if len(raw_job_rows) != 1:
             raise WorkspaceError("workspace_job_row_invalid")
-        raw_job = job_rows[0]
-        if raw_job["singleton"] != 1 or raw_job["schema_version"] != SCHEMA_VERSION:
-            raise WorkspaceError("workspace_schema_version_unknown")
-        job = JobRow(
-            **{
-                name: raw_job[name]
-                for name in JobRow.__dataclass_fields__
-            }
-        )
+        job = _validated_job_row(raw_job_rows[0])
         inventory = tuple(
-            InventoryRow(**dict(row))
+            _validated_inventory_row(row)
             for row in connection.execute(
                 "SELECT * FROM inventory ORDER BY sequence"
             )
         )
         occurrences = tuple(
-            OccurrenceRow(**dict(row))
+            _validated_occurrence_row(row)
             for row in connection.execute(
                 "SELECT * FROM occurrences ORDER BY sequence"
             )
         )
-    except (sqlite3.DatabaseError, UnicodeError) as exc:
+    except WorkspaceError:
+        raise
+    except sqlite3.OperationalError as exc:
+        if _is_readonly_recovery_error(exc) and _journal_path(path).exists():
+            raise _HotJournalRecoveryRequired() from exc
+        raise WorkspaceError("workspace_database_invalid") from exc
+    except (sqlite3.DatabaseError, UnicodeError, TypeError, ValueError) as exc:
         raise WorkspaceError("workspace_database_invalid") from exc
     finally:
         if connection is not None:
-            connection.close()
+            try:
+                connection.close()
+            except sqlite3.Error as exc:
+                raise WorkspaceError("workspace_database_close_failed") from exc
     after = _require_workspace_file(path)
     if after != before:
         raise WorkspaceError("workspace_changed_during_validation")
@@ -341,8 +433,9 @@ class WorkspaceWriter:
 
     def __enter__(self) -> "WorkspaceWriter":
         before = _require_workspace_file(self.path)
-        connection = sqlite3.connect(self.path)
+        connection: sqlite3.Connection | None = None
         try:
+            connection = sqlite3.connect(self.path)
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("PRAGMA synchronous = FULL")
             journal_mode = connection.execute(
@@ -351,36 +444,64 @@ class WorkspaceWriter:
             if str(journal_mode).lower() != "delete":
                 raise WorkspaceError("workspace_journal_mode_invalid")
             after = _require_workspace_file(self.path)
-            if after[:2] != before[:2]:
+            if (after.device, after.inode) != (before.device, before.inode):
                 raise WorkspaceError("workspace_replaced_before_write")
-        except BaseException:
-            connection.close()
+        except WorkspaceError:
+            if connection is not None:
+                try:
+                    connection.close()
+                except sqlite3.Error:
+                    pass
             raise
+        except sqlite3.Error as exc:
+            if connection is not None:
+                try:
+                    connection.close()
+                except sqlite3.Error:
+                    pass
+            raise WorkspaceError("workspace_writer_open_failed") from exc
+        assert connection is not None
         self.connection = connection
         return self
 
     def __exit__(self, *exc_info: object) -> None:
         if self.connection is not None:
-            self.connection.close()
-            self.connection = None
+            try:
+                self.connection.close()
+            except sqlite3.Error as exc:
+                raise WorkspaceError("workspace_writer_close_failed") from exc
+            finally:
+                self.connection = None
+
+    def execute(
+        self, sql: str, parameters: tuple[object, ...] = ()
+    ) -> sqlite3.Cursor:
+        return self._connection().execute(sql, parameters)
 
     def start_resume_run(self) -> None:
-        connection = self._connection()
         try:
-            connection.execute("BEGIN IMMEDIATE")
-            cursor = connection.execute(
+            self.execute("BEGIN IMMEDIATE")
+            cursor = self.execute(
                 """
                 UPDATE job
                 SET run_count = run_count + 1, updated_at = ?
-                WHERE singleton = 1 AND state = 'in_progress'
+                WHERE singleton = 1
+                  AND state = 'in_progress'
+                  AND finalization_state = 'none'
                 """,
                 (_timestamp(),),
             )
             if cursor.rowcount != 1:
-                raise WorkspaceError("workspace_not_in_progress")
-            connection.commit()
+                raise WorkspaceError("workspace_not_translating")
+            self._connection().commit()
+        except WorkspaceError:
+            _rollback_safely(self._connection())
+            raise
+        except sqlite3.Error as exc:
+            _rollback_safely(self._connection())
+            raise WorkspaceError("workspace_resume_update_failed") from exc
         except BaseException:
-            connection.rollback()
+            _rollback_safely(self._connection())
             raise
 
     def checkpoint(
@@ -391,19 +512,10 @@ class WorkspaceWriter:
         model_result: str | None,
         error_code: str | None,
     ) -> None:
-        if state not in _TERMINAL_STATES:
-            raise WorkspaceError("workspace_checkpoint_state_invalid")
-        if state.startswith("accepted_"):
-            valid_values = model_result is not None and error_code is None
-        else:
-            valid_values = model_result is None and error_code is not None
-        if not valid_values:
-            raise WorkspaceError("workspace_checkpoint_payload_invalid")
-
-        connection = self._connection()
+        _validate_checkpoint_payload(state, model_result, error_code)
         try:
-            connection.execute("BEGIN IMMEDIATE")
-            cursor = connection.execute(
+            self.execute("BEGIN IMMEDIATE")
+            cursor = self.execute(
                 """
                 UPDATE occurrences
                 SET state = ?, model_result = ?, error_code = ?
@@ -413,21 +525,28 @@ class WorkspaceWriter:
             )
             if cursor.rowcount != 1:
                 raise WorkspaceError("workspace_checkpoint_target_invalid")
-            cursor = connection.execute(
+            cursor = self.execute(
                 """
                 UPDATE job
                 SET completed_count = completed_count + 1, updated_at = ?
                 WHERE singleton = 1
                   AND state = 'in_progress'
+                  AND finalization_state = 'none'
                   AND completed_count < occurrence_count
                 """,
                 (_timestamp(),),
             )
             if cursor.rowcount != 1:
                 raise WorkspaceError("workspace_counter_update_invalid")
-            connection.commit()
+            self._connection().commit()
+        except WorkspaceError:
+            _rollback_safely(self._connection())
+            raise
+        except sqlite3.Error as exc:
+            _rollback_safely(self._connection())
+            raise WorkspaceError("workspace_checkpoint_failed") from exc
         except BaseException:
-            connection.rollback()
+            _rollback_safely(self._connection())
             raise
 
     def _connection(self) -> sqlite3.Connection:
@@ -436,32 +555,124 @@ class WorkspaceWriter:
         return self.connection
 
 
-def mark_workspace_completed(path: Path) -> None:
+def set_finalization_intent(
+    path: Path,
+    *,
+    output_tree_sha256: str,
+    output_file_count: int,
+    output_directory_count: int,
+    report_run_count: int,
+    report_reused_count: int,
+    report_calls_count: int,
+) -> None:
+    _require_sha256("output_tree_sha256", output_tree_sha256)
+    _require_int("output_file_count", output_file_count, minimum=1)
+    _require_int(
+        "output_directory_count", output_directory_count, minimum=1
+    )
+    _require_int("report_run_count", report_run_count, minimum=1)
+    _require_int("report_reused_count", report_reused_count, minimum=0)
+    _require_int("report_calls_count", report_calls_count, minimum=0)
     with WorkspaceWriter(path) as writer:
-        connection = writer._connection()
         try:
-            connection.execute("BEGIN IMMEDIATE")
-            pending = connection.execute(
+            writer.execute("BEGIN IMMEDIATE")
+            pending = writer.execute(
                 "SELECT COUNT(*) FROM occurrences WHERE state = 'pending'"
             ).fetchone()[0]
             if pending != 0:
                 raise WorkspaceError("workspace_pending_not_zero")
             now = _timestamp()
-            cursor = connection.execute(
+            cursor = writer.execute(
+                """
+                UPDATE job
+                SET finalization_state = 'intent',
+                    output_tree_sha256 = ?,
+                    output_file_count = ?,
+                    output_directory_count = ?,
+                    report_run_count = ?,
+                    report_reused_count = ?,
+                    report_calls_count = ?,
+                    finalization_started_at = ?,
+                    updated_at = ?
+                WHERE singleton = 1
+                  AND state = 'in_progress'
+                  AND finalization_state = 'none'
+                  AND completed_count = occurrence_count
+                """,
+                (
+                    output_tree_sha256,
+                    output_file_count,
+                    output_directory_count,
+                    report_run_count,
+                    report_reused_count,
+                    report_calls_count,
+                    now,
+                    now,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise WorkspaceError("workspace_finalization_intent_invalid")
+            writer._connection().commit()
+        except WorkspaceError:
+            _rollback_safely(writer._connection())
+            raise
+        except sqlite3.Error as exc:
+            _rollback_safely(writer._connection())
+            raise WorkspaceError(
+                "workspace_finalization_intent_failed"
+            ) from exc
+        except BaseException:
+            _rollback_safely(writer._connection())
+            raise
+
+
+def mark_workspace_completed(
+    path: Path,
+    *,
+    output_tree_sha256: str,
+    output_file_count: int,
+    output_directory_count: int,
+) -> None:
+    with WorkspaceWriter(path) as writer:
+        try:
+            writer.execute("BEGIN IMMEDIATE")
+            pending = writer.execute(
+                "SELECT COUNT(*) FROM occurrences WHERE state = 'pending'"
+            ).fetchone()[0]
+            if pending != 0:
+                raise WorkspaceError("workspace_pending_not_zero")
+            now = _timestamp()
+            cursor = writer.execute(
                 """
                 UPDATE job
                 SET state = 'completed', completed_at = ?, updated_at = ?
                 WHERE singleton = 1
                   AND state = 'in_progress'
+                  AND finalization_state = 'intent'
                   AND completed_count = occurrence_count
+                  AND output_tree_sha256 = ?
+                  AND output_file_count = ?
+                  AND output_directory_count = ?
                 """,
-                (now, now),
+                (
+                    now,
+                    now,
+                    output_tree_sha256,
+                    output_file_count,
+                    output_directory_count,
+                ),
             )
             if cursor.rowcount != 1:
                 raise WorkspaceError("workspace_completion_state_invalid")
-            connection.commit()
+            writer._connection().commit()
+        except WorkspaceError:
+            _rollback_safely(writer._connection())
+            raise
+        except sqlite3.Error as exc:
+            _rollback_safely(writer._connection())
+            raise WorkspaceError("workspace_completion_failed") from exc
         except BaseException:
-            connection.rollback()
+            _rollback_safely(writer._connection())
             raise
 
 
@@ -472,31 +683,226 @@ def _validate_database(connection: sqlite3.Connection) -> None:
     if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
         raise WorkspaceError("workspace_foreign_key_check_failed")
     user_version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if user_version != SCHEMA_VERSION:
+    if type(user_version) is not int or user_version != SCHEMA_VERSION:
         raise WorkspaceError("workspace_schema_version_unknown")
     journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
     if str(journal_mode).lower() != "delete":
         raise WorkspaceError("workspace_journal_mode_invalid")
-    objects = {
-        (row[0], row[1])
-        for row in connection.execute(
-            """
-            SELECT type, name
-            FROM sqlite_master
-            WHERE type IN ('table', 'view', 'trigger')
-            """
+    if _schema_signature(connection) != _expected_schema_signature():
+        raise WorkspaceError("workspace_schema_contract_invalid")
+
+
+def _validated_job_row(raw: sqlite3.Row) -> JobRow:
+    if set(raw.keys()) != {
+        "singleton",
+        "schema_version",
+        "state",
+        "source_path",
+        "output_path",
+        "source_tree_sha256",
+        "inventory_sha256",
+        "parser_order_version",
+        "model_tag",
+        "model_digest",
+        "prompt_profile_hash",
+        "occurrence_count",
+        "completed_count",
+        "run_count",
+        "created_at",
+        "updated_at",
+        "completed_at",
+        "finalization_state",
+        "output_tree_sha256",
+        "output_file_count",
+        "output_directory_count",
+        "report_run_count",
+        "report_reused_count",
+        "report_calls_count",
+        "finalization_started_at",
+    }:
+        raise WorkspaceError("workspace_job_columns_invalid")
+    if _require_int("singleton", raw["singleton"], minimum=1, maximum=1) != 1:
+        raise WorkspaceError("workspace_job_singleton_invalid")
+    if (
+        _require_int(
+            "schema_version", raw["schema_version"], minimum=SCHEMA_VERSION
         )
-    }
-    expected_objects = {("table", name) for name in _EXPECTED_COLUMNS}
-    if objects != expected_objects:
-        raise WorkspaceError("workspace_schema_objects_invalid")
-    for table, expected in _EXPECTED_COLUMNS.items():
-        actual = tuple(
-            (row[1], row[2].upper(), row[3], row[5])
-            for row in connection.execute(f"PRAGMA table_info({table})")
+        != SCHEMA_VERSION
+    ):
+        raise WorkspaceError("workspace_schema_version_unknown")
+    state = _require_choice(
+        "state", raw["state"], {"in_progress", "completed"}
+    )
+    finalization_state = _require_choice(
+        "finalization_state", raw["finalization_state"], {"none", "intent"}
+    )
+    occurrence_count = _require_int(
+        "occurrence_count", raw["occurrence_count"], minimum=0
+    )
+    completed_count = _require_int(
+        "completed_count", raw["completed_count"], minimum=0
+    )
+    run_count = _require_int("run_count", raw["run_count"], minimum=1)
+    created_at = _require_timestamp("created_at", raw["created_at"])
+    updated_at = _require_timestamp("updated_at", raw["updated_at"])
+    completed_at = _optional_timestamp("completed_at", raw["completed_at"])
+
+    if completed_count > occurrence_count:
+        raise WorkspaceError("workspace_completed_count_invalid")
+    if finalization_state == "none":
+        for name in (
+            "output_tree_sha256",
+            "output_file_count",
+            "output_directory_count",
+            "report_run_count",
+            "report_reused_count",
+            "report_calls_count",
+            "finalization_started_at",
+        ):
+            if raw[name] is not None:
+                raise WorkspaceError("workspace_finalization_fields_invalid")
+        output_tree_sha256 = None
+        output_file_count = None
+        output_directory_count = None
+        report_run_count = None
+        report_reused_count = None
+        report_calls_count = None
+        finalization_started_at = None
+    else:
+        output_tree_sha256 = _require_sha256(
+            "output_tree_sha256", raw["output_tree_sha256"]
         )
-        if actual != expected:
-            raise WorkspaceError("workspace_schema_columns_invalid")
+        output_file_count = _require_int(
+            "output_file_count", raw["output_file_count"], minimum=1
+        )
+        output_directory_count = _require_int(
+            "output_directory_count",
+            raw["output_directory_count"],
+            minimum=1,
+        )
+        report_run_count = _require_int(
+            "report_run_count", raw["report_run_count"], minimum=1
+        )
+        report_reused_count = _require_int(
+            "report_reused_count", raw["report_reused_count"], minimum=0
+        )
+        report_calls_count = _require_int(
+            "report_calls_count", raw["report_calls_count"], minimum=0
+        )
+        finalization_started_at = _require_timestamp(
+            "finalization_started_at", raw["finalization_started_at"]
+        )
+    if state == "completed":
+        if (
+            completed_at is None
+            or finalization_state != "intent"
+            or completed_count != occurrence_count
+        ):
+            raise WorkspaceError("workspace_completed_state_invalid")
+    elif completed_at is not None:
+        raise WorkspaceError("workspace_in_progress_state_invalid")
+
+    return JobRow(
+        state=state,
+        source_path=_require_text("source_path", raw["source_path"]),
+        output_path=_require_text("output_path", raw["output_path"]),
+        source_tree_sha256=_require_sha256(
+            "source_tree_sha256", raw["source_tree_sha256"]
+        ),
+        inventory_sha256=_require_sha256(
+            "inventory_sha256", raw["inventory_sha256"]
+        ),
+        parser_order_version=_require_text(
+            "parser_order_version", raw["parser_order_version"]
+        ),
+        model_tag=_require_text("model_tag", raw["model_tag"]),
+        model_digest=_require_text("model_digest", raw["model_digest"]),
+        prompt_profile_hash=_require_sha256(
+            "prompt_profile_hash", raw["prompt_profile_hash"]
+        ),
+        occurrence_count=occurrence_count,
+        completed_count=completed_count,
+        run_count=run_count,
+        created_at=created_at,
+        updated_at=updated_at,
+        completed_at=completed_at,
+        finalization_state=finalization_state,
+        output_tree_sha256=output_tree_sha256,
+        output_file_count=output_file_count,
+        output_directory_count=output_directory_count,
+        report_run_count=report_run_count,
+        report_reused_count=report_reused_count,
+        report_calls_count=report_calls_count,
+        finalization_started_at=finalization_started_at,
+    )
+
+
+def _validated_inventory_row(raw: sqlite3.Row) -> InventoryRow:
+    sequence = _require_int("inventory_sequence", raw["sequence"], minimum=0)
+    relative_path = _require_relative_path(raw["relative_path"])
+    parse_status = _require_choice(
+        "parse_status",
+        raw["parse_status"],
+        {"english", "non_english", "skipped"},
+    )
+    return InventoryRow(
+        sequence=sequence,
+        relative_path=relative_path,
+        sha256=_require_sha256("inventory_sha256", raw["sha256"]),
+        byte_count=_require_int(
+            "inventory_byte_count", raw["byte_count"], minimum=0
+        ),
+        parse_status=parse_status,
+        occurrence_count=_require_int(
+            "inventory_occurrence_count",
+            raw["occurrence_count"],
+            minimum=0,
+        ),
+        unsupported_count=_require_int(
+            "inventory_unsupported_count",
+            raw["unsupported_count"],
+            minimum=0,
+        ),
+    )
+
+
+def _validated_occurrence_row(raw: sqlite3.Row) -> OccurrenceRow:
+    state = _require_choice("occurrence_state", raw["state"], _ALL_STATES)
+    model_result = raw["model_result"]
+    error_code = raw["error_code"]
+    if state == "accepted_changed":
+        model_result = _require_text("model_result", model_result, allow_empty=True)
+        if error_code is not None:
+            raise WorkspaceError("workspace_occurrence_payload_invalid")
+    elif state == "accepted_unchanged":
+        if model_result is not None or error_code is not None:
+            raise WorkspaceError("workspace_occurrence_payload_invalid")
+    elif state == "model_fallback":
+        if model_result is not None:
+            raise WorkspaceError("workspace_occurrence_payload_invalid")
+        error_code = _require_choice(
+            "error_code", error_code, KNOWN_ERROR_CODES
+        )
+    elif model_result is not None or error_code is not None:
+        raise WorkspaceError("workspace_occurrence_payload_invalid")
+    return OccurrenceRow(
+        sequence=_require_int(
+            "occurrence_sequence", raw["sequence"], minimum=0
+        ),
+        relative_path=_require_relative_path(raw["relative_path"]),
+        line_number=_require_int(
+            "occurrence_line_number", raw["line_number"], minimum=1
+        ),
+        ordinal=_require_int(
+            "occurrence_ordinal", raw["ordinal"], minimum=0
+        ),
+        source_span_sha256=_require_sha256(
+            "source_span_sha256", raw["source_span_sha256"]
+        ),
+        state=state,
+        model_result=model_result,
+        error_code=error_code,
+    )
 
 
 def _validate_snapshot_counters(
@@ -510,26 +916,79 @@ def _validate_snapshot_counters(
         range(len(occurrences))
     ):
         raise WorkspaceError("workspace_occurrence_order_invalid")
-    if any(row.state not in _ALL_STATES for row in occurrences):
-        raise WorkspaceError("workspace_occurrence_state_invalid")
     completed = sum(row.state in _TERMINAL_STATES for row in occurrences)
     if (
         job.occurrence_count != len(occurrences)
         or job.completed_count != completed
-        or job.run_count < 1
     ):
         raise WorkspaceError("workspace_counter_mismatch")
-    if job.state == "completed":
-        if completed != len(occurrences) or job.completed_at is None:
-            raise WorkspaceError("workspace_completed_state_invalid")
-    elif job.state == "in_progress":
-        if job.completed_at is not None:
-            raise WorkspaceError("workspace_in_progress_state_invalid")
+    inventory_occurrences = sum(row.occurrence_count for row in inventory)
+    if inventory_occurrences != job.occurrence_count:
+        raise WorkspaceError("workspace_inventory_counter_mismatch")
+    inventory_paths = {row.relative_path for row in inventory}
+    if any(row.relative_path not in inventory_paths for row in occurrences):
+        raise WorkspaceError("workspace_occurrence_foreign_path")
+    if job.finalization_state == "intent" and completed != len(occurrences):
+        raise WorkspaceError("workspace_finalization_pending_invalid")
+
+
+def _validate_checkpoint_payload(
+    state: str,
+    model_result: str | None,
+    error_code: str | None,
+) -> None:
+    if state == "accepted_changed":
+        _require_text("model_result", model_result, allow_empty=True)
+        valid = error_code is None
+    elif state == "accepted_unchanged":
+        valid = model_result is None and error_code is None
+    elif state == "model_fallback":
+        valid = (
+            model_result is None
+            and error_code in KNOWN_ERROR_CODES
+        )
     else:
-        raise WorkspaceError("workspace_job_state_invalid")
+        valid = False
+    if not valid:
+        raise WorkspaceError("workspace_checkpoint_payload_invalid")
 
 
-def _require_workspace_file(path: Path) -> tuple[int, int, int, int]:
+def _recover_hot_delete_journal(path: Path) -> None:
+    database_before = _require_workspace_file(path)
+    journal = _journal_path(path)
+    _require_journal_file(journal)
+    connection: sqlite3.Connection | None = None
+    try:
+        connection = sqlite3.connect(path)
+        connection.execute(
+            "SELECT name FROM sqlite_master ORDER BY name LIMIT 1"
+        ).fetchone()
+    except sqlite3.Error as exc:
+        raise WorkspaceError("workspace_hot_journal_recovery_failed") from exc
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except sqlite3.Error as exc:
+                raise WorkspaceError(
+                    "workspace_hot_journal_recovery_close_failed"
+                ) from exc
+    database_after = _require_workspace_file(path)
+    if (
+        database_after.device,
+        database_after.inode,
+        database_after.link_count,
+    ) != (
+        database_before.device,
+        database_before.inode,
+        database_before.link_count,
+    ):
+        raise WorkspaceError("workspace_replaced_during_recovery")
+    if journal.exists() or journal.is_symlink():
+        raise WorkspaceError("workspace_hot_journal_not_cleared")
+
+
+def _require_workspace_file(path: Path) -> _FileIdentity:
     try:
         value = path.lstat()
     except FileNotFoundError as exc:
@@ -538,29 +997,197 @@ def _require_workspace_file(path: Path) -> tuple[int, int, int, int]:
         raise WorkspaceError("workspace_symlink")
     if not stat.S_ISREG(value.st_mode):
         raise WorkspaceError("workspace_not_regular_file")
+    if value.st_nlink != 1:
+        raise WorkspaceError("workspace_link_count_must_be_one")
     if stat.S_IMODE(value.st_mode) != 0o600:
         raise WorkspaceError("workspace_mode_must_be_0600")
     return _identity_from_stat(value)
 
 
-def _identity_from_stat(value: os.stat_result) -> tuple[int, int, int, int]:
-    return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+def _require_journal_file(path: Path) -> _FileIdentity:
+    try:
+        value = path.lstat()
+    except FileNotFoundError as exc:
+        raise WorkspaceError("workspace_hot_journal_missing") from exc
+    if stat.S_ISLNK(value.st_mode) or not stat.S_ISREG(value.st_mode):
+        raise WorkspaceError("workspace_hot_journal_not_regular")
+    if value.st_nlink != 1:
+        raise WorkspaceError("workspace_hot_journal_link_count_invalid")
+    if stat.S_IMODE(value.st_mode) != 0o600:
+        raise WorkspaceError("workspace_hot_journal_mode_invalid")
+    if value.st_size <= 0:
+        raise WorkspaceError("workspace_hot_journal_empty")
+    return _identity_from_stat(value)
+
+
+def _identity_from_stat(value: os.stat_result) -> _FileIdentity:
+    return _FileIdentity(
+        device=value.st_dev,
+        inode=value.st_ino,
+        size=value.st_size,
+        modified_ns=value.st_mtime_ns,
+        link_count=value.st_nlink,
+    )
+
+
+def _schema_signature(connection: sqlite3.Connection) -> tuple[object, ...]:
+    master = tuple(
+        tuple(row)
+        for row in connection.execute(
+            """
+            SELECT type, name, tbl_name, sql
+            FROM sqlite_master
+            WHERE type IN ('table', 'index', 'view', 'trigger')
+            ORDER BY type, name
+            """
+        )
+    )
+    table_details: list[tuple[object, ...]] = []
+    for table in ("inventory", "job", "occurrences"):
+        columns = tuple(
+            tuple(row)
+            for row in connection.execute(f"PRAGMA table_xinfo({table})")
+        )
+        indexes = tuple(
+            tuple(row)
+            for row in connection.execute(f"PRAGMA index_list({table})")
+        )
+        index_details = tuple(
+            (
+                row[1],
+                tuple(
+                    tuple(detail)
+                    for detail in connection.execute(
+                        f"PRAGMA index_xinfo({row[1]})"
+                    )
+                ),
+            )
+            for row in indexes
+        )
+        foreign_keys = tuple(
+            tuple(row)
+            for row in connection.execute(
+                f"PRAGMA foreign_key_list({table})"
+            )
+        )
+        table_details.append(
+            (table, columns, indexes, index_details, foreign_keys)
+        )
+    return (master, tuple(table_details))
+
+
+@lru_cache(maxsize=1)
+def _expected_schema_signature() -> tuple[object, ...]:
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.executescript(_SCHEMA)
+        return _schema_signature(connection)
+    finally:
+        connection.close()
+
+
+def _require_int(
+    name: str,
+    value: object,
+    *,
+    minimum: int,
+    maximum: int | None = None,
+) -> int:
+    if type(value) is not int or value < minimum:
+        raise WorkspaceError(f"workspace_{name}_type_or_range_invalid")
+    if maximum is not None and value > maximum:
+        raise WorkspaceError(f"workspace_{name}_type_or_range_invalid")
+    return value
+
+
+def _require_text(
+    name: str, value: object, *, allow_empty: bool = False
+) -> str:
+    if not isinstance(value, str) or (not allow_empty and not value):
+        raise WorkspaceError(f"workspace_{name}_type_invalid")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise WorkspaceError(f"workspace_{name}_encoding_invalid") from exc
+    return value
+
+
+def _require_choice(
+    name: str, value: object, choices: frozenset[str] | set[str]
+) -> str:
+    text = _require_text(name, value)
+    if text not in choices:
+        raise WorkspaceError(f"workspace_{name}_unknown")
+    return text
+
+
+def _require_sha256(name: str, value: object) -> str:
+    text = _require_text(name, value)
+    if len(text) != 64 or any(char not in _HEX for char in text):
+        raise WorkspaceError(f"workspace_{name}_invalid")
+    return text
+
+
+def _require_timestamp(name: str, value: object) -> str:
+    text = _require_text(name, value)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise WorkspaceError(f"workspace_{name}_invalid") from exc
+    if parsed.tzinfo is None:
+        raise WorkspaceError(f"workspace_{name}_invalid")
+    return text
+
+
+def _optional_timestamp(name: str, value: object) -> str | None:
+    if value is None:
+        return None
+    return _require_timestamp(name, value)
+
+
+def _require_relative_path(value: object) -> str:
+    text = _require_text("relative_path", value)
+    path = PurePosixPath(text)
+    if path.is_absolute() or ".." in path.parts or path.as_posix() != text:
+        raise WorkspaceError("workspace_relative_path_invalid")
+    return text
 
 
 def _read_only_uri(path: Path) -> str:
     return "file:" + quote(os.fspath(path), safe="/") + "?mode=ro"
 
 
+def _journal_path(path: Path) -> Path:
+    return Path(os.fspath(path) + "-journal")
+
+
+def _is_readonly_recovery_error(error: sqlite3.OperationalError) -> bool:
+    code = getattr(error, "sqlite_errorcode", None)
+    return code == getattr(sqlite3, "SQLITE_READONLY", 8) or (
+        "readonly" in str(error).lower()
+    )
+
+
 def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _unlink_if_identity(
-    path: Path, expected: tuple[int, int, int, int]
-) -> None:
+def _rollback_safely(connection: sqlite3.Connection) -> None:
     try:
-        actual = _identity_from_stat(path.lstat())
+        connection.rollback()
+    except sqlite3.Error:
+        pass
+
+
+def _unlink_if_identity(path: Path, expected: _FileIdentity) -> None:
+    try:
+        value = path.lstat()
     except FileNotFoundError:
         return
-    if actual[:2] == expected[:2] and stat.S_ISREG(path.lstat().st_mode):
+    actual = _identity_from_stat(value)
+    if (
+        stat.S_ISREG(value.st_mode)
+        and (actual.device, actual.inode) == (expected.device, expected.inode)
+    ):
         path.unlink()

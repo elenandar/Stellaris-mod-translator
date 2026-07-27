@@ -19,7 +19,7 @@ from stellaris_mod_translator.engine import (
     _tree_hash,
     translate_mod,
 )
-from stellaris_mod_translator.ollama import OllamaResultError
+from stellaris_mod_translator.ollama import OllamaError
 from stellaris_mod_translator.review import (
     ReviewIdentity,
     build_review_pack,
@@ -34,7 +34,7 @@ class ReviewClient:
 
     def translate(self, *, tag: str, text: str) -> str:
         if "FALLBACK_SENTINEL" in text:
-            raise OllamaResultError("synthetic fallback")
+            raise OllamaError("synthetic fallback")
         if "UNCHANGED_SENTINEL" in text:
             return text
         return "RU " + text
