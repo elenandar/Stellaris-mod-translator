@@ -8,6 +8,7 @@ import sys
 from .engine import SafetyError, inspect_mod, translate_mod
 from .ollama import OllamaError
 from .review import build_review_pack
+from .review_application import apply_review_decisions
 
 
 def _occurrence_limit(value: str) -> int:
@@ -55,6 +56,15 @@ def parser() -> argparse.ArgumentParser:
     review.add_argument("--source-mod", required=True, type=Path)
     review.add_argument("--candidate", required=True, type=Path)
     review.add_argument("--output", required=True, type=Path)
+
+    apply_review = commands.add_parser(
+        "apply-review-decisions",
+        help="apply a complete MVP-2 decision set to a new reviewed candidate",
+    )
+    apply_review.add_argument("--source-mod", required=True, type=Path)
+    apply_review.add_argument("--candidate", required=True, type=Path)
+    apply_review.add_argument("--decisions", required=True, type=Path)
+    apply_review.add_argument("--output", required=True, type=Path)
     return root
 
 
@@ -71,10 +81,17 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
                 max_occurrences_per_file=args.max_occurrences_per_file,
             )
-        else:
+        elif args.command == "build-review-pack":
             report = build_review_pack(
                 args.source_mod,
                 args.candidate,
+                args.output,
+            )
+        else:
+            report = apply_review_decisions(
+                args.source_mod,
+                args.candidate,
+                args.decisions,
                 args.output,
             )
         print(json.dumps(report, ensure_ascii=False, indent=2))

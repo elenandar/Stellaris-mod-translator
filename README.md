@@ -9,8 +9,10 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-2` — текущий local editorial review milestone поверх immutable bounded
-pilot из `MVP-1`, слитого в PR №13. Owner decision от 26 июля 2026 года
+`MVP-3` — текущий synthetic-only механизм применения editorial decisions
+поверх immutable bounded pilot. MVP-2 слит в PR №14; `pilot-01` superseded,
+а `pilot-02` остаётся единственным review source. Private decisions ещё не
+применялись. Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
 исторический evidence и не являются runtime authority для нового CLI.
@@ -45,6 +47,12 @@ python3 -m stellaris_mod_translator build-review-pack \
   --source-mod /path/to/read-only-source-mod \
   --candidate /path/to/read-only-candidate \
   --output /path/to/new-review-pack
+
+python3 -m stellaris_mod_translator apply-review-decisions \
+  --source-mod /path/to/read-only-source-mod \
+  --candidate /path/to/read-only-candidate \
+  --decisions /path/to/exported-decisions.json \
+  --output /path/to/new-reviewed-candidate
 ```
 
 `--dry-run` не вызывает Ollama и ничего не записывает. Обычный запуск требует
@@ -99,10 +107,30 @@ fingerprint. Экспорт и импорт decisions JSON выполняютс�
 
 Решение `accept` означает принятие человеком только конкретного occurrence.
 Оно не назначает `editorially_approved` всему моду и не доказывает
-литературную или lore-готовность остальных строк. Применение экспортированных
-решений обратно к candidate ещё не реализовано и в MVP-2 запрещено. Generated
-`index.html`, `review-pack-summary.json` и decisions JSON остаются локальными
-артефактами вне Git.
+литературную или lore-готовность остальных строк. Generated `index.html`,
+`review-pack-summary.json` и decisions JSON остаются локальными артефактами
+вне Git.
+
+## Применение review decisions
+
+`apply-review-decisions` — механизм MVP-3, а не разрешение на live application.
+Он не вызывает Ollama и не использует `index.html` как authority: exact pack
+fingerprint и все 46 occurrence identities заново вычисляются из immutable
+source, base candidate и `translation-report.json`. Требуется полный decisions
+JSON без duplicate, unknown, missing или `unreviewed` entries.
+
+`accept` оставляет candidate span byte-identical, `edit` меняет только
+проверенные human segments, а `reject` восстанавливает их из English source.
+Protected atoms и escapes сохраняются в исходном порядке; source, candidate и
+decisions перепроверяются до атомарной no-clobber публикации. Результат содержит
+только `localisation/russian/**` и `review-application-report.json`. Он остаётся
+отдельным candidate, не регистрируется в launcher, не является active mod и
+сохраняет `editorially_approved=false`, потому что review покрывает только
+bounded pilot.
+
+MVP-3 пока проверен только на synthetic data. Следующий live gate требует
+полностью завершённый человеком decisions JSON для `pilot-02` и отдельное
+явное разрешение владельца; это PR и merge механизма сами по себе не дают.
 
 Известная граница MVP-0: атомарная публикация защищает от появления конечного
 destination, но не обещает защиту от злонамеренного конкурирующего процесса
