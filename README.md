@@ -242,13 +242,33 @@ resumability/counter algebra, source/candidate hashes, все поддержан
 occurrences, protected atoms, escapes и fallback spans. Он публикует pack
 schema v2 с `review_scope=full_candidate` атомарно и без перезаписи.
 
-Полный интерфейс показывает не более 100 строк списка одновременно, поддерживает
-поиск, пагинацию и фильтры по файлу, status, решению, warning и признаку
-«Требует внимания». Локальное состояние sparse: сохраняются только изменения
-относительно `unreviewed`; draft export доступен до завершения, а final export —
-только после решения по каждой записи. Unsupported occurrences и skipped files
-видны в summary как технический остаток, но не становятся редактируемыми:
-для них нет безопасного parsed span.
+Полный интерфейс показывает не более 100 строк списка одновременно, exact
+localisation key и безопасную навигацию к соседним reviewable entries того же
+файла. Поиск включает key; фильтры покрывают файл, status, решение, warning,
+признак «Требует внимания», точные повторы и группы, где одинаковый source имеет
+разные candidate-варианты. Группа повтора вычисляется локально только из exact
+последовательности human segments и protected atoms: она не копирует перевод и
+не распространяет решение.
+
+Checkbox-выбор ограничен видимой страницей и только валидными `unreviewed`
+entries. Смена страницы или фильтра очищает его. Групповые `accept`/`reject`
+требуют подтверждения с точным составом выбранного набора, сначала валидируют
+его целиком, меняют только решения и выполняют одно sparse-state сохранение.
+Последнее групповое действие можно атомарно отменить; undo привязан к exact pack
+fingerprint и не затрагивает посторонние индивидуальные решения. `edit` остаётся
+строго индивидуальным; последующее индивидуальное изменение затронутой записи
+сбрасывает устаревший undo. Глобального select-all нет. State и last-batch undo
+сохраняются одним localStorage envelope, чтобы quota failure не мог связать
+новые decisions со старым undo; прежний sparse storage schema v1 по-прежнему
+импортируется. Если внешний или повреждённый envelope содержит несовместимый
+undo, валидные decisions загружаются, а только undo безопасно отбрасывается.
+
+Локальное состояние sparse: сохраняются только изменения относительно
+`unreviewed`; draft export доступен до завершения, а final export — только после
+валидного решения по каждой записи. Счётчики отдельно показывают remaining
+attention/fallback/unchanged/whitespace и inconsistent-repeat groups.
+Unsupported occurrences и skipped files видны в summary как технический
+остаток, но не становятся редактируемыми: для них нет безопасного parsed span.
 
 Откройте созданный `index.html` напрямую через `file://`. Pack автономен:
 сервер, интернет, CDN, web fonts и внешний frontend runtime не нужны.
@@ -294,11 +314,12 @@ occurrences или skipped files он честно сохраняет
 `editorially_approved=false`: эти residue bytes остаются без изменений, но для
 них не существовало безопасного editable span.
 
-MVP-5C проверен только на synthetic data, включая scale smoke на 1700 entries.
-Он не читает private full pack или реальные decisions и не применяет их.
-Следующий gate после review/merge механизма — завершить local final export и
-получить отдельное явное разрешение владельца на live application; merge этого
-механизма сам по себе такого разрешения не даёт.
+MVP-5C application и MVP-5D ускоренный editorial workflow не принимают решения
+автоматически. Synthetic regressions интерфейса исполняют настоящий JavaScript,
+включая scale smoke примерно на 1700 entries, batch/undo/import/export и
+storage-failure paths. Ни merge интерфейса, ни наличие batch-команд не разрешают
+AI-assisted acceptance или применение реальных decisions: каждое решение и
+последующий live-application gate остаются действиями владельца.
 
 Известная граница MVP-0: атомарная публикация защищает от появления конечного
 destination, но не обещает защиту от злонамеренного конкурирующего процесса
