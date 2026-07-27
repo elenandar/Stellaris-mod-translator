@@ -193,6 +193,14 @@ def test_builds_deterministic_review_pack_for_both_v2_count_schemas(
         "skipped_files": 0,
     }
     assert first["pack_fingerprint"] == second["pack_fingerprint"]
+    assert set(first_pack) == {
+        "schema_version",
+        "pack_fingerprint",
+        "summary",
+        "entries",
+    }
+    assert first_pack["schema_version"] == 1
+    assert all("warnings" not in entry for entry in first_pack["entries"])
     assert [entry["id"] for entry in first_pack["entries"]] == [
         entry["id"] for entry in second_pack["entries"]
     ]

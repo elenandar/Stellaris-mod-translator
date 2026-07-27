@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import tempfile
@@ -30,10 +31,70 @@ from .publication import (
     DestinationExistsError,
     atomic_publish_directory_no_replace,
 )
+from .review_ui import FULL_REVIEW_HTML_SHELL
 
 
-REVIEW_PACK_SCHEMA_VERSION = 1
+LEGACY_REVIEW_PACK_SCHEMA_VERSION = 1
+FULL_REVIEW_PACK_SCHEMA_VERSION = 2
 DECISIONS_SCHEMA_VERSION = 1
+FULL_REVIEW_SCOPE = "full_candidate"
+SHA256_RE = re.compile(r"[0-9a-f]{64}")
+MODEL_TAG_RE = re.compile(
+    r"(?=.{1,255}\Z)[A-Za-z0-9][A-Za-z0-9._/-]*:"
+    r"[A-Za-z0-9][A-Za-z0-9._-]*"
+)
+MODEL_DIGEST_RE = re.compile(r"[0-9a-f]{64}")
+WARNING_FLAGS = (
+    "model_fallback",
+    "accepted_unchanged",
+    "leading_boundary_whitespace_changed",
+    "trailing_boundary_whitespace_changed",
+)
+BOUNDARY_WHITESPACE = frozenset(
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008"
+    "\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+)
+FULL_REPORT_COUNT_FIELDS = {
+    "discovered_yml_files",
+    "english_files",
+    "occurrences",
+    "planned_translation_occurrences",
+    "translated_occurrences",
+    "unchanged_accepted_occurrences",
+    "fallback_occurrences",
+    "deferred_occurrences",
+    "skipped_files",
+    "total_occurrences",
+    "completed_occurrences",
+    "unsupported_occurrences",
+    "pending_occurrences",
+    "reused_from_workspace_occurrences",
+    "calls_in_final_run",
+    "total",
+    "completed",
+    "translated",
+    "accepted_unchanged",
+    "fallback",
+    "unsupported",
+    "pending",
+    "reused_from_workspace",
+}
+FULL_RESUMABILITY_FIELDS = {
+    "mode",
+    "workspace",
+    "workspace_schema_version",
+    "parser_order_version",
+    "prompt_profile_hash",
+    "finalization_protocol",
+    "workspace_state_at_report_creation",
+    "completion_attested_by_report",
+    "output_identity_scope",
+    "run_count",
+    "reused_from_workspace",
+    "calls_in_final_run",
+    "checkpoint_boundary",
+}
 DECISIONS = frozenset({"unreviewed", "accept", "edit", "reject"})
 TAGS = frozenset(
     {
@@ -111,6 +172,9 @@ class ValidatedReviewInputs:
     candidate_localisation_sha256: str
     pack_data: dict[str, object]
     summary: dict[str, int]
+    pack_schema_version: int
+    review_scope: str
+    candidate_report_schema_version: int
 
 
 def build_review_pack(
@@ -118,9 +182,17 @@ def build_review_pack(
     candidate: Path,
     output: Path,
     *,
-    expected_identity: ReviewIdentity = MVP2_PILOT_IDENTITY,
+    expected_identity: ReviewIdentity | None = None,
+    candidate_report_sha256: str | None = None,
 ) -> dict[str, object]:
     """Validate exact immutable inputs and publish a new autonomous review pack."""
+    if (
+        candidate_report_sha256 is not None
+        and SHA256_RE.fullmatch(candidate_report_sha256) is None
+    ):
+        raise SafetyError("invalid_candidate_report_sha256")
+    if candidate_report_sha256 is not None and expected_identity is not None:
+        raise SafetyError("candidate_report_pin_incompatible_with_legacy_identity")
     source = _validated_input_root(source_mod, "source")
     candidate_root = _validated_input_root(candidate, "candidate")
     if _paths_overlap(source, candidate_root):
@@ -130,6 +202,7 @@ def build_review_pack(
         source,
         candidate_root,
         expected_identity,
+        candidate_report_sha256,
     )
     pack_data = inputs.pack_data
     summary = inputs.summary
@@ -140,7 +213,7 @@ def build_review_pack(
 
     html = _render_review_html(pack_data)
     pack_summary = {
-        "schema_version": REVIEW_PACK_SCHEMA_VERSION,
+        "schema_version": inputs.pack_schema_version,
         "pack_fingerprint": pack_fingerprint,
         "counts": summary,
         "identities": {
@@ -150,6 +223,11 @@ def build_review_pack(
         },
         "network_dependencies": 0,
     }
+    if inputs.pack_schema_version == FULL_REVIEW_PACK_SCHEMA_VERSION:
+        pack_summary["review_scope"] = inputs.review_scope
+        pack_summary["candidate_report_schema_version"] = (
+            inputs.candidate_report_schema_version
+        )
 
     temp = Path(
         tempfile.mkdtemp(
@@ -195,9 +273,10 @@ def build_review_pack(
 def _validated_review_inputs(
     source: Path,
     candidate: Path,
-    expected_identity: ReviewIdentity,
+    expected_identity: ReviewIdentity | None,
+    candidate_report_sha256: str | None = None,
 ) -> ValidatedReviewInputs:
-    """Recompute the authoritative MVP-2 alignment without reading its HTML."""
+    """Recompute authoritative alignment without trusting generated HTML."""
     source_files = _snapshot(source)
     candidate_files = _snapshot(candidate)
     report_file = _read_stable_file(
@@ -205,28 +284,43 @@ def _validated_review_inputs(
     )
     inventory = _candidate_inventory(candidate)
     report = _load_report(report_file.data)
+    report_schema = report.get("schema_version")
+    if candidate_report_sha256 is None and report_schema == 3:
+        raise SafetyError("candidate_report_sha256_required")
+    if candidate_report_sha256 is not None and report_schema != 3:
+        raise SafetyError("candidate_report_pin_requires_schema_v3")
+    full_candidate = candidate_report_sha256 is not None
+    identity = expected_identity or MVP2_PILOT_IDENTITY
     source_hash = _tree_hash(
         [(item.relative, item.data) for item in source_files]
     )
     candidate_hash = _tree_hash(
         [(item.relative, item.data) for item in candidate_files]
     )
-    _require_identity(
-        source_hash,
-        expected_identity.source_localisation_sha256,
-        "source_localisation_identity_mismatch",
-    )
-    _require_identity(
-        candidate_hash,
-        expected_identity.candidate_localisation_sha256,
-        "candidate_localisation_identity_mismatch",
-    )
-    _require_identity(
-        report_file.sha256,
-        expected_identity.candidate_report_sha256,
-        "candidate_report_identity_mismatch",
-    )
-    entries, summary = _validated_review_entries(
+    if full_candidate:
+        assert candidate_report_sha256 is not None
+        _require_identity(
+            report_file.sha256,
+            candidate_report_sha256,
+            "candidate_report_identity_mismatch",
+        )
+    else:
+        _require_identity(
+            source_hash,
+            identity.source_localisation_sha256,
+            "source_localisation_identity_mismatch",
+        )
+        _require_identity(
+            candidate_hash,
+            identity.candidate_localisation_sha256,
+            "candidate_localisation_identity_mismatch",
+        )
+        _require_identity(
+            report_file.sha256,
+            identity.candidate_report_sha256,
+            "candidate_report_identity_mismatch",
+        )
+    entries, summary, model_identity = _validated_review_entries(
         source,
         candidate,
         source_files,
@@ -236,21 +330,65 @@ def _validated_review_inputs(
         source_hash,
         candidate_hash,
         report_file.sha256,
-        expected_identity,
+        None if full_candidate else identity,
+        full_candidate=full_candidate,
     )
-    pack_fingerprint = _sha256_json(
-        {
-            "schema_version": REVIEW_PACK_SCHEMA_VERSION,
-            "source_localisation_sha256": source_hash,
-            "candidate_localisation_sha256": candidate_hash,
-            "candidate_report_sha256": report_file.sha256,
-            "model": {
-                "tag": expected_identity.model_tag,
-                "digest": expected_identity.model_digest,
-            },
-            "occurrence_ids": [entry["id"] for entry in entries],
+    if full_candidate:
+        pack_schema_version = FULL_REVIEW_PACK_SCHEMA_VERSION
+        review_scope = FULL_REVIEW_SCOPE
+        candidate_report_schema_version = 3
+        pack_fingerprint = _sha256_json(
+            {
+                "schema_version": pack_schema_version,
+                "review_scope": review_scope,
+                "candidate_report_schema_version": (
+                    candidate_report_schema_version
+                ),
+                "candidate_report_sha256": report_file.sha256,
+                "source_localisation_sha256": source_hash,
+                "candidate_localisation_sha256": candidate_hash,
+                "model": model_identity,
+                "occurrence_ids": [entry["id"] for entry in entries],
+                "warning_flags": [
+                    {
+                        "occurrence_id": entry["id"],
+                        "warnings": entry["warnings"],
+                    }
+                    for entry in entries
+                ],
+                "summary": summary,
+            }
+        )
+        pack_data: dict[str, object] = {
+            "schema_version": pack_schema_version,
+            "review_scope": review_scope,
+            "candidate_report_schema_version": (
+                candidate_report_schema_version
+            ),
+            "pack_fingerprint": pack_fingerprint,
+            "summary": summary,
+            "entries": entries,
         }
-    )
+    else:
+        pack_schema_version = LEGACY_REVIEW_PACK_SCHEMA_VERSION
+        review_scope = "bounded_pilot"
+        candidate_report_schema_version = 2
+        pack_fingerprint = _sha256_json(
+            {
+                "schema_version": pack_schema_version,
+                "source_localisation_sha256": source_hash,
+                "candidate_localisation_sha256": candidate_hash,
+                "candidate_report_sha256": report_file.sha256,
+                "model": model_identity,
+                "occurrence_ids": [entry["id"] for entry in entries],
+            }
+        )
+        pack_data = {
+            "schema_version": pack_schema_version,
+            "pack_fingerprint": pack_fingerprint,
+            "summary": summary,
+            "entries": entries,
+        }
     return ValidatedReviewInputs(
         source=source,
         candidate=candidate,
@@ -261,13 +399,11 @@ def _validated_review_inputs(
         report=report,
         source_localisation_sha256=source_hash,
         candidate_localisation_sha256=candidate_hash,
-        pack_data={
-            "schema_version": REVIEW_PACK_SCHEMA_VERSION,
-            "pack_fingerprint": pack_fingerprint,
-            "summary": summary,
-            "entries": entries,
-        },
+        pack_data=pack_data,
         summary=summary,
+        pack_schema_version=pack_schema_version,
+        review_scope=review_scope,
+        candidate_report_schema_version=candidate_report_schema_version,
     )
 
 
@@ -383,16 +519,28 @@ def _validated_review_entries(
     source_hash: str,
     candidate_hash: str,
     report_hash: str,
-    expected_identity: ReviewIdentity,
-) -> tuple[list[dict[str, object]], dict[str, int]]:
-    _validate_report_header(
-        report,
-        source,
-        candidate_root,
-        source_hash,
-        candidate_hash,
-        expected_identity,
-    )
+    expected_identity: ReviewIdentity | None,
+    *,
+    full_candidate: bool,
+) -> tuple[list[dict[str, object]], dict[str, int], dict[str, str]]:
+    if full_candidate:
+        model_identity = _validate_full_report_header(
+            report,
+            source,
+            candidate_root,
+            source_hash,
+            candidate_hash,
+        )
+    else:
+        assert expected_identity is not None
+        model_identity = _validate_pilot_report_header(
+            report,
+            source,
+            candidate_root,
+            source_hash,
+            candidate_hash,
+            expected_identity,
+        )
     source_english = [
         item for item in source_files if item.parsed and item.parsed.is_english
     ]
@@ -426,7 +574,10 @@ def _validated_review_entries(
     counts = report["counts"]
     assert isinstance(counts, dict)
     limit = report["max_occurrences_per_file"]
-    if (
+    if full_candidate:
+        if limit is not None:
+            raise SafetyError("invalid_report_occurrence_limit")
+    elif (
         isinstance(limit, bool)
         or not isinstance(limit, int)
         or not 1 <= limit <= 100
@@ -464,7 +615,12 @@ def _validated_review_entries(
         candidate_entries = {
             entry.line_index: entry for entry in candidate_file.parsed.entries
         }
-        for ordinal, source_entry in enumerate(item.parsed.entries[:limit]):
+        selected_entries = (
+            item.parsed.entries
+            if limit is None
+            else item.parsed.entries[:limit]
+        )
+        for ordinal, source_entry in enumerate(selected_entries):
             selected.append(
                 (
                     item,
@@ -550,20 +706,25 @@ def _validated_review_entries(
                 "candidate_tree_sha256": candidate_hash,
             }
         )
-        entries.append(
-            {
-                "id": occurrence_id,
-                "path": source_file.relative.as_posix(),
-                "line": source_entry.line_index + 1,
-                "occurrence_ordinal": ordinal,
-                "status": status,
-                "source_span_sha256": source_span_hash,
-                "candidate_span_sha256": candidate_span_hash,
-                "source_segments": source_segments,
-                "candidate_segments": candidate_segments,
-                "protected_atoms": source_atoms,
-            }
-        )
+        entry_data: dict[str, object] = {
+            "id": occurrence_id,
+            "path": source_file.relative.as_posix(),
+            "line": source_entry.line_index + 1,
+            "occurrence_ordinal": ordinal,
+            "status": status,
+            "source_span_sha256": source_span_hash,
+            "candidate_span_sha256": candidate_span_hash,
+            "source_segments": source_segments,
+            "candidate_segments": candidate_segments,
+            "protected_atoms": source_atoms,
+        }
+        if full_candidate:
+            entry_data["warnings"] = _warning_flags(
+                status,
+                source_segments,
+                candidate_segments,
+            )
+        entries.append(entry_data)
     if len({entry["id"] for entry in entries}) != len(entries):
         raise SafetyError("duplicate_occurrence_id")
 
@@ -572,54 +733,94 @@ def _validated_review_entries(
         for item in parser_diagnostics
         if item.get("code") == "unsupported_entry"
     )
-    _validate_report_counts(
-        counts,
-        selected_count=len(selected),
-        accepted_count=(
-            status_counts["accepted_changed"]
-            + status_counts["accepted_unchanged"]
-        ),
-        accepted_unchanged=status_counts["accepted_unchanged"],
-        model_fallback=status_counts["model_fallback"],
-        parser_unsupported=parser_unsupported,
-        deferred=expected_identity.deferred,
-        discovered=len(source_files),
-        english_files=len(source_english),
-        skipped_files=skipped_files,
+    accepted_count = (
+        status_counts["accepted_changed"]
+        + status_counts["accepted_unchanged"]
     )
-    actual_summary = {
-        "review_entries": len(entries),
-        "accepted_changed": status_counts["accepted_changed"],
-        "accepted_unchanged": status_counts["accepted_unchanged"],
-        "model_fallback": status_counts["model_fallback"],
-        "parser_unsupported": parser_unsupported,
-        "deferred": counts["deferred_occurrences"],
-        "skipped_files": skipped_files,
-    }
-    expected_summary = {
-        "review_entries": expected_identity.review_entries,
-        "accepted_changed": expected_identity.accepted_changed,
-        "accepted_unchanged": expected_identity.accepted_unchanged,
-        "model_fallback": expected_identity.model_fallback,
-        "parser_unsupported": expected_identity.parser_unsupported,
-        "deferred": expected_identity.deferred,
-        "skipped_files": expected_identity.skipped_files,
-    }
-    if actual_summary != expected_summary:
-        raise SafetyError("review_summary_identity_mismatch")
-    if report_hash != expected_identity.candidate_report_sha256:
-        raise SafetyError("candidate_report_identity_mismatch")
-    return entries, actual_summary
+    if full_candidate:
+        _validate_full_report_counts(
+            counts,
+            selected_count=len(selected),
+            accepted_count=accepted_count,
+            accepted_unchanged=status_counts["accepted_unchanged"],
+            model_fallback=status_counts["model_fallback"],
+            parser_unsupported=parser_unsupported,
+            discovered=len(source_files),
+            english_files=len(source_english),
+            skipped_files=skipped_files,
+            resumability=report["resumability"],
+            report_status=report["status"],
+        )
+        whitespace_warning_entries = sum(
+            any(
+                warning
+                in {
+                    "leading_boundary_whitespace_changed",
+                    "trailing_boundary_whitespace_changed",
+                }
+                for warning in entry["warnings"]
+            )
+            for entry in entries
+        )
+        actual_summary = {
+            "total": counts["total"],
+            "review_entries": len(entries),
+            "accepted_changed": status_counts["accepted_changed"],
+            "accepted_unchanged": status_counts["accepted_unchanged"],
+            "model_fallback": status_counts["model_fallback"],
+            "unsupported": parser_unsupported,
+            "deferred": counts["deferred_occurrences"],
+            "skipped_files": skipped_files,
+            "pending": counts["pending"],
+            "whitespace_warning_entries": whitespace_warning_entries,
+        }
+    else:
+        assert expected_identity is not None
+        _validate_report_counts(
+            counts,
+            selected_count=len(selected),
+            accepted_count=accepted_count,
+            accepted_unchanged=status_counts["accepted_unchanged"],
+            model_fallback=status_counts["model_fallback"],
+            parser_unsupported=parser_unsupported,
+            deferred=expected_identity.deferred,
+            discovered=len(source_files),
+            english_files=len(source_english),
+            skipped_files=skipped_files,
+        )
+        actual_summary = {
+            "review_entries": len(entries),
+            "accepted_changed": status_counts["accepted_changed"],
+            "accepted_unchanged": status_counts["accepted_unchanged"],
+            "model_fallback": status_counts["model_fallback"],
+            "parser_unsupported": parser_unsupported,
+            "deferred": counts["deferred_occurrences"],
+            "skipped_files": skipped_files,
+        }
+        expected_summary = {
+            "review_entries": expected_identity.review_entries,
+            "accepted_changed": expected_identity.accepted_changed,
+            "accepted_unchanged": expected_identity.accepted_unchanged,
+            "model_fallback": expected_identity.model_fallback,
+            "parser_unsupported": expected_identity.parser_unsupported,
+            "deferred": expected_identity.deferred,
+            "skipped_files": expected_identity.skipped_files,
+        }
+        if actual_summary != expected_summary:
+            raise SafetyError("review_summary_identity_mismatch")
+        if report_hash != expected_identity.candidate_report_sha256:
+            raise SafetyError("candidate_report_identity_mismatch")
+    return entries, actual_summary, model_identity
 
 
-def _validate_report_header(
+def _validate_pilot_report_header(
     report: dict[str, object],
     source: Path,
     candidate: Path,
     source_hash: str,
     candidate_hash: str,
     expected_identity: ReviewIdentity,
-) -> None:
+) -> dict[str, str]:
     common_fields = {
         "schema_version",
         "source",
@@ -669,6 +870,124 @@ def _validate_report_header(
         raise SafetyError("report_source_hash_mismatch")
     if hashes["output_localisation_sha256"] != candidate_hash:
         raise SafetyError("report_candidate_hash_mismatch")
+    return {
+        "tag": expected_identity.model_tag,
+        "digest": expected_identity.model_digest,
+    }
+
+
+def _validate_full_report_header(
+    report: dict[str, object],
+    source: Path,
+    candidate: Path,
+    source_hash: str,
+    candidate_hash: str,
+) -> dict[str, str]:
+    common_fields = {
+        "schema_version",
+        "source",
+        "output",
+        "counts",
+        "hashes",
+        "diagnostics",
+        "dry_run",
+        "max_occurrences_per_file",
+        "model",
+        "status",
+        "editorial_status",
+        "editorially_approved",
+        "resumability",
+    }
+    if set(report) != common_fields or report.get("schema_version") != 3:
+        raise SafetyError("unsupported_candidate_report_schema")
+    if report["source"] != str(source) or report["output"] != str(candidate):
+        raise SafetyError("candidate_report_path_identity_mismatch")
+    if report["dry_run"] is not False:
+        raise SafetyError("candidate_report_must_not_be_dry_run")
+    if report["max_occurrences_per_file"] is not None:
+        raise SafetyError("invalid_report_occurrence_limit")
+    if (
+        report["editorial_status"] != "human_review_required"
+        or report["editorially_approved"] is not False
+    ):
+        raise SafetyError("candidate_report_editorial_state_mismatch")
+    model = _validate_full_model_identity(report["model"])
+    hashes = report["hashes"]
+    if not isinstance(hashes, dict) or set(hashes) != {
+        "source_localisation_sha256",
+        "output_localisation_sha256",
+    }:
+        raise SafetyError("invalid_candidate_report_hashes")
+    if (
+        not isinstance(hashes["source_localisation_sha256"], str)
+        or SHA256_RE.fullmatch(hashes["source_localisation_sha256"]) is None
+        or hashes["source_localisation_sha256"] != source_hash
+    ):
+        raise SafetyError("report_source_hash_mismatch")
+    if (
+        not isinstance(hashes["output_localisation_sha256"], str)
+        or SHA256_RE.fullmatch(hashes["output_localisation_sha256"]) is None
+        or hashes["output_localisation_sha256"] != candidate_hash
+    ):
+        raise SafetyError("report_candidate_hash_mismatch")
+    _validate_full_resumability(report["resumability"], source, candidate)
+    return model
+
+
+def _validate_full_model_identity(value: object) -> dict[str, str]:
+    if not isinstance(value, dict) or set(value) != {"tag", "digest"}:
+        raise SafetyError("invalid_candidate_model_identity")
+    tag = value["tag"]
+    digest = value["digest"]
+    if (
+        not isinstance(tag, str)
+        or MODEL_TAG_RE.fullmatch(tag) is None
+        or tag.rsplit(":", 1)[0].endswith("-cloud")
+        or not isinstance(digest, str)
+        or MODEL_DIGEST_RE.fullmatch(digest) is None
+    ):
+        raise SafetyError("invalid_candidate_model_identity")
+    return {"tag": tag, "digest": digest}
+
+
+def _validate_full_resumability(
+    value: object,
+    source: Path,
+    candidate: Path,
+) -> None:
+    if not isinstance(value, dict) or set(value) != FULL_RESUMABILITY_FIELDS:
+        raise SafetyError("invalid_candidate_resumability")
+    workspace = value["workspace"]
+    if (
+        value["mode"] != "sqlite_workspace"
+        or not isinstance(workspace, str)
+        or not workspace
+        or not os.path.isabs(workspace)
+        or str(Path(workspace)) != workspace
+        or workspace in {str(source), str(candidate)}
+        or value["workspace_schema_version"] != 2
+        or isinstance(value["workspace_schema_version"], bool)
+        or value["parser_order_version"] != "mvp4-lossless-parser-order-v1"
+        or not isinstance(value["prompt_profile_hash"], str)
+        or SHA256_RE.fullmatch(value["prompt_profile_hash"]) is None
+        or value["finalization_protocol"]
+        != "intent_then_no_clobber_publish_then_complete_v1"
+        or value["workspace_state_at_report_creation"] != "in_progress"
+        or value["completion_attested_by_report"] is not False
+        or value["output_identity_scope"]
+        != "all_paths_types_and_bytes_including_report"
+        or value["checkpoint_boundary"]
+        != "committed_after_each_finished_occurrence"
+    ):
+        raise SafetyError("invalid_candidate_resumability")
+    for field, minimum in (
+        ("run_count", 1),
+        ("reused_from_workspace", 0),
+        ("calls_in_final_run", 0),
+    ):
+        item = value[field]
+        if isinstance(item, bool) or not isinstance(item, int) or item < minimum:
+            raise SafetyError("invalid_candidate_resumability")
 
 
 def _validate_report_counts(
@@ -725,8 +1044,102 @@ def _validate_report_counts(
         raise SafetyError("candidate_report_unchanged_count_mismatch")
 
 
+def _validate_full_report_counts(
+    counts: object,
+    *,
+    selected_count: int,
+    accepted_count: int,
+    accepted_unchanged: int,
+    model_fallback: int,
+    parser_unsupported: int,
+    discovered: int,
+    english_files: int,
+    skipped_files: int,
+    resumability: object,
+    report_status: object,
+) -> None:
+    if not isinstance(counts, dict) or set(counts) != FULL_REPORT_COUNT_FIELDS:
+        raise SafetyError("unsupported_candidate_count_schema")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for value in counts.values()
+    ):
+        raise SafetyError("invalid_candidate_report_count")
+    if not isinstance(resumability, dict):
+        raise SafetyError("invalid_candidate_resumability")
+    aliases = {
+        "total_occurrences": "occurrences",
+        "completed_occurrences": "completed",
+        "translated_occurrences": "translated",
+        "unchanged_accepted_occurrences": "accepted_unchanged",
+        "fallback_occurrences": "fallback",
+        "unsupported_occurrences": "unsupported",
+        "pending_occurrences": "pending",
+        "reused_from_workspace_occurrences": "reused_from_workspace",
+    }
+    for canonical, alias in aliases.items():
+        if counts[canonical] != counts[alias]:
+            raise SafetyError(f"candidate_report_count_alias_mismatch_{alias}")
+    if counts["pending_occurrences"] != 0:
+        raise SafetyError("candidate_report_pending_must_be_zero")
+    if counts["deferred_occurrences"] != 0:
+        raise SafetyError("candidate_report_deferred_must_be_zero")
+    if counts["completed_occurrences"] != counts["total_occurrences"]:
+        raise SafetyError("candidate_report_completed_total_mismatch")
+    expected = {
+        "discovered_yml_files": discovered,
+        "english_files": english_files,
+        "occurrences": selected_count + parser_unsupported,
+        "planned_translation_occurrences": selected_count,
+        "translated_occurrences": accepted_count,
+        "unchanged_accepted_occurrences": accepted_unchanged,
+        "fallback_occurrences": model_fallback + parser_unsupported,
+        "deferred_occurrences": 0,
+        "skipped_files": skipped_files,
+        "total_occurrences": selected_count + parser_unsupported,
+        "completed_occurrences": selected_count + parser_unsupported,
+        "unsupported_occurrences": parser_unsupported,
+        "pending_occurrences": 0,
+    }
+    for name, expected_value in expected.items():
+        if counts[name] != expected_value:
+            raise SafetyError(f"candidate_report_count_mismatch_{name}")
+    if accepted_count + model_fallback != selected_count:
+        raise SafetyError("candidate_report_planned_algebra_mismatch")
+    if (
+        counts["reused_from_workspace_occurrences"]
+        + counts["calls_in_final_run"]
+        != selected_count
+    ):
+        raise SafetyError("candidate_report_resume_count_mismatch")
+    if (
+        counts["reused_from_workspace"]
+        != resumability.get("reused_from_workspace")
+        or counts["calls_in_final_run"]
+        != resumability.get("calls_in_final_run")
+    ):
+        raise SafetyError("candidate_report_resumability_count_mismatch")
+    expected_status = (
+        "technical_safe_partial"
+        if (
+            counts["fallback_occurrences"]
+            or counts["deferred_occurrences"]
+            or counts["skipped_files"]
+        )
+        else (
+            "no_translatable_content"
+            if counts["occurrences"] == 0
+            else "technical_safe"
+        )
+    )
+    if report_status != expected_status:
+        raise SafetyError("candidate_report_status_mismatch")
+
+
 def _validate_file_alignment(
-    source_file: SourceFile, candidate_file: SourceFile, limit: int
+    source_file: SourceFile,
+    candidate_file: SourceFile,
+    limit: int | None,
 ) -> None:
     source = source_file.parsed
     candidate = candidate_file.parsed
@@ -754,7 +1167,10 @@ def _validate_file_alignment(
     if set(source_by_line) != set(candidate_by_line):
         raise SafetyError("candidate_occurrence_alignment_mismatch")
     selected_lines = {
-        entry.line_index for entry in source.entries[:limit]
+        entry.line_index
+        for entry in (
+            source.entries if limit is None else source.entries[:limit]
+        )
     }
     for index, (source_line, candidate_line) in enumerate(
         zip(source.lines, candidate.lines)
@@ -800,6 +1216,60 @@ def _segments_and_atoms(entry: Entry) -> tuple[list[str], list[str]]:
         cursor = position + len(token.original)
     segments.append(entry.value[cursor:])
     return segments, atoms
+
+
+def _warning_flags(
+    status: str,
+    source_segments: list[str],
+    candidate_segments: list[str],
+) -> list[str]:
+    flags: list[str] = []
+    if status == "model_fallback":
+        flags.append("model_fallback")
+    if status == "accepted_unchanged":
+        flags.append("accepted_unchanged")
+    if _boundary_whitespace_changed(
+        source_segments,
+        candidate_segments,
+        leading=True,
+    ):
+        flags.append("leading_boundary_whitespace_changed")
+    if _boundary_whitespace_changed(
+        source_segments,
+        candidate_segments,
+        leading=False,
+    ):
+        flags.append("trailing_boundary_whitespace_changed")
+    if any(flag not in WARNING_FLAGS for flag in flags):
+        raise SafetyError("internal_warning_flag_error")
+    return flags
+
+
+def _boundary_whitespace_changed(
+    source_segments: list[str],
+    candidate_segments: list[str],
+    *,
+    leading: bool,
+) -> bool:
+    if len(source_segments) != len(candidate_segments):
+        raise SafetyError("protected_atom_alignment_failure")
+    index = 0 if leading else -1
+    return (
+        _boundary_whitespace(source_segments[index], leading=leading)
+        != _boundary_whitespace(candidate_segments[index], leading=leading)
+    )
+
+
+def _boundary_whitespace(value: str, *, leading: bool) -> str:
+    if leading:
+        index = 0
+        while index < len(value) and value[index] in BOUNDARY_WHITESPACE:
+            index += 1
+        return value[:index]
+    index = len(value)
+    while index > 0 and value[index - 1] in BOUNDARY_WHITESPACE:
+        index -= 1
+    return value[index:]
 
 
 def _human_span_hash(segments: Iterable[str]) -> str:
@@ -1052,14 +1522,19 @@ def _render_review_html(pack_data: dict[str, object]) -> bytes:
     ).decode("ascii")
     fingerprint = pack_data["pack_fingerprint"]
     assert isinstance(fingerprint, str)
+    shell = (
+        FULL_REVIEW_HTML_SHELL
+        if pack_data.get("schema_version") == FULL_REVIEW_PACK_SCHEMA_VERSION
+        else _LEGACY_HTML_SHELL
+    )
     html = (
-        _HTML_SHELL.replace("__PACK_DATA_BASE64__", encoded)
+        shell.replace("__PACK_DATA_BASE64__", encoded)
         .replace("__PACK_FINGERPRINT__", fingerprint)
     )
     return html.encode("utf-8")
 
 
-_HTML_SHELL = r"""<!doctype html>
+_LEGACY_HTML_SHELL = r"""<!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">

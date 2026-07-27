@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import sys
 
 from .engine import SafetyError, inspect_mod, translate_mod
@@ -21,6 +22,14 @@ def _occurrence_limit(value: str) -> int:
     if parsed < 1 or parsed > 100:
         raise argparse.ArgumentTypeError("must be an integer from 1 to 100")
     return parsed
+
+
+def _sha256_pin(value: str) -> str:
+    if re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        raise argparse.ArgumentTypeError(
+            "must be exactly 64 lowercase hexadecimal characters"
+        )
+    return value
 
 
 def parser() -> argparse.ArgumentParser:
@@ -66,6 +75,15 @@ def parser() -> argparse.ArgumentParser:
     review.add_argument("--source-mod", required=True, type=Path)
     review.add_argument("--candidate", required=True, type=Path)
     review.add_argument("--output", required=True, type=Path)
+    review.add_argument(
+        "--candidate-report-sha256",
+        type=_sha256_pin,
+        metavar="SHA256",
+        help=(
+            "required exact translation-report.json pin for schema-v3 "
+            "full candidates; omit for the legacy exact pilot"
+        ),
+    )
 
     apply_review = commands.add_parser(
         "apply-review-decisions",
@@ -98,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.source_mod,
                 args.candidate,
                 args.output,
+                candidate_report_sha256=args.candidate_report_sha256,
             )
         else:
             report = apply_review_decisions(

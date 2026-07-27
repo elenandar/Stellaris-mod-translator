@@ -128,6 +128,82 @@ def test_build_review_pack_requires_all_three_paths() -> None:
     assert str(args.source_mod) == "/source"
     assert str(args.candidate) == "/candidate"
     assert str(args.output) == "/review"
+    assert args.candidate_report_sha256 is None
+
+
+def test_build_review_pack_accepts_and_dispatches_full_report_pin(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pin = "a" * 64
+    received: tuple[Path, Path, Path, str | None] | None = None
+
+    def build(
+        source: Path,
+        candidate: Path,
+        output: Path,
+        *,
+        candidate_report_sha256: str | None,
+    ) -> dict[str, object]:
+        nonlocal received
+        received = (source, candidate, output, candidate_report_sha256)
+        return {"status": "review_pack_created"}
+
+    monkeypatch.setattr(cli, "build_review_pack", build)
+    result = main(
+        [
+            "build-review-pack",
+            "--source-mod",
+            "/source",
+            "--candidate",
+            "/candidate",
+            "--output",
+            "/review",
+            "--candidate-report-sha256",
+            pin,
+        ]
+    )
+    assert result == 0
+    assert received == (
+        Path("/source"),
+        Path("/candidate"),
+        Path("/review"),
+        pin,
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "review_pack_created"
+    }
+
+
+@pytest.mark.parametrize(
+    "pin",
+    ["A" * 64, "a" * 63, "g" * 64, "a" * 65],
+)
+def test_build_review_pack_rejects_malformed_report_pin(pin: str) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(
+            [
+                "build-review-pack",
+                "--source-mod",
+                "/source",
+                "--candidate",
+                "/candidate",
+                "--output",
+                "/review",
+                "--candidate-report-sha256",
+                pin,
+            ]
+        )
+    assert exc.value.code == 2
+
+
+def test_build_review_help_lists_full_report_pin(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(["build-review-pack", "--help"])
+    assert exc.value.code == 0
+    assert "--candidate-report-sha256 SHA256" in capsys.readouterr().out
 
 
 def test_apply_review_decisions_requires_all_four_paths() -> None:
