@@ -224,22 +224,31 @@ def test_apply_review_decisions_requires_all_four_paths() -> None:
     assert str(args.candidate) == "/candidate"
     assert str(args.decisions) == "/decisions.json"
     assert str(args.output) == "/reviewed"
+    assert args.candidate_report_sha256 is None
 
 
 def test_apply_review_decisions_dispatches_without_ollama(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    received: tuple[Path, Path, Path, Path] | None = None
+    received: tuple[Path, Path, Path, Path, str | None] | None = None
 
     def apply(
         source: Path,
         candidate: Path,
         decisions: Path,
         output: Path,
+        *,
+        candidate_report_sha256: str | None,
     ) -> dict[str, object]:
         nonlocal received
-        received = (source, candidate, decisions, output)
+        received = (
+            source,
+            candidate,
+            decisions,
+            output,
+            candidate_report_sha256,
+        )
         return {"status": "bounded_pilot_review_applied"}
 
     monkeypatch.setattr(cli, "apply_review_decisions", apply)
@@ -263,7 +272,96 @@ def test_apply_review_decisions_dispatches_without_ollama(
         Path("/candidate"),
         Path("/decisions.json"),
         Path("/reviewed"),
+        None,
     )
     assert json.loads(capsys.readouterr().out) == {
         "status": "bounded_pilot_review_applied"
     }
+
+
+def test_apply_review_decisions_accepts_and_dispatches_full_report_pin(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pin = "c" * 64
+    received: tuple[Path, Path, Path, Path, str | None] | None = None
+
+    def apply(
+        source: Path,
+        candidate: Path,
+        decisions: Path,
+        output: Path,
+        *,
+        candidate_report_sha256: str | None,
+    ) -> dict[str, object]:
+        nonlocal received
+        received = (
+            source,
+            candidate,
+            decisions,
+            output,
+            candidate_report_sha256,
+        )
+        return {"status": "full_candidate_review_applied"}
+
+    monkeypatch.setattr(cli, "apply_review_decisions", apply)
+    result = main(
+        [
+            "apply-review-decisions",
+            "--source-mod",
+            "/source",
+            "--candidate",
+            "/candidate",
+            "--candidate-report-sha256",
+            pin,
+            "--decisions",
+            "/decisions.json",
+            "--output",
+            "/reviewed",
+        ]
+    )
+
+    assert result == 0
+    assert received == (
+        Path("/source"),
+        Path("/candidate"),
+        Path("/decisions.json"),
+        Path("/reviewed"),
+        pin,
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "full_candidate_review_applied"
+    }
+
+
+@pytest.mark.parametrize(
+    "pin",
+    ["A" * 64, "a" * 63, "g" * 64, "a" * 65],
+)
+def test_apply_review_decisions_rejects_malformed_report_pin(pin: str) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(
+            [
+                "apply-review-decisions",
+                "--source-mod",
+                "/source",
+                "--candidate",
+                "/candidate",
+                "--candidate-report-sha256",
+                pin,
+                "--decisions",
+                "/decisions.json",
+                "--output",
+                "/reviewed",
+            ]
+        )
+    assert exc.value.code == 2
+
+
+def test_apply_review_help_lists_full_report_pin(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(["apply-review-decisions", "--help"])
+    assert exc.value.code == 0
+    assert "--candidate-report-sha256 SHA256" in capsys.readouterr().out

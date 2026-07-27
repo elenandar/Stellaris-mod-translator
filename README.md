@@ -9,11 +9,12 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-5B` обобщает автономный review pack для полного schema-v3 candidate,
-сохраняя прежний schema-v2 pilot path. Полный pack остаётся private/local-only,
-не применяет решения, не вызывает Ollama и не регистрируется в launcher.
-`apply-review-decisions` для full candidate ещё не реализован; это отдельный
-MVP-5C. Owner decision от 26 июля 2026 года
+`MVP-5C` обобщает `apply-review-decisions` для полного schema-v3 candidate,
+сохраняя прежний schema-v2 bounded-pilot path. Полное применение требует pin
+точных байтов `translation-report.json`, завершённый decisions JSON и всегда
+создаёт новый отдельный reviewed candidate. Оно не вызывает Ollama, не
+регистрируется в launcher и не меняет source/base candidate. Owner decision от
+26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
 исторический evidence и не являются runtime authority для нового CLI.
@@ -73,6 +74,13 @@ python3 -m stellaris_mod_translator apply-review-decisions \
   --candidate /path/to/read-only-candidate \
   --decisions /path/to/exported-decisions.json \
   --output /path/to/new-reviewed-candidate
+
+python3 -m stellaris_mod_translator apply-review-decisions \
+  --source-mod /path/to/read-only-source-mod \
+  --candidate /path/to/read-only-schema-v3-candidate \
+  --candidate-report-sha256 64-lowercase-hex-report-pin \
+  --decisions /path/to/final-full-decisions.json \
+  --output /path/to/new-full-reviewed-candidate
 ```
 
 `--dry-run` не вызывает Ollama и ничего не записывает. Обычный запуск требует
@@ -259,26 +267,38 @@ fingerprint. Экспорт и импорт decisions JSON выполняютс�
 
 ## Применение review decisions
 
-`apply-review-decisions` — механизм MVP-3 только для bounded pilot, а не
-разрешение на live application. Full decisions schema-v1 export уже доступен,
-но его применение намеренно оставлено для MVP-5C.
-Он не вызывает Ollama и не использует `index.html` как authority: exact pack
-fingerprint и все 46 occurrence identities заново вычисляются из immutable
-source, base candidate и `translation-report.json`. Требуется полный decisions
-JSON без duplicate, unknown, missing или `unreviewed` entries.
+`apply-review-decisions` поддерживает два явно разделённых режима. Без
+`--candidate-report-sha256` сохраняется exact legacy bounded pilot. С pin из
+ровно 64 lowercase hex символов разрешён только полный schema-v3 candidate;
+schema-v3 без pin и legacy schema-v2 с pin отклоняются.
+
+Команда не вызывает Ollama и не использует `index.html`,
+`review-pack-summary.json` или browser state как authority. Общий validator
+review pack заново вычисляет source/candidate inventories и localisation
+hashes, проверяет exact report bytes, schema-v3 count/resumability algebra,
+model tag/digest, occurrence order/identities, protected atoms, escapes и pack
+schema-v2 fingerprint. Decisions могут идти в любом порядке, но обязаны
+содержать каждое reviewable occurrence ровно один раз, без duplicate, unknown,
+missing или `unreviewed` entries. Число записей выводится из validated
+candidate и не привязано к конкретному full pack.
 
 `accept` оставляет candidate span byte-identical, `edit` меняет только
 проверенные human segments, а `reject` восстанавливает их из English source.
 Protected atoms и escapes сохраняются в исходном порядке; source, candidate и
 decisions перепроверяются до атомарной no-clobber публикации. Результат содержит
-только `localisation/russian/**` и `review-application-report.json`. Он остаётся
-отдельным candidate, не регистрируется в launcher, не является active mod и
-сохраняет `editorially_approved=false`, потому что review покрывает только
-bounded pilot.
+только `localisation/russian/**` и `review-application-report.json`. Full report
+использует отдельную schema v2 и status `full_candidate_review_applied`, хранит
+hashes всех authority inputs и final localisation, исходные candidate
+status/counts, decision counts и technical residue. При unsupported
+occurrences или skipped files он честно сохраняет
+`editorially_approved=false`: эти residue bytes остаются без изменений, но для
+них не существовало безопасного editable span.
 
-MVP-3 пока проверен только на synthetic data. Следующий live gate требует
-полностью завершённый человеком decisions JSON для `pilot-02` и отдельное
-явное разрешение владельца; это PR и merge механизма сами по себе не дают.
+MVP-5C проверен только на synthetic data, включая scale smoke на 1700 entries.
+Он не читает private full pack или реальные decisions и не применяет их.
+Следующий gate после review/merge механизма — завершить local final export и
+получить отдельное явное разрешение владельца на live application; merge этого
+механизма сам по себе такого разрешения не даёт.
 
 Известная граница MVP-0: атомарная публикация защищает от появления конечного
 destination, но не обещает защиту от злонамеренного конкурирующего процесса
