@@ -258,20 +258,27 @@ def test_interruption_after_intent_before_publication_rebuilds_exact_tree(
     monkeypatch.setattr(
         engine, "atomic_publish_directory_no_replace", real_publish
     )
-    resume_client = SyntheticClient()
+    client_constructions = 0
 
-    translate_mod(
+    def forbidden_client_factory() -> SyntheticClient:
+        nonlocal client_constructions
+        client_constructions += 1
+        raise AssertionError("post_intent_recovery_created_model_client")
+
+    report = translate_mod(
         source,
         output,
         "synthetic:1",
         workspace=workspace,
         resume=True,
-        client_factory=lambda: resume_client,
+        client_factory=forbidden_client_factory,
     )
 
-    assert resume_client.calls == []
+    assert client_constructions == 0
+    assert report["counts"]["calls_in_final_run"] == 2
     assert engine._output_tree_identity(output).sha256 == expected_hash
     assert load_workspace(workspace).job.state == "completed"
+    assert list(tmp_path.glob(".candidate.tmp-*")) == []
 
 
 @pytest.mark.parametrize(
@@ -884,6 +891,149 @@ def test_real_hot_delete_journal_is_recovered_before_readonly_validation(
     assert not journal.exists()
 
 
+def test_commit_phase_hot_journal_with_changed_page_one_is_recovered(
+    tmp_path: Path,
+) -> None:
+    workspace = make_empty_workspace(tmp_path)
+    journal = Path(os.fspath(workspace) + "-journal")
+    ready = tmp_path / "commit-ready"
+    proceed = tmp_path / "commit-proceed"
+
+    def database_page_geometry(path: Path) -> tuple[int, int]:
+        with path.open("rb") as stream:
+            header = stream.read(100)
+        assert header[:16] == b"SQLite format 3\0"
+        page_size = int.from_bytes(header[16:18], "big")
+        if page_size == 1:
+            page_size = 65536
+        return page_size, int.from_bytes(header[28:32], "big")
+
+    page_size, original_pages = database_page_geometry(workspace)
+    original_size = workspace.stat().st_size
+    assert original_size == page_size * original_pages
+    child = (
+        "import os, sqlite3, sys, time\n"
+        "from pathlib import Path\n"
+        "database, ready, proceed = map(Path, sys.argv[1:])\n"
+        "connection = sqlite3.connect(database)\n"
+        "connection.execute('PRAGMA journal_mode = DELETE')\n"
+        "connection.execute('PRAGMA synchronous = FULL')\n"
+        "connection.execute('PRAGMA cache_size = 1')\n"
+        "connection.execute('PRAGMA cache_spill = ON')\n"
+        "connection.execute('BEGIN IMMEDIATE')\n"
+        "connection.execute("
+        "'CREATE TABLE commit_phase_growth(payload BLOB NOT NULL)')\n"
+        "connection.execute("
+        "\"WITH RECURSIVE counter(value) AS (VALUES(1) UNION ALL "
+        "SELECT value + 1 FROM counter WHERE value < 36000) "
+        "INSERT INTO commit_phase_growth "
+        "SELECT zeroblob(4000) FROM counter\")\n"
+        "ready.write_bytes(b'ready')\n"
+        "while not proceed.exists():\n"
+        "    time.sleep(0.001)\n"
+        "connection.commit()\n"
+    )
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            child,
+            os.fspath(workspace),
+            os.fspath(ready),
+            os.fspath(proceed),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    killed_during_commit = False
+    deadline = time.monotonic() + 45
+    try:
+        while not ready.exists() and time.monotonic() < deadline:
+            if process.poll() is not None:
+                break
+            time.sleep(0.001)
+        assert ready.is_file()
+        assert process.poll() is None
+        assert database_page_geometry(workspace)[1] == original_pages
+        assert journal.is_file()
+        proceed.write_bytes(b"proceed")
+
+        while process.poll() is None and time.monotonic() < deadline:
+            try:
+                crash_pages = database_page_geometry(workspace)[1]
+                with journal.open("rb") as stream:
+                    journal_header = stream.read(28)
+            except FileNotFoundError:
+                continue
+            if (
+                crash_pages != original_pages
+                and journal_header[:8]
+                == bytes.fromhex("d9d505f920a163d7")
+            ):
+                process.kill()
+                killed_during_commit = True
+                break
+        process.wait(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=10)
+    assert process.stdout is not None
+    assert process.stderr is not None
+    process.stdout.close()
+    stderr = process.stderr.read().decode("utf-8", errors="replace")
+    process.stderr.close()
+    assert killed_during_commit, stderr
+    assert process.returncode == -9
+
+    crash_page_size, crash_pages = database_page_geometry(workspace)
+    with journal.open("rb") as stream:
+        journal_header = stream.read(28)
+    journal_original_pages = int.from_bytes(journal_header[16:20], "big")
+    assert crash_page_size == page_size
+    assert crash_pages > original_pages
+    assert journal_original_pages == original_pages
+    assert journal.is_file()
+
+    sqlite_control = tmp_path / "sqlite-control.sqlite3"
+    sqlite_control_journal = Path(
+        os.fspath(sqlite_control) + "-journal"
+    )
+    shutil.copyfile(workspace, sqlite_control)
+    shutil.copyfile(journal, sqlite_control_journal)
+    sqlite_control.chmod(0o600)
+    sqlite_control_journal.chmod(0o600)
+    with sqlite3.connect(sqlite_control) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone() == (
+            "ok",
+        )
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE name = 'commit_phase_growth'"
+        ).fetchone() == (0,)
+    assert database_page_geometry(sqlite_control)[1] == original_pages
+    assert not sqlite_control_journal.exists()
+
+    snapshot = load_workspace(workspace)
+
+    assert snapshot.job.state == "in_progress"
+    assert snapshot.job.completed_count == 0
+    assert snapshot.job.occurrence_count == 0
+    assert snapshot.inventory == ()
+    assert snapshot.occurrences == ()
+    assert database_page_geometry(workspace)[1] == original_pages
+    assert workspace.stat().st_size == original_size
+    assert not journal.exists()
+    with sqlite3.connect(workspace) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchone() == (
+            "ok",
+        )
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE name = 'commit_phase_growth'"
+        ).fetchone() == (0,)
+
+
 def test_published_tree_change_between_manifest_passes_blocks_completion(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -928,9 +1078,11 @@ def test_published_tree_change_between_manifest_passes_blocks_completion(
     assert output.is_dir()
 
 
+@pytest.mark.parametrize("parent_mode", [0o500, 0o555])
 def test_lost_success_after_completion_commit_resumes_idempotently(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    parent_mode: int,
 ) -> None:
     source = make_source(tmp_path)
     output, workspace = paths(tmp_path)
@@ -965,8 +1117,19 @@ def test_lost_success_after_completion_commit_resumes_idempotently(
     run_count = committed.job.run_count
     workspace_hash = hashlib.sha256(workspace.read_bytes()).hexdigest()
     output_inode = output.stat().st_ino
+    output_identity = engine._output_tree_identity(output)
     published_report = json.loads(
         (output / "translation-report.json").read_text()
+    )
+    sibling_inventory = tuple(
+        sorted(
+            (
+                path.name,
+                stat.S_IFMT(path.lstat().st_mode),
+                path.lstat().st_ino,
+            )
+            for path in tmp_path.iterdir()
+        )
     )
     factory_calls = 0
 
@@ -975,18 +1138,43 @@ def test_lost_success_after_completion_commit_resumes_idempotently(
         factory_calls += 1
         raise AssertionError("completed_resume_created_model_client")
 
-    report = translate_mod(
-        source,
-        output,
-        "synthetic:1",
-        workspace=workspace,
-        resume=True,
-        client_factory=forbidden_client_factory,
-    )
+    tmp_path.chmod(parent_mode)
+    try:
+        report = translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            resume=True,
+            client_factory=forbidden_client_factory,
+        )
+        sibling_inventory_after = tuple(
+            sorted(
+                (
+                    path.name,
+                    stat.S_IFMT(path.lstat().st_mode),
+                    path.lstat().st_ino,
+                )
+                for path in tmp_path.iterdir()
+            )
+        )
+        workspace_hash_after = hashlib.sha256(
+            workspace.read_bytes()
+        ).hexdigest()
+        output_identity_after = engine._output_tree_identity(output)
+    finally:
+        tmp_path.chmod(0o700)
 
     assert report == published_report
     assert factory_calls == 0
+    assert sibling_inventory_after == sibling_inventory
+    assert not any(
+        name.startswith(".candidate.recover-")
+        for name, _, _ in sibling_inventory_after
+    )
     assert output.stat().st_ino == output_inode
+    assert output_identity_after == output_identity
+    assert workspace_hash_after == workspace_hash
     assert hashlib.sha256(workspace.read_bytes()).hexdigest() == workspace_hash
     resumed = load_workspace(workspace)
     assert resumed.job.state == "completed"

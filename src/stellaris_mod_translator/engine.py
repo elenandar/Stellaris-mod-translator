@@ -75,6 +75,12 @@ class OutputTreeIdentity:
 
 
 @dataclass(frozen=True)
+class _LogicalOutputTree:
+    directories: tuple[Path, ...]
+    files: tuple[tuple[Path, bytes], ...]
+
+
+@dataclass(frozen=True)
 class _OutputManifestEntry:
     relative_path: str
     kind: str
@@ -282,6 +288,7 @@ def _translate_mod_resumable_locked(
     client_factory: Callable[[], OllamaClient],
 ) -> dict[str, object]:
     workspace_abs = workspace
+    reused = 0
 
     if resume:
         initial_workspace = _load_workspace(workspace_abs)
@@ -338,46 +345,37 @@ def _translate_mod_resumable_locked(
             or report_calls is None
         ):
             raise SafetyError("workspace_finalization_report_counters_missing")
-        recovery_temp = Path(
-            tempfile.mkdtemp(
-                prefix=f".{output_abs.name}.recover-",
-                dir=output_abs.parent,
-            )
+        (
+            expected_report,
+            _,
+            expected_output,
+        ) = _build_workspace_candidate_tree(
+            source=source,
+            output=output_abs,
+            workspace=workspace_abs,
+            model_identity=identity,
+            files=files,
+            plan=plan,
+            workspace_snapshot=initial_workspace,
+            report_run_count=report_run_count,
+            reused=report_reused,
+            calls_in_final_run=report_calls,
+            prompt_profile_hash=prompt_profile_hash,
         )
-        try:
-            expected_report, expected_output = _build_workspace_candidate_tree(
-                temp=recovery_temp,
-                source=source,
-                output=output_abs,
-                workspace=workspace_abs,
-                model_identity=identity,
-                files=files,
-                plan=plan,
-                workspace_snapshot=initial_workspace,
-                report_run_count=report_run_count,
-                reused=report_reused,
-                calls_in_final_run=report_calls,
-                prompt_profile_hash=prompt_profile_hash,
+        _validate_intended_output_identity(initial_workspace, expected_output)
+        actual_output = _output_tree_identity(output_abs)
+        if actual_output != expected_output:
+            raise SafetyError("finalization_output_identity_mismatch")
+        _verify_snapshot(source, files)
+        if initial_workspace.job.state == "in_progress":
+            _complete_workspace(
+                workspace_abs,
+                output_identity=actual_output,
             )
-            _validate_intended_output_identity(
-                initial_workspace, expected_output
-            )
-            actual_output = _output_tree_identity(output_abs)
-            if actual_output != expected_output:
-                raise SafetyError("finalization_output_identity_mismatch")
-            _verify_snapshot(source, files)
-            if initial_workspace.job.state == "in_progress":
-                _complete_workspace(
-                    workspace_abs,
-                    output_identity=actual_output,
-                )
-            completed = _load_workspace(workspace_abs)
-            if completed.job.state != "completed":
-                raise SafetyError("workspace_completion_not_persisted")
-            return expected_report
-        finally:
-            if recovery_temp.exists():
-                shutil.rmtree(recovery_temp)
+        completed = _load_workspace(workspace_abs)
+        if completed.job.state != "completed":
+            raise SafetyError("workspace_completion_not_persisted")
+        return expected_report
 
     if (
         initial_workspace is not None
@@ -385,8 +383,21 @@ def _translate_mod_resumable_locked(
     ):
         raise SafetyError("completed_workspace_output_missing")
 
-    client = client_factory()
-    identity = _validated_model_identity(client.exact_model(model), model)
+    client: OllamaClient | None = None
+    if (
+        initial_workspace is not None
+        and initial_workspace.job.finalization_state == "intent"
+    ):
+        identity = _validated_model_identity(
+            {
+                "tag": initial_workspace.job.model_tag,
+                "digest": initial_workspace.job.model_digest,
+            },
+            model,
+        )
+    else:
+        client = client_factory()
+        identity = _validated_model_identity(client.exact_model(model), model)
     _verify_snapshot(source, files)
 
     if initial_workspace is None:
@@ -431,7 +442,10 @@ def _translate_mod_resumable_locked(
             prompt_profile_hash=prompt_profile_hash,
         )
         reused = 0
-    elif identity["digest"] != initial_workspace.job.model_digest:
+    elif (
+        initial_workspace.job.finalization_state == "none"
+        and identity["digest"] != initial_workspace.job.model_digest
+    ):
         raise SafetyError("workspace_model_digest_drift")
     _verify_snapshot(source, files)
 
@@ -446,6 +460,7 @@ def _translate_mod_resumable_locked(
                 for row in initial_workspace.occurrences:
                     if row.state != "pending":
                         continue
+                    assert client is not None
                     item = plan_by_sequence[row.sequence]
                     calls_in_final_run += 1
                     try:
@@ -538,25 +553,22 @@ def _translate_mod_resumable_locked(
         report_reused = reused
         report_calls = calls_in_final_run
 
-    temp = Path(
-        tempfile.mkdtemp(prefix=f".{output_abs.name}.tmp-", dir=output_abs.parent)
+    report, logical_tree, output_identity = _build_workspace_candidate_tree(
+        source=source,
+        output=output_abs,
+        workspace=workspace_abs,
+        model_identity=identity,
+        files=final_files,
+        plan=final_plan,
+        workspace_snapshot=completed_workspace,
+        report_run_count=report_run_count,
+        reused=report_reused,
+        calls_in_final_run=report_calls,
+        prompt_profile_hash=prompt_profile_hash,
     )
-    try:
-        report, output_identity = _build_workspace_candidate_tree(
-            temp=temp,
-            source=source,
-            output=output_abs,
-            workspace=workspace_abs,
-            model_identity=identity,
-            files=final_files,
-            plan=final_plan,
-            workspace_snapshot=completed_workspace,
-            report_run_count=report_run_count,
-            reused=report_reused,
-            calls_in_final_run=report_calls,
-            prompt_profile_hash=prompt_profile_hash,
-        )
-        _verify_snapshot(source, final_files)
+    _verify_snapshot(source, final_files)
+    if completed_workspace.job.finalization_state == "none":
+        assert client is not None
         final_identity = _validated_model_identity(
             client.exact_model(model), model
         )
@@ -564,28 +576,32 @@ def _translate_mod_resumable_locked(
             raise SafetyError("model_identity_changed")
         _verify_snapshot(source, final_files)
 
-        if completed_workspace.job.finalization_state == "none":
-            try:
-                set_finalization_intent(
-                    workspace_abs,
-                    output_tree_sha256=output_identity.sha256,
-                    output_file_count=output_identity.file_count,
-                    output_directory_count=output_identity.directory_count,
-                    report_run_count=report_run_count,
-                    report_reused_count=report_reused,
-                    report_calls_count=report_calls,
-                )
-            except (WorkspaceError, sqlite3.Error) as exc:
-                raise SafetyError(str(exc)) from exc
-            intent_workspace = _load_workspace(workspace_abs)
-            _validate_intended_output_identity(
-                intent_workspace, output_identity
+        try:
+            set_finalization_intent(
+                workspace_abs,
+                output_tree_sha256=output_identity.sha256,
+                output_file_count=output_identity.file_count,
+                output_directory_count=output_identity.directory_count,
+                report_run_count=report_run_count,
+                report_reused_count=report_reused,
+                report_calls_count=report_calls,
             )
-        else:
-            _validate_intended_output_identity(
-                completed_workspace, output_identity
-            )
+        except (WorkspaceError, sqlite3.Error) as exc:
+            raise SafetyError(str(exc)) from exc
+        intent_workspace = _load_workspace(workspace_abs)
+        _validate_intended_output_identity(intent_workspace, output_identity)
+    else:
+        _validate_intended_output_identity(
+            completed_workspace, output_identity
+        )
 
+    temp = Path(
+        tempfile.mkdtemp(prefix=f".{output_abs.name}.tmp-", dir=output_abs.parent)
+    )
+    try:
+        _materialize_logical_output_tree(temp, logical_tree)
+        if _output_tree_identity(temp) != output_identity:
+            raise SafetyError("finalization_materialized_identity_mismatch")
         _verify_snapshot(source, final_files)
         _require_output_absent(output_abs)
         try:
@@ -858,7 +874,6 @@ def _workspace_translation_report(
 
 def _build_workspace_candidate_tree(
     *,
-    temp: Path,
     source: Path,
     output: Path,
     workspace: Path,
@@ -870,7 +885,7 @@ def _build_workspace_candidate_tree(
     reused: int,
     calls_in_final_run: int,
     prompt_profile_hash: str,
-) -> tuple[dict[str, object], OutputTreeIdentity]:
+) -> tuple[dict[str, object], _LogicalOutputTree, OutputTreeIdentity]:
     report = _workspace_translation_report(
         source=source,
         output=output,
@@ -884,7 +899,6 @@ def _build_workspace_candidate_tree(
         prompt_profile_hash=prompt_profile_hash,
     )
     candidates = _render_workspace_candidates(
-        temp,
         files,
         plan,
         workspace_snapshot,
@@ -894,17 +908,18 @@ def _build_workspace_candidate_tree(
     report["status"] = _translation_status(report, dry_run=False)
     report["editorial_status"] = "human_review_required"
     report["editorially_approved"] = False
-    _write_new(
-        temp / "translation-report.json",
+    report_bytes = (
         (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode(
             "utf-8"
-        ),
+        )
     )
-    return report, _output_tree_identity(temp)
+    logical_tree = _logical_output_tree(
+        [*candidates, (Path("translation-report.json"), report_bytes)]
+    )
+    return report, logical_tree, _logical_output_tree_identity(logical_tree)
 
 
 def _render_workspace_candidates(
-    temp: Path,
     files: list[SourceFile],
     plan: tuple[PlannedOccurrence, ...],
     workspace_snapshot: WorkspaceSnapshot,
@@ -934,11 +949,95 @@ def _render_workspace_candidates(
                     ) from exc
         relative = _candidate_relative(source_file.relative)
         rendered = parsed.render(replacements, russian_header=True)
-        target = temp / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        _write_new(target, rendered)
         candidates.append((relative, rendered))
     return candidates
+
+
+def _logical_output_tree(
+    files: list[tuple[Path, bytes]],
+) -> _LogicalOutputTree:
+    directories = {Path(".")}
+    seen_files: set[Path] = set()
+    ordered_files: list[tuple[Path, bytes]] = []
+    for relative, data in files:
+        if (
+            relative.is_absolute()
+            or relative == Path(".")
+            or ".." in relative.parts
+            or relative in seen_files
+        ):
+            raise SafetyError("logical_output_path_invalid")
+        seen_files.add(relative)
+        ordered_files.append((relative, data))
+        for parent in relative.parents:
+            directories.add(parent)
+            if parent == Path("."):
+                break
+    if any(relative in directories for relative in seen_files):
+        raise SafetyError("logical_output_path_conflict")
+    return _LogicalOutputTree(
+        directories=tuple(
+            sorted(
+                directories,
+                key=lambda path: (len(path.parts), path.as_posix()),
+            )
+        ),
+        files=tuple(
+            sorted(ordered_files, key=lambda item: item[0].as_posix())
+        ),
+    )
+
+
+def _logical_output_tree_identity(
+    tree: _LogicalOutputTree,
+) -> OutputTreeIdentity:
+    digest = hashlib.sha256()
+    digest.update(b"stellaris-mod-translator-output-tree-v1\0")
+    _update_output_identity_entry(digest, Path("."), b"D", None)
+    directories_by_parent: dict[Path, list[Path]] = {}
+    for directory in tree.directories:
+        if directory == Path("."):
+            continue
+        directories_by_parent.setdefault(directory.parent, []).append(directory)
+    files_by_parent: dict[Path, list[tuple[Path, bytes]]] = {}
+    for relative, data in tree.files:
+        files_by_parent.setdefault(relative.parent, []).append((relative, data))
+
+    def update_directory(directory: Path) -> None:
+        child_directories = sorted(
+            directories_by_parent.get(directory, []),
+            key=lambda path: path.name,
+        )
+        child_files = sorted(
+            files_by_parent.get(directory, []),
+            key=lambda item: item[0].name,
+        )
+        for child in child_directories:
+            _update_output_identity_entry(digest, child, b"D", None)
+        for relative, data in child_files:
+            _update_output_identity_entry(digest, relative, b"F", len(data))
+            digest.update(data)
+        for child in child_directories:
+            update_directory(child)
+
+    update_directory(Path("."))
+    if not tree.files:
+        raise SafetyError("finalization_output_has_no_files")
+    return OutputTreeIdentity(
+        sha256=digest.hexdigest(),
+        file_count=len(tree.files),
+        directory_count=len(tree.directories),
+    )
+
+
+def _materialize_logical_output_tree(
+    root: Path, tree: _LogicalOutputTree
+) -> None:
+    for directory in tree.directories:
+        if directory != Path("."):
+            (root / directory).mkdir()
+    for relative, data in tree.files:
+        _write_new(root / relative, data)
 
 
 def _output_tree_identity(root: Path) -> OutputTreeIdentity:

@@ -1254,111 +1254,21 @@ def _validate_hot_delete_journal(
         database_page_size = _MAX_SQLITE_PAGE_SIZE
     if not _valid_page_size(database_page_size):
         raise WorkspaceError("workspace_hot_journal_page_size_invalid")
-    database_page_count = int.from_bytes(database_header[28:32], "big")
+    header = _pread_exact(journal_descriptor, 28, 0)
+    if len(header) != 28 or header[:8] != _JOURNAL_MAGIC:
+        raise WorkspaceError("workspace_hot_journal_malformed")
+    initial_page_count = int.from_bytes(header[16:20], "big")
+    sector_size = int.from_bytes(header[20:24], "big")
+    page_size = int.from_bytes(header[24:28], "big")
     if (
-        database_page_count < 1
-        or database_identity.size
-        < database_page_count * database_page_size
+        initial_page_count < 1
+        or sector_size < _MIN_SQLITE_PAGE_SIZE
+        or sector_size > _MAX_SQLITE_PAGE_SIZE
+        or not _power_of_two(sector_size)
+        or journal_identity.size < sector_size
+        or page_size != database_page_size
+        or not _valid_page_size(page_size)
     ):
-        raise WorkspaceError("workspace_hot_journal_database_size_invalid")
-
-    offset = 0
-    validated_headers = 0
-    while offset < journal_identity.size:
-        header = _pread_exact(journal_descriptor, 28, offset)
-        if len(header) != 28:
-            raise WorkspaceError("workspace_hot_journal_malformed")
-        magic = header[:8]
-        record_count = int.from_bytes(header[8:12], "big")
-        nonce = int.from_bytes(header[12:16], "big")
-        initial_page_count = int.from_bytes(header[16:20], "big")
-        sector_size = int.from_bytes(header[20:24], "big")
-        page_size = int.from_bytes(header[24:28], "big")
-
-        if magic != _JOURNAL_MAGIC:
-            if (
-                validated_headers > 0
-                and magic == b"\0" * 8
-                and record_count == 0
-                and initial_page_count == database_page_count
-                and sector_size >= _MIN_SQLITE_PAGE_SIZE
-                and sector_size <= _MAX_SQLITE_PAGE_SIZE
-                and _power_of_two(sector_size)
-                and page_size == database_page_size
-                and offset + sector_size <= journal_identity.size
-                and not any(
-                    _pread_exact(
-                        journal_descriptor,
-                        sector_size - 28,
-                        offset + 28,
-                    )
-                )
-            ):
-                break
-            raise WorkspaceError("workspace_hot_journal_malformed")
-        if (
-            record_count < 1
-            or record_count == 0xFFFFFFFF
-            or initial_page_count != database_page_count
-            or initial_page_count < 1
-            or sector_size < _MIN_SQLITE_PAGE_SIZE
-            or sector_size > _MAX_SQLITE_PAGE_SIZE
-            or not _power_of_two(sector_size)
-            or page_size != database_page_size
-            or not _valid_page_size(page_size)
-        ):
-            raise WorkspaceError("workspace_hot_journal_malformed")
-        header_padding = _pread_exact(
-            journal_descriptor, sector_size - 28, offset + 28
-        )
-        if (
-            len(header_padding) != sector_size - 28
-            or any(header_padding)
-        ):
-            raise WorkspaceError("workspace_hot_journal_malformed")
-
-        record_size = page_size + 8
-        records_start = offset + sector_size
-        records_end = records_start + record_count * record_size
-        if records_end > journal_identity.size:
-            raise WorkspaceError("workspace_hot_journal_malformed")
-        for record_index in range(record_count):
-            record_offset = records_start + record_index * record_size
-            record = _pread_exact(
-                journal_descriptor, record_size, record_offset
-            )
-            if len(record) != record_size:
-                raise WorkspaceError("workspace_hot_journal_malformed")
-            page_number = int.from_bytes(record[:4], "big")
-            if page_number < 1 or page_number > initial_page_count:
-                raise WorkspaceError("workspace_hot_journal_malformed")
-            page = record[4 : 4 + page_size]
-            stored_checksum = int.from_bytes(record[-4:], "big")
-            if stored_checksum != _journal_checksum(page, nonce):
-                raise WorkspaceError("workspace_hot_journal_malformed")
-        validated_headers += 1
-        if records_end == journal_identity.size:
-            break
-        next_offset = _align_up(records_end, sector_size)
-        if next_offset > journal_identity.size:
-            padding = _pread_exact(
-                journal_descriptor,
-                journal_identity.size - records_end,
-                records_end,
-            )
-            if any(padding):
-                raise WorkspaceError("workspace_hot_journal_malformed")
-            break
-        padding = _pread_exact(
-            journal_descriptor, next_offset - records_end, records_end
-        )
-        if len(padding) != next_offset - records_end or any(padding):
-            raise WorkspaceError("workspace_hot_journal_malformed")
-        if next_offset == journal_identity.size:
-            break
-        offset = next_offset
-
-    if validated_headers < 1:
         raise WorkspaceError("workspace_hot_journal_malformed")
     journal_after = _identity_from_stat(os.fstat(journal_descriptor))
     if journal_after != journal_identity:
@@ -1424,19 +1334,6 @@ def _valid_page_size(value: int) -> bool:
 
 def _power_of_two(value: int) -> bool:
     return value > 0 and value & (value - 1) == 0
-
-
-def _align_up(value: int, alignment: int) -> int:
-    return (value + alignment - 1) // alignment * alignment
-
-
-def _journal_checksum(page: bytes, nonce: int) -> int:
-    checksum = nonce
-    index = len(page) - 200
-    while index > 0:
-        checksum = (checksum + page[index]) & 0xFFFFFFFF
-        index -= 200
-    return checksum
 
 
 def _identity_from_stat(value: os.stat_result) -> _FileIdentity:

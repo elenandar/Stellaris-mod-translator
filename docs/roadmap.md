@@ -41,14 +41,18 @@ intent-before-publish finalization только после `pending=0`. Точн
 MVP-4 remediation дополнительно вводит sidecar-before-SQLite structural
 preflight, process-lifetime advisory workspace lease, два независимых полных
 descriptor-checked manifest-прохода опубликованного tree и идемпотентный
-read-only resume уже `completed` workspace. Полный synthetic baseline:
-`264 passed` с warnings-as-errors. Остаётся явно принятое ограничение: эти
-проверки не доказывают абсолютную защиту от hostile same-UID процесса, который
-сознательно обходит advisory lease и подменяет состояние между проверками.
+read-only resume уже `completed` workspace. Финальная узкая remediation
+делегирует rollback прошедшего structural preflight journal самой SQLite,
+доказывает настоящий commit-phase crash с изменённым page-1, отделяет
+in-memory logical tree/identity от materialization и убирает Ollama dependency
+из post-intent recovery. Полный synthetic baseline: `266 passed` с
+warnings-as-errors. Остаётся явно принятое ограничение: эти проверки не
+доказывают абсолютную защиту от hostile same-UID процесса, который сознательно
+обходит advisory lease и подменяет состояние между проверками.
 
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
-| MVP-4 — Resumable full-mod translation | private SQLite workspace, immutable job/model/source provenance, sidecar-before-open validation, run-wide lease, minimized unchanged checkpoints, stable two-pass reconciliation, idempotent completed resume и crash-recoverable exact-tree atomic no-clobber finalization | merged MVP-3 at `4dc79f9c` | full synthetic suite; затем отдельное owner authorization для любого private/live full-mod run | **mechanism concurrency/recovery-remediated for synthetic data — 264 tests; same-UID limitation documented; no private reads, live Ollama calls or active publication** |
+| MVP-4 — Resumable full-mod translation | private SQLite workspace, immutable job/model/source provenance, SQLite-authoritative hot-journal rollback after structural preflight, run-wide lease, in-memory logical output identity, offline post-intent recovery, stable two-pass reconciliation, write-free completed resume и crash-recoverable exact-tree atomic no-clobber finalization | merged MVP-3 at `4dc79f9c` | full synthetic suite; затем отдельное owner authorization для любого private/live full-mod run | **final remediation validated for synthetic data — 266 tests; commit-phase rollback/offline intent/read-only completion covered; same-UID limitation documented; no private reads, live Ollama calls or active publication** |
 | MVP-3 — Apply editorial review decisions | complete decisions validation, occurrence-identity application, lossless human-span edits и atomic no-clobber reviewed candidate | merged MVP-2 and exact pilot-02 source/candidate/report identity | synthetic suite; затем completed human decisions JSON и отдельное owner authorization для live application | **mechanism implemented for synthetic review; private decisions not applied and output is not active** |
 | MVP-2 — Local editorial review pack | pinned occurrence alignment, автономный CSP-safe `index.html`, локальные decisions import/export и atomic no-clobber publication | merged MVP-1 и exact immutable pilot identities | synthetic suite, offline/XSS/browser smoke, source/candidate/report identity и immutability recheck | **implemented — merged in PR №14 as `c6788aab`; pilot-02 remains local and human review is not full-mod approval** |
 | MVP-1 — Bounded real-mod pilot | детерминированный per-file limit, отдельные deferred/fallback counters и небольшой private candidate для human review | merged MVP-0 и explicit owner consent для exact mod/model/path | synthetic suite, dry-run, source/model identity и candidate safety checks | **implemented — merged in PR #13 as `b5c9d942`; live pilot is technically safe with fallbacks and human review remains required** |
