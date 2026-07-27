@@ -654,7 +654,7 @@ def test_full_ui_sparse_storage_exports_imports_keyboard_and_dom_window(
     assert node is not None, "Node.js is required for JavaScript regression"
     source, candidate, pin = make_full_review_inputs(
         tmp_path,
-        entry_count=1700,
+        entry_count=1678,
     )
     output = tmp_path / "review"
     build_review_pack(
@@ -878,14 +878,23 @@ async function fireDocument(type, event) {
   vm.runInThisContext("downloadDocument(true)");
   const finalBytes = Buffer.from(await globalThis.capturedBlob.arrayBuffer());
   const finalDocument = JSON.parse(finalBytes.toString("utf8"));
+  const reorderedDocument = {
+    ...finalDocument,
+    decisions: finalDocument.decisions.slice().reverse()
+  };
+  const reorderedText = JSON.stringify(reorderedDocument);
   elements.get("importFile").files = [{
-    size: finalBytes.length,
-    text: async () => finalBytes.toString("utf8")
+    size: Buffer.byteLength(reorderedText),
+    text: async () => reorderedText
   }];
   await elements.get("importFile").fire(
     "change", {target: elements.get("importFile")}
   );
   const importedCount = vm.runInThisContext("state.size");
+  const reorderedFullImportAccepted = vm.runInThisContext(
+    "state.size===pack.entries.length"
+    + "&&pack.entries.every(record=>currentState(record).decision==='accept')"
+  );
   const beforeInvalidImport = vm.runInThisContext(
     "JSON.stringify(sparseDocument())"
   );
@@ -902,6 +911,124 @@ async function fireDocument(type, event) {
   const atomicInvalidImport = beforeInvalidImport === vm.runInThisContext(
     "JSON.stringify(sparseDocument())"
   );
+  vm.runInThisContext(`
+    el("search").value="";
+    el("attentionFilter").checked=false;
+    el("fileFilter").value="";
+    el("statusFilter").value="";
+    el("decisionFilter").value="accept";
+    el("warningFilter").value="";
+    currentId=pack.entries[Math.floor(pack.entries.length/2)].id;
+    pageIndex=0;
+    applyFilters();
+    {
+      const record=byId.get(currentId);
+      drafts.set(record.id,{
+        item:cloneItem(currentState(record)),
+        valid:false,
+        error:"atomic import sentinel"
+      });
+      render()
+    }
+  `);
+  function captureImportParts() {
+    return vm.runInThisContext(`({
+      decisionBytes:JSON.stringify(exportDocument(state,false,false)),
+      sparseBytes:JSON.stringify(sparseDocument()),
+      storageBytes:localStorage.getItem(storageKey),
+      draftsBytes:JSON.stringify([...drafts.entries()].map(
+        ([id,draft])=>[id,{
+          item:draft.item,valid:draft.valid,error:draft.error
+        }]
+      )),
+      uiBytes:JSON.stringify({
+        currentId,
+        visible:visible.map(record=>record.id),
+        search:el("search").value,
+        attention:el("attentionFilter").checked,
+        file:el("fileFilter").value,
+        status:el("statusFilter").value,
+        decisionFilter:el("decisionFilter").value,
+        warning:el("warningFilter").value,
+        resultCount:el("resultCount").textContent,
+        path:el("path").textContent,
+        decision:el("decision").value,
+        emptyHidden:el("empty").classList.contains("hidden"),
+        reviewHidden:el("review").classList.contains("hidden")
+      })
+    })`);
+  }
+  function cloneFinalDocument() {
+    return JSON.parse(JSON.stringify(finalDocument));
+  }
+  const partialOneDocument = cloneFinalDocument();
+  partialOneDocument.decisions.pop();
+  const partialManyDocument = cloneFinalDocument();
+  partialManyDocument.decisions = partialManyDocument.decisions.slice(
+    0, Math.floor(partialManyDocument.decisions.length / 2)
+  );
+  const duplicateDocument = cloneFinalDocument();
+  duplicateDocument.decisions[duplicateDocument.decisions.length - 1] = {
+    ...duplicateDocument.decisions[0]
+  };
+  const unknownDocument = cloneFinalDocument();
+  unknownDocument.decisions[unknownDocument.decisions.length - 1] = {
+    ...unknownDocument.decisions[unknownDocument.decisions.length - 1],
+    occurrence_id: "0".repeat(64)
+  };
+  const extraDocument = cloneFinalDocument();
+  extraDocument.decisions.push({...extraDocument.decisions[0]});
+  const invalidImportDocuments = [
+    ["missing_occurrence", partialOneDocument],
+    ["partial_document", partialManyDocument],
+    ["duplicate_occurrence", duplicateDocument],
+    ["unknown_occurrence", unknownDocument],
+    ["extra_entry", extraDocument]
+  ];
+  const completeImportSnapshot = captureImportParts();
+  const invalidImportResults = [];
+  for (const [name, documentValue] of invalidImportDocuments) {
+    const text = JSON.stringify(documentValue);
+    elements.get("importFile").files = [{
+      size: Buffer.byteLength(text),
+      text: async () => text
+    }];
+    await elements.get("importFile").fire(
+      "change", {target: elements.get("importFile")}
+    );
+    const after = captureImportParts();
+    invalidImportResults.push({
+      name,
+      rejected: elements.get("error").textContent.startsWith(
+        "Импорт отклонён:"
+      ),
+      stateUnchanged:
+        after.decisionBytes === completeImportSnapshot.decisionBytes,
+      sparseUnchanged:
+        after.sparseBytes === completeImportSnapshot.sparseBytes,
+      storageUnchanged:
+        after.storageBytes === completeImportSnapshot.storageBytes,
+      draftsUnchanged:
+        after.draftsBytes === completeImportSnapshot.draftsBytes,
+      uiUnchanged: after.uiBytes === completeImportSnapshot.uiBytes
+    });
+  }
+  const completeImportFailuresAtomic = invalidImportResults.every(
+    result => Object.entries(result).every(
+      ([key, value]) => key === "name" || value === true
+    )
+  );
+  const partialImportResult = invalidImportResults.find(
+    result => result.name === "missing_occurrence"
+  );
+  const partialImportState1678Preserved = (
+    finalDocument.decisions.length === 1678
+    && partialImportResult.stateUnchanged
+    && partialImportResult.sparseUnchanged
+  );
+  const partialImportDraftsPreserved = partialImportResult.draftsUnchanged;
+  const partialImportStoragePreserved = partialImportResult.storageUnchanged;
+  const partialImportCardFiltersPreserved = partialImportResult.uiUnchanged;
   let oversizedRead = false;
   elements.get("importFile").files = [{
     size: 4 * 1024 * 1024 + 1,
@@ -1144,7 +1271,145 @@ async function fireDocument(type, event) {
     + "&&!visible.some(record=>record.id===currentId)"
     + "&&!el('review').classList.contains('hidden')"
   );
-  vm.runInThisContext("state=new Map();drafts.clear();currentId=pack.entries[0].id;pageIndex=0;render()");
+  const decisionFilterCases = [];
+  for (const filter of ["unreviewed", "accept", "edit", "reject"]) {
+    for (const position of ["first", "middle", "last"]) {
+      const terminalDecision = (
+        filter === "unreviewed"
+          ? (position === "middle" ? "reject" : "accept")
+          : filter
+      );
+      decisionFilterCases.push({
+        filter,
+        position,
+        awayDecision: filter === "edit" ? "accept" : "edit",
+        terminalDecision
+      });
+    }
+  }
+  function filterStateSnapshot(filter, targetId) {
+    return vm.runInThisContext(`(()=>{
+      const expected=pack.entries.filter(
+        record=>currentState(record).decision===${JSON.stringify(filter)}
+      );
+      const target=byId.get(${JSON.stringify(targetId)});
+      return {
+        predicateExact:
+          visible.length===expected.length
+          &&visible.every((record,index)=>record.id===expected[index].id),
+        resultCountExact:
+          el("resultCount").textContent==="Найдено: "+visible.length,
+        targetDecision:currentState(target).decision,
+        currentId,
+        dropdownDecision:el("decision").value,
+        cardVisible:!el("review").classList.contains("hidden")
+      }
+    })()`);
+  }
+  const decisionFilterMatrix = [];
+  for (const testCase of decisionFilterCases) {
+    const targetIndex = (
+      testCase.position === "first"
+        ? 0
+        : testCase.position === "last"
+          ? vm.runInThisContext("pack.entries.length-1")
+          : vm.runInThisContext("Math.floor(pack.entries.length/2)")
+    );
+    const targetId = vm.runInThisContext(
+      `pack.entries[${targetIndex}].id`
+    );
+    vm.runInThisContext(`
+      state=new Map();
+      drafts.clear();
+      for(const record of pack.entries){
+        const item=defaults(record);
+        item.decision=${JSON.stringify(testCase.filter)};
+        if(!isDefaultItem(record,item))state.set(record.id,item)
+      }
+      el("search").value="";
+      el("attentionFilter").checked=false;
+      el("fileFilter").value="";
+      el("statusFilter").value="";
+      el("decisionFilter").value=${JSON.stringify(testCase.filter)};
+      el("warningFilter").value="";
+      currentId=${JSON.stringify(targetId)};
+      pageIndex=0;
+      applyFilters()
+    `);
+    vm.runInThisContext(
+      `setDecision(${JSON.stringify(testCase.awayDecision)},false)`
+    );
+    const afterAway = filterStateSnapshot(testCase.filter, targetId);
+    vm.runInThisContext(
+      `setDecision(${JSON.stringify(testCase.terminalDecision)},true)`
+    );
+    const afterTerminal = filterStateSnapshot(testCase.filter, targetId);
+    const expectedAdvanceId = vm.runInThisContext(
+      targetIndex + 1 < vm.runInThisContext("pack.entries.length")
+        ? `pack.entries[${targetIndex + 1}].id`
+        : `pack.entries[${targetIndex}].id`
+    );
+    const expectedCardDecision = (
+      targetIndex + 1 < vm.runInThisContext("pack.entries.length")
+        ? testCase.filter
+        : testCase.terminalDecision
+    );
+    vm.runInThisContext(`
+      currentId=${JSON.stringify(targetId)};
+      render();
+      setDecision(${JSON.stringify(testCase.filter)},false)
+    `);
+    const afterRestore = filterStateSnapshot(testCase.filter, targetId);
+    decisionFilterMatrix.push({
+      ...testCase,
+      predicateExact:
+        afterAway.predicateExact
+        && afterTerminal.predicateExact
+        && afterRestore.predicateExact,
+      resultCountExact:
+        afterAway.resultCountExact
+        && afterTerminal.resultCountExact
+        && afterRestore.resultCountExact,
+      awayCardActual:
+        afterAway.currentId === targetId
+        && afterAway.targetDecision === testCase.awayDecision
+        && afterAway.dropdownDecision === testCase.awayDecision
+        && afterAway.cardVisible,
+      terminalStateActual:
+        afterTerminal.targetDecision === testCase.terminalDecision
+        && afterTerminal.dropdownDecision === expectedCardDecision
+        && afterTerminal.cardVisible,
+      advanceOriginalOrder: afterTerminal.currentId === expectedAdvanceId,
+      restoredReentry:
+        afterRestore.targetDecision === testCase.filter
+        && afterRestore.currentId === targetId
+        && afterRestore.dropdownDecision === testCase.filter
+        && vm.runInThisContext(
+          `visible.some(record=>record.id===${JSON.stringify(targetId)})`
+        ),
+      endNoWrap:
+        testCase.position !== "last"
+        || afterTerminal.currentId === targetId
+    });
+  }
+  const decisionFilterStateMatrix = decisionFilterMatrix.every(
+    result => (
+      result.predicateExact
+      && result.awayCardActual
+      && result.terminalStateActual
+      && result.advanceOriginalOrder
+    )
+  );
+  const matchingFilterReentry = decisionFilterMatrix.every(
+    result => result.restoredReentry
+  );
+  const filterResultCount = decisionFilterMatrix.every(
+    result => result.resultCountExact
+  );
+  const filterEndNoWrap = decisionFilterMatrix.every(
+    result => result.endNoWrap
+  );
+  vm.runInThisContext('el("decisionFilter").value="";state=new Map();drafts.clear();currentId=pack.entries[0].id;pageIndex=0;applyFilters()');
   await fireDocument("keydown", {
     key: "a", target: elements.get("review"), preventDefault() {}
   });
@@ -1186,7 +1451,14 @@ async function fireDocument(type, event) {
     finalDecisionCount: finalDocument.decisions.length,
     finalExactlyOneLf: finalBytes.at(-1) === 10 && finalBytes.at(-2) !== 10,
     importedCount,
+    reorderedFullImportAccepted,
     atomicInvalidImport,
+    invalidImportCaseCount: invalidImportResults.length,
+    completeImportFailuresAtomic,
+    partialImportState1678Preserved,
+    partialImportDraftsPreserved,
+    partialImportStoragePreserved,
+    partialImportCardFiltersPreserved,
     oversizedRead,
     filteredKeyboardEditStayed,
     filteredKeyboardEditorFocused,
@@ -1213,6 +1485,11 @@ async function fireDocument(type, event) {
     filteredRejectRemainingBefore,
     filteredEditRejectAdvance,
     filteredEditNoEndWrap,
+    decisionFilterCaseCount: decisionFilterMatrix.length,
+    decisionFilterStateMatrix,
+    matchingFilterReentry,
+    filterResultCount,
+    filterEndNoWrap,
     keyboardAcceptedAndAdvanced,
     focusedKeyExcluded,
     noEndWrap,
@@ -1242,14 +1519,21 @@ async function fireDocument(type, event) {
         "reloadDecision": "accept",
         "memorySurvivedStorageFailure": True,
         "storageWarningVisible": True,
-        "draftDecisionCount": 1700,
+        "draftDecisionCount": 1678,
         "draftExactlyOneLf": True,
         "incompleteFinalDisabled": True,
         "finalEnabled": True,
-        "finalDecisionCount": 1700,
+        "finalDecisionCount": 1678,
         "finalExactlyOneLf": True,
-        "importedCount": 1700,
+        "importedCount": 1678,
+        "reorderedFullImportAccepted": True,
         "atomicInvalidImport": True,
+        "invalidImportCaseCount": 5,
+        "completeImportFailuresAtomic": True,
+        "partialImportState1678Preserved": True,
+        "partialImportDraftsPreserved": True,
+        "partialImportStoragePreserved": True,
+        "partialImportCardFiltersPreserved": True,
         "oversizedRead": False,
         "filteredKeyboardEditStayed": True,
         "filteredKeyboardEditorFocused": True,
@@ -1258,7 +1542,7 @@ async function fireDocument(type, event) {
         "filteredSelectEditorFocused": True,
         "filteredSelectCountIsStrict": True,
         "invalidDraftPresent": True,
-        "invalidEditDraftDecisionCount": 1700,
+        "invalidEditDraftDecisionCount": 1678,
         "invalidEditDraftUsesLastValid": True,
         "invalidEditDraftExcludesInvalidBytes": True,
         "invalidEditDraftExactlyOneLf": True,
@@ -1271,11 +1555,16 @@ async function fireDocument(type, event) {
         "glossarySavedDuringInvalidDraft": True,
         "glossaryPersistedDuringInvalidDraft": True,
         "glossarySurvivesInvalidRepair": True,
-        "filteredAcceptRemainingBefore": 1699,
+        "filteredAcceptRemainingBefore": 1677,
         "filteredEditAcceptAdvance": True,
-        "filteredRejectRemainingBefore": 1699,
+        "filteredRejectRemainingBefore": 1677,
         "filteredEditRejectAdvance": True,
         "filteredEditNoEndWrap": True,
+        "decisionFilterCaseCount": 12,
+        "decisionFilterStateMatrix": True,
+        "matchingFilterReentry": True,
+        "filterResultCount": True,
+        "filterEndNoWrap": True,
         "keyboardAcceptedAndAdvanced": True,
         "focusedKeyExcluded": True,
         "noEndWrap": True,

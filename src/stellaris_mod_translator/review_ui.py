@@ -231,8 +231,10 @@ function validateDocument(documentValue){
   if(documentValue.schema_version!==1)throw new Error("invalid decisions schema");
   if(documentValue.pack_fingerprint!==pack.pack_fingerprint)throw new Error("fingerprint mismatch");
   if(!Array.isArray(documentValue.decisions))throw new Error("invalid decisions array");
+  if(documentValue.decisions.length!==pack.entries.length)throw new Error("decisions document must contain every occurrence exactly once");
   const next=new Map();const seen=new Set();
   for(const item of documentValue.decisions){const [record,normalized]=validateDecisionRecord(item);if(seen.has(record.id))throw new Error("duplicate occurrence ID");seen.add(record.id);if(!isDefaultItem(record,normalized))next.set(record.id,normalized)}
+  if(seen.size!==pack.entries.length)throw new Error("decisions document must contain every occurrence exactly once");
   return next
 }
 function sparseDocument(stateValue=state){
@@ -311,7 +313,10 @@ function move(delta){
   flushText();const record=neighboringVisibleRecord(delta);if(!record)return;currentId=record.id;pageIndex=Math.floor(visible.findIndex(value=>value.id===record.id)/PAGE_SIZE);render()
 }
 function setDecision(decision,advance=false){
-  const record=byId.get(currentId);if(!record)return;const nextRecord=neighboringVisibleRecord(1);flushText();const item=cloneItem(currentState(record));item.decision=decision;if(decision!=="edit"){item.edited_segments=record.candidate_segments.slice();drafts.delete(record.id)}persistRecord(record,item);if(advance){const decisionFilter=el("decisionFilter").value;if(decisionFilter&&decision!==decisionFilter){if(nextRecord)currentId=nextRecord.id;applyFilters(false,!nextRecord)}else move(1)}else{applyFilters(false,decision==="edit");if(decision==="edit"){const area=el("editor").querySelector("textarea");if(area)area.focus()}}
+  const record=byId.get(currentId);if(!record)return;flushText();const item=cloneItem(currentState(record));item.decision=decision;if(decision!=="edit"){item.edited_segments=record.candidate_segments.slice();drafts.delete(record.id)}persistRecord(record,item);
+  const decisionFilter=el("decisionFilter").value;applyFilters(false,Boolean(decisionFilter));
+  if(advance){const nextRecord=neighboringVisibleRecord(1);if(nextRecord){currentId=nextRecord.id;pageIndex=Math.floor(visible.findIndex(value=>value.id===nextRecord.id)/PAGE_SIZE);render()}}
+  if(decision==="edit"){const area=el("editor").querySelector("textarea");if(area)area.focus()}
 }
 function documentBytes(documentValue){const text=JSON.stringify(documentValue,null,2).replace(/\n+$/u,"")+"\n";const encoded=new TextEncoder().encode(text);if(encoded.byteLength>MAX_JSON_BYTES)throw new Error("JSON превышает лимит 4 MiB");return encoded}
 function downloadDocument(finalMode){
