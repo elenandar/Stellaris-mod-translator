@@ -9,11 +9,11 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-4` — текущий synthetic-only механизм возобновляемого полного перевода
-через private local SQLite workspace. MVP-3 слит в PR №15; `pilot-01`
-superseded, а `pilot-02` остаётся единственным review source. Private decisions
-ещё не применялись, private mods и live Ollama в MVP-4 не читались и не
-вызывались. Owner decision от 26 июля 2026 года
+`MVP-5B` обобщает автономный review pack для полного schema-v3 candidate,
+сохраняя прежний schema-v2 pilot path. Полный pack остаётся private/local-only,
+не применяет решения, не вызывает Ollama и не регистрируется в launcher.
+`apply-review-decisions` для full candidate ещё не реализован; это отдельный
+MVP-5C. Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
 исторический evidence и не являются runtime authority для нового CLI.
@@ -61,6 +61,12 @@ python3 -m stellaris_mod_translator build-review-pack \
   --source-mod /path/to/read-only-source-mod \
   --candidate /path/to/read-only-candidate \
   --output /path/to/new-review-pack
+
+python3 -m stellaris_mod_translator build-review-pack \
+  --source-mod /path/to/read-only-source-mod \
+  --candidate /path/to/read-only-schema-v3-candidate \
+  --candidate-report-sha256 64-lowercase-hex-report-pin \
+  --output /path/to/new-full-review-pack
 
 python3 -m stellaris_mod_translator apply-review-decisions \
   --source-mod /path/to/read-only-source-mod \
@@ -220,12 +226,21 @@ crash/finalization, stable-tree reconciliation и legacy single-pass semantics.
 
 ## Локальный editorial review pack
 
-`build-review-pack` не вызывает Ollama и не переводит текст повторно. Текущий
-MVP-2 builder принимает только exact identities утверждённого pilot
-candidate, повторно сопоставляет source/candidate occurrences по файлу,
-строке и ordinal, проверяет protected atoms, escapes, report counters и
-source/candidate/report SHA-256, а затем атомарно публикует новый output без
-перезаписи существующего пути.
+`build-review-pack` не вызывает Ollama и не переводит текст повторно. Legacy
+pilot продолжает использовать прежние exact identities, pack schema v1 и
+fingerprint domain. Полный schema-v3 candidate требует точный SHA-256 pin
+байтов `translation-report.json`; builder заново проверяет report schema,
+resumability/counter algebra, source/candidate hashes, все поддержанные
+occurrences, protected atoms, escapes и fallback spans. Он публикует pack
+schema v2 с `review_scope=full_candidate` атомарно и без перезаписи.
+
+Полный интерфейс показывает не более 100 строк списка одновременно, поддерживает
+поиск, пагинацию и фильтры по файлу, status, решению, warning и признаку
+«Требует внимания». Локальное состояние sparse: сохраняются только изменения
+относительно `unreviewed`; draft export доступен до завершения, а final export —
+только после решения по каждой записи. Unsupported occurrences и skipped files
+видны в summary как технический остаток, но не становятся редактируемыми:
+для них нет безопасного parsed span.
 
 Откройте созданный `index.html` напрямую через `file://`. Pack автономен:
 сервер, интернет, CDN, web fonts и внешний frontend runtime не нужны.
@@ -235,6 +250,8 @@ fingerprint. Экспорт и импорт decisions JSON выполняютс�
 комментарии/теги и span hashes, но не полный source corpus.
 
 Решение `accept` означает принятие человеком только конкретного occurrence.
+Для fallback/unchanged оно сохраняет английский; чтобы получить перевод, нужно
+выбрать `edit`.
 Оно не назначает `editorially_approved` всему моду и не доказывает
 литературную или lore-готовность остальных строк. Generated `index.html`,
 `review-pack-summary.json` и decisions JSON остаются локальными артефактами
@@ -242,7 +259,9 @@ fingerprint. Экспорт и импорт decisions JSON выполняютс�
 
 ## Применение review decisions
 
-`apply-review-decisions` — механизм MVP-3, а не разрешение на live application.
+`apply-review-decisions` — механизм MVP-3 только для bounded pilot, а не
+разрешение на live application. Full decisions schema-v1 export уже доступен,
+но его применение намеренно оставлено для MVP-5C.
 Он не вызывает Ollama и не использует `index.html` как authority: exact pack
 fingerprint и все 46 occurrence identities заново вычисляются из immutable
 source, base candidate и `translation-report.json`. Требуется полный decisions
