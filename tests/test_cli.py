@@ -61,6 +61,58 @@ def test_occurrence_limit_is_optional() -> None:
     assert args.max_occurrences_per_file is None
 
 
+def test_workspace_and_resume_arguments_are_exposed() -> None:
+    args = parser().parse_args(
+        [
+            "translate-mod",
+            "--source-mod",
+            "/source",
+            "--output",
+            "/output",
+            "--model",
+            "synthetic:1",
+            "--workspace",
+            "/job.smt-workspace.sqlite3",
+            "--resume",
+        ]
+    )
+    assert args.workspace == Path("/job.smt-workspace.sqlite3")
+    assert args.resume is True
+
+
+def test_resume_requires_workspace_at_dispatch(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = main(
+        [
+            "translate-mod",
+            "--source-mod",
+            "/source",
+            "--output",
+            "/output",
+            "--model",
+            "synthetic:1",
+            "--resume",
+        ]
+    )
+    assert result == 2
+    assert (
+        json.loads(capsys.readouterr().err)["message"]
+        == "resume_requires_workspace"
+    )
+
+
+def test_translate_help_lists_workspace_and_resume(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(["translate-mod", "--help"])
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    assert "--workspace WORKSPACE" in output
+    assert "--resume" in output
+
+
 def test_build_review_pack_requires_all_three_paths() -> None:
     args = parser().parse_args(
         [

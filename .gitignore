@@ -62,3 +62,9 @@ fresh_mods/
 *.db-wal
 *.db-shm
 *.db-journal
+
+# Private MVP-4 resumable translation workspaces
+*.smt-workspace.sqlite3
+*.smt-workspace.sqlite3-wal
+*.smt-workspace.sqlite3-shm
+*.smt-workspace.sqlite3-journal

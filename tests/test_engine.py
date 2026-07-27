@@ -9,7 +9,7 @@ import pytest
 
 from stellaris_mod_translator import engine
 from stellaris_mod_translator.engine import SafetyError, inspect_mod, translate_mod
-from stellaris_mod_translator.ollama import OllamaError
+from stellaris_mod_translator.ollama import OllamaResultError
 
 
 SOURCE_BYTES = (
@@ -30,7 +30,7 @@ class FakeClient:
     def translate(self, *, tag: str, text: str) -> str:
         type(self).calls += 1
         if "Goodbye" in text:
-            raise OllamaError("synthetic failure")
+            raise OllamaResultError("synthetic failure")
         return text.replace("Hello", "Привет")
 
 
@@ -393,7 +393,7 @@ def test_selected_model_failure_is_fallback_while_later_entry_is_deferred(
     class FailingClient(FakeClient):
         def translate(self, *, tag: str, text: str) -> str:
             type(self).calls += 1
-            raise OllamaError("selected failure")
+            raise OllamaResultError("selected failure")
 
     FailingClient.calls = 0
     report = translate_mod(

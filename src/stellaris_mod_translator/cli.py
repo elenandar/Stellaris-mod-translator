@@ -48,6 +48,16 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     translate.add_argument("--dry-run", action="store_true")
+    translate.add_argument(
+        "--workspace",
+        type=Path,
+        help="checkpoint a full translation job in a private local SQLite file",
+    )
+    translate.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue an existing --workspace job",
+    )
 
     review = commands.add_parser(
         "build-review-pack",
@@ -80,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.model,
                 dry_run=args.dry_run,
                 max_occurrences_per_file=args.max_occurrences_per_file,
+                workspace=args.workspace,
+                resume=args.resume,
             )
         elif args.command == "build-review-pack":
             report = build_review_pack(

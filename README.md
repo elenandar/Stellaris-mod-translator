@@ -9,10 +9,11 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-3` — текущий synthetic-only механизм применения editorial decisions
-поверх immutable bounded pilot. MVP-2 слит в PR №14; `pilot-01` superseded,
-а `pilot-02` остаётся единственным review source. Private decisions ещё не
-применялись. Owner decision от 26 июля 2026 года
+`MVP-4` — текущий synthetic-only механизм возобновляемого полного перевода
+через private local SQLite workspace. MVP-3 слит в PR №15; `pilot-01`
+superseded, а `pilot-02` остаётся единственным review source. Private decisions
+ещё не применялись, private mods и live Ollama в MVP-4 не читались и не
+вызывались. Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
 исторический evidence и не являются runtime authority для нового CLI.
@@ -42,6 +43,19 @@ python3 -m stellaris_mod_translator translate-mod \
   --output /path/to/new-candidate \
   --model exact-ollama-tag \
   --max-occurrences-per-file 3
+
+python3 -m stellaris_mod_translator translate-mod \
+  --source-mod /path/to/read-only-mod \
+  --output /path/to/new-full-candidate \
+  --model exact-ollama-tag \
+  --workspace /path/to/job.smt-workspace.sqlite3
+
+python3 -m stellaris_mod_translator translate-mod \
+  --source-mod /path/to/read-only-mod \
+  --output /path/to/new-full-candidate \
+  --model exact-ollama-tag \
+  --workspace /path/to/job.smt-workspace.sqlite3 \
+  --resume
 
 python3 -m stellaris_mod_translator build-review-pack \
   --source-mod /path/to/read-only-source-mod \
@@ -88,6 +102,54 @@ deferred — поддержанный occurrence, который bounded run н�
 Accepted unchanged не превращается во fallback и, как весь candidate, требует
 human review. Наличие кириллицы не является техническим условием принятия:
 имена и термины могут законно остаться латиницей.
+
+## Возобновляемый полный перевод
+
+Опциональный `--workspace PATH` включает full-mod режим MVP-4. Первый запуск
+требует отсутствующий workspace, а продолжение — тот же существующий файл и
+флаг `--resume`. Workspace-режим несовместим с `--dry-run` и
+`--max-occurrences-per-file`; source, workspace и intended output не могут
+пересекаться. Пока хотя бы один поддержанный occurrence остаётся `pending`,
+output отсутствует. Завершённый workspace нельзя продолжить или использовать
+для повторной публикации.
+
+Workspace — private local data: он содержит сохранённые переводы и не должен
+попадать в Git, backup общего доступа, issue или PR. Файл создаётся с mode
+`0600`; `.gitignore` отдельно покрывает `*.smt-workspace.sqlite3` и его SQLite
+sidecars. В БД не копируются raw source files или полный English corpus:
+сохраняются identities/inventory, source-span hashes, exact model provenance и
+проверенный model result, необходимый для lossless replay.
+
+После каждого законченного occurrence terminal state
+`accepted_changed`, `accepted_unchanged` или `model_fallback` фиксируется
+отдельной durable SQLite transaction. `--resume` заново проверяет integrity и
+schema БД, source bytes/inventory/order, occurrence identities, output path,
+parser/order version, prompt profile и exact model tag/digest до первого нового
+translation call. Уже committed occurrences модели повторно не отправляются.
+Если остановка произошла после model call, но до SQLite commit, только этот
+незафиксированный вызов может повториться.
+
+Сохранённые результаты не считаются доверенными: перед resume и финальным
+render каждый из них повторно проходит текущий `restore_translation` и
+protected-atom validation. Transport/timeout/inventory failure, malformed
+provider envelope и model identity/digest drift немедленно останавливают запуск
+с сохранением committed progress. Malformed или unsafe результат одной строки
+даёт ровно один `model_fallback`, оставляет английский span и не блокирует
+остальные occurrences.
+
+После `pending=0` CLI заново читает immutable source snapshot, воспроизводит
+принятые results, проверяет hashes/counters/source generation и model identity,
+а затем использует прежнюю atomic no-clobber публикацию. Только после успешной
+публикации workspace получает state `completed`. `translation-report.json`
+содержит resumability provenance, total/completed/translated/unchanged/
+fallback/unsupported/pending counters, число reused occurrences и calls
+финального запуска. Fallback, unsupported syntax или skipped files сохраняют
+честный partial status.
+
+MVP-4 пока подтверждён только synthetic data: private mods и live Ollama не
+использовались. Candidate остаётся отдельным от active game paths, не
+регистрируется в launcher и всегда требует human review. Применение реального
+`pilot-02` — отдельный будущий live gate с новым явным разрешением владельца.
 
 ## Локальный editorial review pack
 
