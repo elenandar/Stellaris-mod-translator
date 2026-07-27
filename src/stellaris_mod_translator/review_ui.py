@@ -139,6 +139,7 @@ const allowedTags=new Set(["terminology","lore","meaning","style","grammar","lef
 const allowedWarnings=new Set(["model_fallback","accepted_unchanged","leading_boundary_whitespace_changed","trailing_boundary_whitespace_changed"]);
 const storageKey="stellaris-review-pack:"+pack.pack_fingerprint;
 const byId=new Map(pack.entries.map(entry=>[entry.id,entry]));
+const entryIndexById=new Map(pack.entries.map((entry,index)=>[entry.id,index]));
 const statusLabels={
   accepted_changed:"Перевод изменён",
   accepted_unchanged:"Оставлен английский",
@@ -271,10 +272,10 @@ function updateProgress(){
 }
 function searchable(record){return [record.path,record.status,...record.source_segments,...record.candidate_segments].join("\n").toLocaleLowerCase()}
 function needsAttention(record){return record.status==="model_fallback"||record.status==="accepted_unchanged"||record.warnings.some(warning=>warning==="leading_boundary_whitespace_changed"||warning==="trailing_boundary_whitespace_changed")}
-function applyFilters(keepEmpty=false){
+function applyFilters(keepEmpty=false,preserveCurrent=false){
   const query=el("search").value.toLocaleLowerCase();const file=el("fileFilter").value;const status=el("statusFilter").value;const decision=el("decisionFilter").value;const warning=el("warningFilter").value;const attention=el("attentionFilter").checked;
   visible=pack.entries.filter(record=>(!file||record.path===file)&&(!status||record.status===status)&&(!decision||currentState(record).decision===decision)&&(!warning||record.warnings.includes(warning))&&(!attention||needsAttention(record))&&(!query||searchable(record).includes(query)));
-  const visibleIndex=visible.findIndex(record=>record.id===currentId);if(visibleIndex<0){if(!keepEmpty)currentId=visible.length?visible[0].id:null;pageIndex=0}else pageIndex=Math.floor(visibleIndex/PAGE_SIZE);
+  const visibleIndex=visible.findIndex(record=>record.id===currentId);if(visibleIndex<0){if(!keepEmpty&&!preserveCurrent)currentId=visible.length?visible[0].id:null;pageIndex=0}else pageIndex=Math.floor(visibleIndex/PAGE_SIZE);
   render()
 }
 function renderList(){
@@ -297,14 +298,14 @@ function render(){
   for(const input of el("tags").querySelectorAll("input"))input.checked=item.tags.includes(input.value)
 }
 function move(delta){
-  flushText();const index=visible.findIndex(record=>record.id===currentId);const next=index+delta;if(index<0||next<0||next>=visible.length)return;currentId=visible[next].id;pageIndex=Math.floor(next/PAGE_SIZE);render()
+  flushText();const index=visible.findIndex(record=>record.id===currentId);if(index<0){const currentIndex=entryIndexById.get(currentId);const candidates=delta>0?visible:[...visible].reverse();const record=candidates.find(value=>delta>0?entryIndexById.get(value.id)>currentIndex:entryIndexById.get(value.id)<currentIndex);if(!record)return;currentId=record.id;pageIndex=Math.floor(visible.findIndex(value=>value.id===record.id)/PAGE_SIZE);render();return}const next=index+delta;if(next<0||next>=visible.length)return;currentId=visible[next].id;pageIndex=Math.floor(next/PAGE_SIZE);render()
 }
 function setDecision(decision,advance=false){
-  const record=byId.get(currentId);if(!record)return;const currentIndex=visible.findIndex(value=>value.id===record.id);const nextId=currentIndex>=0&&currentIndex+1<visible.length?visible[currentIndex+1].id:null;flushText();const item=cloneItem(currentState(record));item.decision=decision;if(decision!=="edit"){item.edited_segments=record.candidate_segments.slice();drafts.delete(record.id)}persistRecord(record,item);if(advance){const decisionFilter=el("decisionFilter").value;if(decisionFilter&&decision!==decisionFilter){currentId=nextId;applyFilters(nextId===null)}else move(1)}else{applyFilters();if(decision==="edit"){const area=el("editor").querySelector("textarea");if(area)area.focus()}}
+  const record=byId.get(currentId);if(!record)return;const currentIndex=visible.findIndex(value=>value.id===record.id);const nextId=currentIndex>=0&&currentIndex+1<visible.length?visible[currentIndex+1].id:null;flushText();const item=cloneItem(currentState(record));item.decision=decision;if(decision!=="edit"){item.edited_segments=record.candidate_segments.slice();drafts.delete(record.id)}persistRecord(record,item);if(advance){const decisionFilter=el("decisionFilter").value;if(decisionFilter&&decision!==decisionFilter){currentId=nextId;applyFilters(nextId===null)}else move(1)}else{applyFilters(false,decision==="edit");if(decision==="edit"){const area=el("editor").querySelector("textarea");if(area)area.focus()}}
 }
 function documentBytes(documentValue){const text=JSON.stringify(documentValue,null,2).replace(/\n+$/u,"")+"\n";const encoded=new TextEncoder().encode(text);if(encoded.byteLength>MAX_JSON_BYTES)throw new Error("JSON превышает лимит 4 MiB");return encoded}
 function downloadDocument(finalMode){
-  flushText();const documentValue=exportDocument(state,true,finalMode);const encoded=documentBytes(documentValue);const blob=new Blob([encoded],{type:"application/json"});const link=document.createElement("a");link.download=(finalMode?"review-decisions-final-":"review-decisions-draft-")+pack.pack_fingerprint.slice(0,12)+".json";link.href=URL.createObjectURL(blob);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0)
+  flushText();const documentValue=exportDocument(state,finalMode,finalMode);const encoded=documentBytes(documentValue);const blob=new Blob([encoded],{type:"application/json"});const link=document.createElement("a");link.download=(finalMode?"review-decisions-final-":"review-decisions-draft-")+pack.pack_fingerprint.slice(0,12)+".json";link.href=URL.createObjectURL(blob);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0)
 }
 for(const file of [...new Set(pack.entries.map(record=>record.path))].sort()){const option=document.createElement("option");option.value=file;option.textContent=file;el("fileFilter").append(option)}
 for(const tag of allowedTags){const label=document.createElement("label");const input=document.createElement("input");input.type="checkbox";input.value=tag;input.addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.tags=[...el("tags").querySelectorAll("input:checked")].map(node=>node.value);try{persistRecord(record,item);showError("")}catch(error){render();showError("Изменение отклонено: "+error.message)}});label.append(input,document.createTextNode(" "+tag));el("tags").append(label)}

@@ -285,9 +285,10 @@ def _validated_review_inputs(
     inventory = _candidate_inventory(candidate)
     report = _load_report(report_file.data)
     report_schema = report.get("schema_version")
-    if candidate_report_sha256 is None and report_schema == 3:
+    report_is_schema_v3 = type(report_schema) is int and report_schema == 3
+    if candidate_report_sha256 is None and report_is_schema_v3:
         raise SafetyError("candidate_report_sha256_required")
-    if candidate_report_sha256 is not None and report_schema != 3:
+    if candidate_report_sha256 is not None and not report_is_schema_v3:
         raise SafetyError("candidate_report_pin_requires_schema_v3")
     full_candidate = candidate_report_sha256 is not None
     identity = expected_identity or MVP2_PILOT_IDENTITY
@@ -738,7 +739,7 @@ def _validated_review_entries(
         + status_counts["accepted_unchanged"]
     )
     if full_candidate:
-        _validate_full_report_counts(
+        validated_total = _validate_full_report_counts(
             counts,
             selected_count=len(selected),
             accepted_count=accepted_count,
@@ -763,7 +764,7 @@ def _validated_review_entries(
             for entry in entries
         )
         actual_summary = {
-            "total": counts["total"],
+            "total": validated_total,
             "review_entries": len(entries),
             "accepted_changed": status_counts["accepted_changed"],
             "accepted_unchanged": status_counts["accepted_unchanged"],
@@ -898,7 +899,11 @@ def _validate_full_report_header(
         "editorially_approved",
         "resumability",
     }
-    if set(report) != common_fields or report.get("schema_version") != 3:
+    if (
+        set(report) != common_fields
+        or type(report.get("schema_version")) is not int
+        or report["schema_version"] != 3
+    ):
         raise SafetyError("unsupported_candidate_report_schema")
     if report["source"] != str(source) or report["output"] != str(candidate):
         raise SafetyError("candidate_report_path_identity_mismatch")
@@ -942,7 +947,7 @@ def _validate_full_model_identity(value: object) -> dict[str, str]:
     if (
         not isinstance(tag, str)
         or MODEL_TAG_RE.fullmatch(tag) is None
-        or tag.rsplit(":", 1)[0].endswith("-cloud")
+        or tag.endswith("-cloud")
         or not isinstance(digest, str)
         or MODEL_DIGEST_RE.fullmatch(digest) is None
     ):
@@ -965,8 +970,8 @@ def _validate_full_resumability(
         or not os.path.isabs(workspace)
         or str(Path(workspace)) != workspace
         or workspace in {str(source), str(candidate)}
+        or type(value["workspace_schema_version"]) is not int
         or value["workspace_schema_version"] != 2
-        or isinstance(value["workspace_schema_version"], bool)
         or value["parser_order_version"] != "mvp4-lossless-parser-order-v1"
         or not isinstance(value["prompt_profile_hash"], str)
         or SHA256_RE.fullmatch(value["prompt_profile_hash"]) is None
@@ -1057,7 +1062,7 @@ def _validate_full_report_counts(
     skipped_files: int,
     resumability: object,
     report_status: object,
-) -> None:
+) -> int:
     if not isinstance(counts, dict) or set(counts) != FULL_REPORT_COUNT_FIELDS:
         raise SafetyError("unsupported_candidate_count_schema")
     if any(
@@ -1080,6 +1085,8 @@ def _validate_full_report_counts(
     for canonical, alias in aliases.items():
         if counts[canonical] != counts[alias]:
             raise SafetyError(f"candidate_report_count_alias_mismatch_{alias}")
+    if counts["total"] != counts["total_occurrences"]:
+        raise SafetyError("candidate_report_count_alias_mismatch_total")
     if counts["pending_occurrences"] != 0:
         raise SafetyError("candidate_report_pending_must_be_zero")
     if counts["deferred_occurrences"] != 0:
@@ -1134,6 +1141,7 @@ def _validate_full_report_counts(
     )
     if report_status != expected_status:
         raise SafetyError("candidate_report_status_mismatch")
+    return expected["occurrences"]
 
 
 def _validate_file_alignment(

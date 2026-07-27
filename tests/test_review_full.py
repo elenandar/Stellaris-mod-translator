@@ -370,7 +370,7 @@ def test_schema_v2_rejects_full_candidate_pin(tmp_path: Path) -> None:
         (
             lambda report: report["model"].__setitem__(
                 "tag",
-                "synthetic-review-cloud:latest",
+                "synthetic-review:latest-cloud",
             ),
             "model",
         ),
@@ -405,6 +405,126 @@ def test_schema_v3_rejects_fields_alias_pending_deferred_and_resumability_drift(
     source, candidate, _ = make_full_review_inputs(tmp_path)
     pin = rewrite_report(candidate, mutation)
     with pytest.raises(SafetyError, match=error):
+        build_review_pack(
+            source,
+            candidate,
+            tmp_path / "review",
+            candidate_report_sha256=pin,
+        )
+
+
+@pytest.mark.parametrize("schema_version", [3.0, True, "3"])
+def test_schema_v3_requires_exact_integer_schema_version(
+    tmp_path: Path,
+    schema_version: object,
+) -> None:
+    source, candidate, _ = make_full_review_inputs(tmp_path)
+    pin = rewrite_report(
+        candidate,
+        lambda report: report.__setitem__("schema_version", schema_version),
+    )
+    with pytest.raises(
+        SafetyError,
+        match="candidate_report_pin_requires_schema_v3",
+    ):
+        build_review_pack(
+            source,
+            candidate,
+            tmp_path / "review",
+            candidate_report_sha256=pin,
+        )
+
+
+@pytest.mark.parametrize("workspace_schema_version", [2.0, True, "2"])
+def test_schema_v3_requires_exact_integer_workspace_schema_version(
+    tmp_path: Path,
+    workspace_schema_version: object,
+) -> None:
+    source, candidate, _ = make_full_review_inputs(tmp_path)
+    pin = rewrite_report(
+        candidate,
+        lambda report: report["resumability"].__setitem__(
+            "workspace_schema_version",
+            workspace_schema_version,
+        ),
+    )
+    with pytest.raises(SafetyError, match="resumability"):
+        build_review_pack(
+            source,
+            candidate,
+            tmp_path / "review",
+            candidate_report_sha256=pin,
+        )
+
+
+def test_schema_v3_rejects_rehashed_untrusted_total_count(
+    tmp_path: Path,
+) -> None:
+    source, candidate, _ = make_full_review_inputs(tmp_path)
+    pin = rewrite_report(
+        candidate,
+        lambda report: report["counts"].__setitem__(
+            "total",
+            report["counts"]["total"] + 1,
+        ),
+    )
+    with pytest.raises(
+        SafetyError,
+        match="candidate_report_count_alias_mismatch_total",
+    ):
+        build_review_pack(
+            source,
+            candidate,
+            tmp_path / "review",
+            candidate_report_sha256=pin,
+        )
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "synthetic-review:1",
+        "registry.example/team/model:latest",
+        "synthetic-review-cloud:latest",
+    ],
+)
+def test_schema_v3_accepts_runtime_compatible_model_tag_forms(
+    tmp_path: Path,
+    tag: str,
+) -> None:
+    source, candidate, _ = make_full_review_inputs(tmp_path)
+    pin = rewrite_report(
+        candidate,
+        lambda report: report["model"].__setitem__("tag", tag),
+    )
+    result = build_review_pack(
+        source,
+        candidate,
+        tmp_path / "review",
+        candidate_report_sha256=pin,
+    )
+    assert result["counts"]["review_entries"] == 6
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "synthetic-review:latest-cloud",
+        "synthetic-review",
+        "synthetic-review:",
+        ":latest",
+    ],
+)
+def test_schema_v3_rejects_cloud_suffix_and_malformed_model_tag_forms(
+    tmp_path: Path,
+    tag: str,
+) -> None:
+    source, candidate, _ = make_full_review_inputs(tmp_path)
+    pin = rewrite_report(
+        candidate,
+        lambda report: report["model"].__setitem__("tag", tag),
+    )
+    with pytest.raises(SafetyError, match="model"):
         build_review_pack(
             source,
             candidate,
@@ -790,6 +910,98 @@ async function fireDocument(type, event) {
   await elements.get("importFile").fire(
     "change", {target: elements.get("importFile")}
   );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();
+    el("decisionFilter").value="unreviewed";
+    currentId=pack.entries[0].id;pageIndex=0;applyFilters()
+  `);
+  globalThis.focusedElement = undefined;
+  const keyboardEditId = vm.runInThisContext("currentId");
+  await fireDocument("keydown", {
+    key: "E", target: elements.get("review"), preventDefault() {}
+  });
+  const filteredKeyboardEditStayed = vm.runInThisContext(
+    "currentId===" + JSON.stringify(keyboardEditId)
+    + "&&currentState(byId.get(currentId)).decision==='edit'"
+  );
+  const filteredKeyboardEditorFocused = (
+    globalThis.focusedElement === elements.get("editor").querySelector("textarea")
+  );
+  const filteredKeyboardCountIsStrict = vm.runInThisContext(
+    "visible.length===pack.entries.length-1"
+    + "&&!visible.some(record=>record.id===currentId)"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();
+    el("decisionFilter").value="unreviewed";
+    currentId=pack.entries[1].id;pageIndex=0;applyFilters()
+  `);
+  globalThis.focusedElement = undefined;
+  const selectEditId = vm.runInThisContext("currentId");
+  elements.get("decision").value = "edit";
+  await elements.get("decision").fire("change");
+  const filteredSelectEditStayed = vm.runInThisContext(
+    "currentId===" + JSON.stringify(selectEditId)
+    + "&&currentState(byId.get(currentId)).decision==='edit'"
+  );
+  const filteredSelectEditorFocused = (
+    globalThis.focusedElement === elements.get("editor").querySelector("textarea")
+  );
+  const filteredSelectCountIsStrict = vm.runInThisContext(
+    "visible.length===pack.entries.length-1"
+    + "&&!visible.some(record=>record.id===currentId)"
+  );
+  vm.runInThisContext(`
+    el("decisionFilter").value="";
+    state=new Map(pack.entries.map(record=>{
+      const item=defaults(record);item.decision="accept";return [record.id,item]
+    }));
+    drafts.clear();currentId=pack.entries[0].id;pageIndex=0;applyFilters();
+    setDecision("edit",false)
+  `);
+  let editArea = elements.get("editor").querySelector("textarea");
+  editArea.value = "VALID LAST STATE";
+  await editArea.fire("input");
+  await editArea.fire("blur");
+  const lastValidTranslation = vm.runInThisContext(
+    "fullTranslation(byId.get(currentId),currentState(byId.get(currentId)))"
+  );
+  editArea = elements.get("editor").querySelector("textarea");
+  editArea.value = "$INVALID_BYTES";
+  await editArea.fire("input");
+  const invalidDraftPresent = vm.runInThisContext(
+    "drafts.has(currentId)&&drafts.get(currentId).valid===false"
+  );
+  globalThis.capturedBlob = undefined;
+  vm.runInThisContext("downloadDocument(false)");
+  const invalidEditDraftBytes = Buffer.from(
+    await globalThis.capturedBlob.arrayBuffer()
+  );
+  const invalidEditDraftDocument = JSON.parse(
+    invalidEditDraftBytes.toString("utf8")
+  );
+  const invalidEditDraftRecord = invalidEditDraftDocument.decisions.find(
+    item => item.occurrence_id === keyboardEditId
+  );
+  const invalidEditDraftUsesLastValid = (
+    invalidEditDraftRecord.edited_translation === lastValidTranslation
+  );
+  const invalidEditDraftExcludesInvalidBytes = (
+    !invalidEditDraftBytes.includes(Buffer.from("$INVALID_BYTES"))
+  );
+  const invalidEditDraftExactlyOneLf = (
+    invalidEditDraftBytes.at(-1) === 10
+    && invalidEditDraftBytes.at(-2) !== 10
+  );
+  const invalidEditFinalDisabled = elements.get("finalExport").disabled;
+  globalThis.capturedBlob = undefined;
+  let invalidEditFinalRejected = false;
+  try {
+    vm.runInThisContext("downloadDocument(true)");
+  } catch (error) {
+    invalidEditFinalRejected = error.message.includes("невалидную редакцию");
+  }
+  const invalidEditFinalNoBlob = globalThis.capturedBlob === undefined;
   vm.runInThisContext("state=new Map();drafts.clear();currentId=pack.entries[0].id;pageIndex=0;render()");
   await fireDocument("keydown", {
     key: "a", target: elements.get("review"), preventDefault() {}
@@ -834,6 +1046,20 @@ async function fireDocument(type, event) {
     importedCount,
     atomicInvalidImport,
     oversizedRead,
+    filteredKeyboardEditStayed,
+    filteredKeyboardEditorFocused,
+    filteredKeyboardCountIsStrict,
+    filteredSelectEditStayed,
+    filteredSelectEditorFocused,
+    filteredSelectCountIsStrict,
+    invalidDraftPresent,
+    invalidEditDraftDecisionCount: invalidEditDraftDocument.decisions.length,
+    invalidEditDraftUsesLastValid,
+    invalidEditDraftExcludesInvalidBytes,
+    invalidEditDraftExactlyOneLf,
+    invalidEditFinalDisabled,
+    invalidEditFinalRejected,
+    invalidEditFinalNoBlob,
     keyboardAcceptedAndAdvanced,
     focusedKeyExcluded,
     noEndWrap,
@@ -872,6 +1098,20 @@ async function fireDocument(type, event) {
         "importedCount": 1700,
         "atomicInvalidImport": True,
         "oversizedRead": False,
+        "filteredKeyboardEditStayed": True,
+        "filteredKeyboardEditorFocused": True,
+        "filteredKeyboardCountIsStrict": True,
+        "filteredSelectEditStayed": True,
+        "filteredSelectEditorFocused": True,
+        "filteredSelectCountIsStrict": True,
+        "invalidDraftPresent": True,
+        "invalidEditDraftDecisionCount": 1700,
+        "invalidEditDraftUsesLastValid": True,
+        "invalidEditDraftExcludesInvalidBytes": True,
+        "invalidEditDraftExactlyOneLf": True,
+        "invalidEditFinalDisabled": True,
+        "invalidEditFinalRejected": True,
+        "invalidEditFinalNoBlob": True,
         "keyboardAcceptedAndAdvanced": True,
         "focusedKeyExcluded": True,
         "noEndWrap": True,
