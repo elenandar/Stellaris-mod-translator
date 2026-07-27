@@ -1002,6 +1002,148 @@ async function fireDocument(type, event) {
     invalidEditFinalRejected = error.message.includes("невалидную редакцию");
   }
   const invalidEditFinalNoBlob = globalThis.capturedBlob === undefined;
+  const tagInput = elements.get("tags").querySelectorAll("input").find(
+    input => input.value === "terminology"
+  );
+  tagInput.checked = true;
+  await tagInput.fire("change");
+  const tagSavedDuringInvalidDraft = vm.runInThisContext(
+    "currentState(byId.get(currentId)).tags.includes('terminology')"
+    + "&&drafts.get(currentId).item.tags.includes('terminology')"
+    + "&&drafts.get(currentId).valid===false"
+  );
+  const tagPersistedDuringInvalidDraft = vm.runInThisContext(
+    "validateSparseDocument(JSON.parse(localStorage.getItem(storageKey)))"
+    + ".get(currentId).tags.includes('terminology')"
+  );
+  editArea.value = "VALID TAG REPAIR";
+  await editArea.fire("input");
+  await editArea.fire("blur");
+  const tagDraftAfterRepair = vm.runInThisContext(
+    "exportDocument(state,false,false).decisions.find("
+    + "item=>item.occurrence_id===currentId)"
+  );
+  const tagFinalAfterRepair = vm.runInThisContext(
+    "exportDocument(state,true,true).decisions.find("
+    + "item=>item.occurrence_id===currentId)"
+  );
+  const tagSurvivesInvalidRepair = (
+    tagDraftAfterRepair.tags.includes("terminology")
+    && tagFinalAfterRepair.tags.includes("terminology")
+    && tagDraftAfterRepair.edited_translation === "VALID TAG REPAIR"
+    && !JSON.stringify(tagDraftAfterRepair).includes("$INVALID_BYTES")
+  );
+  vm.runInThisContext(`
+    state=new Map(pack.entries.map(record=>{
+      const item=defaults(record);item.decision="accept";return [record.id,item]
+    }));
+    drafts.clear();currentId=pack.entries[0].id;pageIndex=0;applyFilters();
+    setDecision("edit",false)
+  `);
+  editArea = elements.get("editor").querySelector("textarea");
+  editArea.value = "VALID GLOSSARY STATE";
+  await editArea.fire("input");
+  await editArea.fire("blur");
+  editArea = elements.get("editor").querySelector("textarea");
+  editArea.value = "$INVALID_GLOSSARY_BYTES";
+  await editArea.fire("input");
+  elements.get("glossary").checked = true;
+  await elements.get("glossary").fire("change");
+  const glossarySavedDuringInvalidDraft = vm.runInThisContext(
+    "currentState(byId.get(currentId)).glossary_candidate===true"
+    + "&&drafts.get(currentId).item.glossary_candidate===true"
+    + "&&drafts.get(currentId).valid===false"
+  );
+  const glossaryPersistedDuringInvalidDraft = vm.runInThisContext(
+    "validateSparseDocument(JSON.parse(localStorage.getItem(storageKey)))"
+    + ".get(currentId).glossary_candidate===true"
+  );
+  editArea.value = "VALID GLOSSARY REPAIR";
+  await editArea.fire("input");
+  await editArea.fire("blur");
+  const glossaryDraftAfterRepair = vm.runInThisContext(
+    "exportDocument(state,false,false).decisions.find("
+    + "item=>item.occurrence_id===currentId)"
+  );
+  const glossaryFinalAfterRepair = vm.runInThisContext(
+    "exportDocument(state,true,true).decisions.find("
+    + "item=>item.occurrence_id===currentId)"
+  );
+  const glossarySurvivesInvalidRepair = (
+    glossaryDraftAfterRepair.glossary_candidate === true
+    && glossaryFinalAfterRepair.glossary_candidate === true
+    && glossaryDraftAfterRepair.edited_translation === "VALID GLOSSARY REPAIR"
+    && !JSON.stringify(glossaryDraftAfterRepair).includes(
+      "$INVALID_GLOSSARY_BYTES"
+    )
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();
+    el("decisionFilter").value="unreviewed";
+    currentId=pack.entries[0].id;pageIndex=0;applyFilters()
+  `);
+  await fireDocument("keydown", {
+    key: "E", target: elements.get("review"), preventDefault() {}
+  });
+  editArea = elements.get("editor").querySelector("textarea");
+  editArea.value = "VALID FILTERED ACCEPT EDIT";
+  await editArea.fire("input");
+  await editArea.fire("blur");
+  const filteredAcceptRemainingBefore = vm.runInThisContext("visible.length");
+  await fireDocument("keydown", {
+    key: "A", target: elements.get("review"), preventDefault() {}
+  });
+  const filteredEditAcceptAdvance = vm.runInThisContext(
+    "visible.length===pack.entries.length-1"
+    + "&&currentId===pack.entries[1].id"
+    + "&&currentId!==null"
+    + "&&!el('review').classList.contains('hidden')"
+    + "&&el('empty').classList.contains('hidden')"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();
+    el("decisionFilter").value="unreviewed";
+    currentId=pack.entries[1].id;pageIndex=0;applyFilters()
+  `);
+  await fireDocument("keydown", {
+    key: "E", target: elements.get("review"), preventDefault() {}
+  });
+  editArea = elements.get("editor").querySelector("textarea");
+  editArea.value = "VALID FILTERED REJECT EDIT";
+  await editArea.fire("input");
+  await editArea.fire("blur");
+  const filteredRejectRemainingBefore = vm.runInThisContext("visible.length");
+  await fireDocument("keydown", {
+    key: "R", target: elements.get("review"), preventDefault() {}
+  });
+  const filteredEditRejectAdvance = vm.runInThisContext(
+    "visible.length===pack.entries.length-1"
+    + "&&currentId===pack.entries[2].id"
+    + "&&currentId!==null"
+    + "&&!el('review').classList.contains('hidden')"
+    + "&&el('empty').classList.contains('hidden')"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();
+    el("decisionFilter").value="unreviewed";
+    currentId=pack.entries[pack.entries.length-1].id;pageIndex=0;applyFilters()
+  `);
+  await fireDocument("keydown", {
+    key: "E", target: elements.get("review"), preventDefault() {}
+  });
+  editArea = elements.get("editor").querySelector("textarea");
+  editArea.value = "VALID FILTERED END EDIT";
+  await editArea.fire("input");
+  await editArea.fire("blur");
+  await fireDocument("keydown", {
+    key: "A", target: elements.get("review"), preventDefault() {}
+  });
+  const filteredEditNoEndWrap = vm.runInThisContext(
+    "currentId===pack.entries[pack.entries.length-1].id"
+    + "&&currentId!==pack.entries[0].id"
+    + "&&!visible.some(record=>record.id===currentId)"
+    + "&&!el('review').classList.contains('hidden')"
+  );
   vm.runInThisContext("state=new Map();drafts.clear();currentId=pack.entries[0].id;pageIndex=0;render()");
   await fireDocument("keydown", {
     key: "a", target: elements.get("review"), preventDefault() {}
@@ -1060,6 +1202,17 @@ async function fireDocument(type, event) {
     invalidEditFinalDisabled,
     invalidEditFinalRejected,
     invalidEditFinalNoBlob,
+    tagSavedDuringInvalidDraft,
+    tagPersistedDuringInvalidDraft,
+    tagSurvivesInvalidRepair,
+    glossarySavedDuringInvalidDraft,
+    glossaryPersistedDuringInvalidDraft,
+    glossarySurvivesInvalidRepair,
+    filteredAcceptRemainingBefore,
+    filteredEditAcceptAdvance,
+    filteredRejectRemainingBefore,
+    filteredEditRejectAdvance,
+    filteredEditNoEndWrap,
     keyboardAcceptedAndAdvanced,
     focusedKeyExcluded,
     noEndWrap,
@@ -1112,6 +1265,17 @@ async function fireDocument(type, event) {
         "invalidEditFinalDisabled": True,
         "invalidEditFinalRejected": True,
         "invalidEditFinalNoBlob": True,
+        "tagSavedDuringInvalidDraft": True,
+        "tagPersistedDuringInvalidDraft": True,
+        "tagSurvivesInvalidRepair": True,
+        "glossarySavedDuringInvalidDraft": True,
+        "glossaryPersistedDuringInvalidDraft": True,
+        "glossarySurvivesInvalidRepair": True,
+        "filteredAcceptRemainingBefore": 1699,
+        "filteredEditAcceptAdvance": True,
+        "filteredRejectRemainingBefore": 1699,
+        "filteredEditRejectAdvance": True,
+        "filteredEditNoEndWrap": True,
         "keyboardAcceptedAndAdvanced": True,
         "focusedKeyExcluded": True,
         "noEndWrap": True,

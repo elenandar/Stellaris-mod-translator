@@ -265,6 +265,12 @@ function updateDraft(record,item){
   drafts.set(record.id,draft);scheduleTextSave();updateProgress()
 }
 function showError(message){el("error").textContent=message}
+function updateDraftAwareField(record,field,value,persistImmediately=false){
+  const fieldValue=Array.isArray(value)?value.slice():value;const item=cloneItem(currentState(record));item[field]=fieldValue;setStateMemory(record,item);
+  const draft=drafts.get(record.id);if(draft)draft.item[field]=Array.isArray(fieldValue)?fieldValue.slice():fieldValue;
+  if(persistImmediately)persistSparse();else scheduleTextSave();updateProgress();
+  if(draft&&!draft.valid)showError("Редактирование отклонено: "+draft.error);else showError("")
+}
 function reviewedCount(){let count=0;for(const record of pack.entries)if(currentState(record).decision!=="unreviewed")count++;return count}
 function updateProgress(){
   const reviewed=reviewedCount();el("progressText").textContent=reviewed+" / "+pack.entries.length+" проверено";el("progressBar").style.width=(pack.entries.length?reviewed/pack.entries.length*100:0)+"%";
@@ -297,23 +303,27 @@ function render(){
   el("decision").value=item.decision;el("note").value=item.note;el("glossary").checked=item.glossary_candidate;el("editorField").classList.toggle("hidden",item.decision!=="edit");renderEditor(record,item);
   for(const input of el("tags").querySelectorAll("input"))input.checked=item.tags.includes(input.value)
 }
+function neighboringVisibleRecord(delta){
+  const index=visible.findIndex(record=>record.id===currentId);if(index>=0){const next=index+delta;return next>=0&&next<visible.length?visible[next]:null}
+  const currentIndex=entryIndexById.get(currentId);if(currentIndex===undefined)return null;const candidates=delta>0?visible:[...visible].reverse();return candidates.find(value=>delta>0?entryIndexById.get(value.id)>currentIndex:entryIndexById.get(value.id)<currentIndex)||null
+}
 function move(delta){
-  flushText();const index=visible.findIndex(record=>record.id===currentId);if(index<0){const currentIndex=entryIndexById.get(currentId);const candidates=delta>0?visible:[...visible].reverse();const record=candidates.find(value=>delta>0?entryIndexById.get(value.id)>currentIndex:entryIndexById.get(value.id)<currentIndex);if(!record)return;currentId=record.id;pageIndex=Math.floor(visible.findIndex(value=>value.id===record.id)/PAGE_SIZE);render();return}const next=index+delta;if(next<0||next>=visible.length)return;currentId=visible[next].id;pageIndex=Math.floor(next/PAGE_SIZE);render()
+  flushText();const record=neighboringVisibleRecord(delta);if(!record)return;currentId=record.id;pageIndex=Math.floor(visible.findIndex(value=>value.id===record.id)/PAGE_SIZE);render()
 }
 function setDecision(decision,advance=false){
-  const record=byId.get(currentId);if(!record)return;const currentIndex=visible.findIndex(value=>value.id===record.id);const nextId=currentIndex>=0&&currentIndex+1<visible.length?visible[currentIndex+1].id:null;flushText();const item=cloneItem(currentState(record));item.decision=decision;if(decision!=="edit"){item.edited_segments=record.candidate_segments.slice();drafts.delete(record.id)}persistRecord(record,item);if(advance){const decisionFilter=el("decisionFilter").value;if(decisionFilter&&decision!==decisionFilter){currentId=nextId;applyFilters(nextId===null)}else move(1)}else{applyFilters(false,decision==="edit");if(decision==="edit"){const area=el("editor").querySelector("textarea");if(area)area.focus()}}
+  const record=byId.get(currentId);if(!record)return;const nextRecord=neighboringVisibleRecord(1);flushText();const item=cloneItem(currentState(record));item.decision=decision;if(decision!=="edit"){item.edited_segments=record.candidate_segments.slice();drafts.delete(record.id)}persistRecord(record,item);if(advance){const decisionFilter=el("decisionFilter").value;if(decisionFilter&&decision!==decisionFilter){if(nextRecord)currentId=nextRecord.id;applyFilters(false,!nextRecord)}else move(1)}else{applyFilters(false,decision==="edit");if(decision==="edit"){const area=el("editor").querySelector("textarea");if(area)area.focus()}}
 }
 function documentBytes(documentValue){const text=JSON.stringify(documentValue,null,2).replace(/\n+$/u,"")+"\n";const encoded=new TextEncoder().encode(text);if(encoded.byteLength>MAX_JSON_BYTES)throw new Error("JSON превышает лимит 4 MiB");return encoded}
 function downloadDocument(finalMode){
   flushText();const documentValue=exportDocument(state,finalMode,finalMode);const encoded=documentBytes(documentValue);const blob=new Blob([encoded],{type:"application/json"});const link=document.createElement("a");link.download=(finalMode?"review-decisions-final-":"review-decisions-draft-")+pack.pack_fingerprint.slice(0,12)+".json";link.href=URL.createObjectURL(blob);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0)
 }
 for(const file of [...new Set(pack.entries.map(record=>record.path))].sort()){const option=document.createElement("option");option.value=file;option.textContent=file;el("fileFilter").append(option)}
-for(const tag of allowedTags){const label=document.createElement("label");const input=document.createElement("input");input.type="checkbox";input.value=tag;input.addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.tags=[...el("tags").querySelectorAll("input:checked")].map(node=>node.value);try{persistRecord(record,item);showError("")}catch(error){render();showError("Изменение отклонено: "+error.message)}});label.append(input,document.createTextNode(" "+tag));el("tags").append(label)}
+for(const tag of allowedTags){const label=document.createElement("label");const input=document.createElement("input");input.type="checkbox";input.value=tag;input.addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const tags=[...el("tags").querySelectorAll("input:checked")].map(node=>node.value);try{updateDraftAwareField(record,"tags",tags,true)}catch(error){render();showError("Изменение отклонено: "+error.message)}});label.append(input,document.createTextNode(" "+tag));el("tags").append(label)}
 for(const id of ["search","attentionFilter","fileFilter","statusFilter","decisionFilter","warningFilter"])el(id).addEventListener(id==="search"?"input":"change",()=>applyFilters());
 el("decision").addEventListener("change",()=>setDecision(el("decision").value));
-el("note").addEventListener("input",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(renderedState(record));item.note=el("note").value;updateDraft(record,item)});
+el("note").addEventListener("input",()=>{const record=byId.get(currentId);if(!record)return;try{updateDraftAwareField(record,"note",el("note").value)}catch(error){render();showError("Комментарий отклонён: "+error.message)}});
 el("note").addEventListener("blur",flushText);
-el("glossary").addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.glossary_candidate=el("glossary").checked;try{persistRecord(record,item);showError("")}catch(error){render();showError("Изменение отклонено: "+error.message)}});
+el("glossary").addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;try{updateDraftAwareField(record,"glossary_candidate",el("glossary").checked,true)}catch(error){render();showError("Изменение отклонено: "+error.message)}});
 el("previous").addEventListener("click",()=>move(-1));el("next").addEventListener("click",()=>move(1));
 el("pagePrevious").addEventListener("click",()=>{flushText();if(pageIndex>0){pageIndex--;currentId=visible[pageIndex*PAGE_SIZE].id;render()}});
 el("pageNext").addEventListener("click",()=>{flushText();if((pageIndex+1)*PAGE_SIZE<visible.length){pageIndex++;currentId=visible[pageIndex*PAGE_SIZE].id;render()}});
