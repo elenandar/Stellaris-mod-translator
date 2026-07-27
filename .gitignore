@@ -68,3 +68,4 @@ fresh_mods/
 *.smt-workspace.sqlite3-wal
 *.smt-workspace.sqlite3-shm
 *.smt-workspace.sqlite3-journal
+*.smt-workspace.sqlite3.lock

@@ -30,6 +30,7 @@ from .workspace import (
     InventoryRow,
     OccurrenceRow,
     WorkspaceError,
+    WorkspaceRunLock,
     WorkspaceSnapshot,
     WorkspaceWriter,
     create_workspace,
@@ -71,6 +72,20 @@ class OutputTreeIdentity:
     sha256: str
     file_count: int
     directory_count: int
+
+
+@dataclass(frozen=True)
+class _OutputManifestEntry:
+    relative_path: str
+    kind: str
+    stat_identity: tuple[int, int, int, int, int, int, int]
+    content_sha256: str | None
+
+
+@dataclass(frozen=True)
+class _OutputTreeManifest:
+    identity: OutputTreeIdentity
+    entries: tuple[_OutputManifestEntry, ...]
 
 
 def inspect_mod(source_mod: Path) -> dict[str, object]:
@@ -243,11 +258,33 @@ def _translate_mod_resumable(
     output_abs = _normalized_output(source, output)
     workspace_abs = _normalized_workspace(workspace, resume=resume)
     _validate_workspace_path_relationships(source, output_abs, workspace_abs)
+    try:
+        with WorkspaceRunLock(workspace_abs):
+            return _translate_mod_resumable_locked(
+                source,
+                output_abs,
+                model,
+                workspace=workspace_abs,
+                resume=resume,
+                client_factory=client_factory,
+            )
+    except WorkspaceError as exc:
+        raise SafetyError(str(exc)) from exc
+
+
+def _translate_mod_resumable_locked(
+    source: Path,
+    output_abs: Path,
+    model: str,
+    *,
+    workspace: Path,
+    resume: bool,
+    client_factory: Callable[[], OllamaClient],
+) -> dict[str, object]:
+    workspace_abs = workspace
 
     if resume:
         initial_workspace = _load_workspace(workspace_abs)
-        if initial_workspace.job.state == "completed":
-            raise SafetyError("workspace_already_completed")
     else:
         if workspace_abs.exists() or workspace_abs.is_symlink():
             raise SafetyError("first_run_requires_absent_workspace")
@@ -329,10 +366,11 @@ def _translate_mod_resumable(
             if actual_output != expected_output:
                 raise SafetyError("finalization_output_identity_mismatch")
             _verify_snapshot(source, files)
-            _complete_workspace(
-                workspace_abs,
-                output_identity=actual_output,
-            )
+            if initial_workspace.job.state == "in_progress":
+                _complete_workspace(
+                    workspace_abs,
+                    output_identity=actual_output,
+                )
             completed = _load_workspace(workspace_abs)
             if completed.job.state != "completed":
                 raise SafetyError("workspace_completion_not_persisted")
@@ -340,6 +378,12 @@ def _translate_mod_resumable(
         finally:
             if recovery_temp.exists():
                 shutil.rmtree(recovery_temp)
+
+    if (
+        initial_workspace is not None
+        and initial_workspace.job.state == "completed"
+    ):
+        raise SafetyError("completed_workspace_output_missing")
 
     client = client_factory()
     identity = _validated_model_identity(client.exact_model(model), model)
@@ -550,9 +594,16 @@ def _translate_mod_resumable(
             raise SafetyError("output_appeared_before_publication") from exc
         except AtomicPublicationUnavailable as exc:
             raise SafetyError("atomic_no_replace_unavailable") from exc
+        published_identity = _output_tree_identity(output_abs)
+        if published_identity != output_identity:
+            raise SafetyError("finalization_output_identity_mismatch")
+        published_workspace = _load_workspace(workspace_abs)
+        _validate_intended_output_identity(
+            published_workspace, published_identity
+        )
         _complete_workspace(
             workspace_abs,
-            output_identity=output_identity,
+            output_identity=published_identity,
         )
     except BaseException:
         if temp.exists():
@@ -891,20 +942,25 @@ def _render_workspace_candidates(
 
 
 def _output_tree_identity(root: Path) -> OutputTreeIdentity:
+    first = _scan_output_tree_once(root)
+    second = _scan_output_tree_once(root)
+    if first != second:
+        raise SafetyError("finalization_output_tree_unstable")
+    return second.identity
+
+
+def _scan_output_tree_once(root: Path) -> _OutputTreeManifest:
     try:
-        root_before = root.lstat()
+        root_before = _output_directory_manifest_entry(root, Path("."))
     except FileNotFoundError as exc:
         raise SafetyError("finalization_output_missing") from exc
-    if stat.S_ISLNK(root_before.st_mode) or not stat.S_ISDIR(
-        root_before.st_mode
-    ):
-        raise SafetyError("finalization_output_root_not_directory")
 
     digest = hashlib.sha256()
     digest.update(b"stellaris-mod-translator-output-tree-v1\0")
     _update_output_identity_entry(digest, Path("."), b"D", None)
     directory_count = 1
     file_count = 0
+    entries = [root_before]
 
     def fail_walk(error: OSError) -> None:
         raise SafetyError("finalization_output_inventory_failed") from error
@@ -929,6 +985,9 @@ def _output_tree_identity(root: Path) -> OutputTreeIdentity:
                 _update_output_identity_entry(
                     digest, relative, b"D", None
                 )
+                entries.append(
+                    _output_directory_manifest_entry(path, relative)
+                )
                 directory_count += 1
             for name in names:
                 path = current_path / name
@@ -940,30 +999,25 @@ def _output_tree_identity(root: Path) -> OutputTreeIdentity:
                 if value.st_nlink != 1:
                     raise SafetyError("finalization_output_hardlink")
                 relative = path.relative_to(root)
-                _hash_output_file(digest, relative, path)
+                entries.append(_hash_output_file(digest, relative, path))
                 file_count += 1
     except SafetyError:
         raise
     except OSError as exc:
         raise SafetyError("finalization_output_inventory_failed") from exc
 
-    root_after = root.lstat()
-    if (
-        root_after.st_dev,
-        root_after.st_ino,
-        root_after.st_mtime_ns,
-    ) != (
-        root_before.st_dev,
-        root_before.st_ino,
-        root_before.st_mtime_ns,
-    ):
+    root_after = _output_directory_manifest_entry(root, Path("."))
+    if root_after != root_before:
         raise SafetyError("finalization_output_changed_during_read")
     if file_count < 1:
         raise SafetyError("finalization_output_has_no_files")
-    return OutputTreeIdentity(
-        sha256=digest.hexdigest(),
-        file_count=file_count,
-        directory_count=directory_count,
+    return _OutputTreeManifest(
+        identity=OutputTreeIdentity(
+            sha256=digest.hexdigest(),
+            file_count=file_count,
+            directory_count=directory_count,
+        ),
+        entries=tuple(entries),
     )
 
 
@@ -983,7 +1037,7 @@ def _update_output_identity_entry(
 
 def _hash_output_file(
     digest: object, relative: Path, path: Path
-) -> None:
+) -> _OutputManifestEntry:
     flags = (
         os.O_RDONLY
         | getattr(os, "O_NOFOLLOW", 0)
@@ -997,10 +1051,12 @@ def _hash_output_file(
         _update_output_identity_entry(
             digest, relative, b"F", before.st_size
         )
+        content_digest = hashlib.sha256()
         bytes_read = 0
         while chunk := os.read(descriptor, 1024 * 1024):
             bytes_read += len(chunk)
             digest.update(chunk)
+            content_digest.update(chunk)
         after = os.fstat(descriptor)
     finally:
         os.close(descriptor)
@@ -1009,20 +1065,64 @@ def _hash_output_file(
     ):
         raise SafetyError("finalization_output_file_changed_during_read")
     path_after = path.lstat()
-    if (
-        path_after.st_dev,
-        path_after.st_ino,
-        path_after.st_size,
-        path_after.st_mtime_ns,
-        path_after.st_nlink,
-    ) != (
-        after.st_dev,
-        after.st_ino,
-        after.st_size,
-        after.st_mtime_ns,
-        after.st_nlink,
-    ):
+    if _output_stat_identity(path_after) != _output_stat_identity(after):
         raise SafetyError("finalization_output_file_replaced_during_read")
+    return _OutputManifestEntry(
+        relative_path=relative.as_posix(),
+        kind="file",
+        stat_identity=_output_stat_identity(after),
+        content_sha256=content_digest.hexdigest(),
+    )
+
+
+def _output_directory_manifest_entry(
+    path: Path, relative: Path
+) -> _OutputManifestEntry:
+    before = path.lstat()
+    if stat.S_ISLNK(before.st_mode) or not stat.S_ISDIR(before.st_mode):
+        if relative == Path("."):
+            raise SafetyError("finalization_output_root_not_directory")
+        raise SafetyError("finalization_output_directory_type_invalid")
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    descriptor = os.open(path, flags)
+    try:
+        opened = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    after = path.lstat()
+    identity = _output_stat_identity(opened)
+    if (
+        not stat.S_ISDIR(opened.st_mode)
+        or _output_stat_identity(before) != identity
+        or _output_stat_identity(after) != identity
+    ):
+        raise SafetyError("finalization_output_directory_changed_during_read")
+    return _OutputManifestEntry(
+        relative_path=relative.as_posix(),
+        kind="directory",
+        stat_identity=identity,
+        content_sha256=None,
+    )
+
+
+def _output_stat_identity(
+    value: os.stat_result,
+) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_nlink,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
 
 
 def _validate_intended_output_identity(

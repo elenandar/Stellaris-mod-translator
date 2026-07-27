@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import errno
+import fcntl
 from functools import lru_cache
 import os
 from pathlib import Path, PurePosixPath
@@ -21,6 +23,10 @@ _TERMINAL_STATES = frozenset(
 )
 _ALL_STATES = _TERMINAL_STATES | {"pending"}
 _HEX = frozenset("0123456789abcdef")
+_JOURNAL_MAGIC = bytes.fromhex("d9d505f920a163d7")
+_SQLITE_HEADER = b"SQLite format 3\0"
+_MIN_SQLITE_PAGE_SIZE = 512
+_MAX_SQLITE_PAGE_SIZE = 65536
 
 _SCHEMA = """
 CREATE TABLE job (
@@ -173,6 +179,12 @@ class _FileIdentity:
 
 
 @dataclass(frozen=True)
+class _SidecarPreflight:
+    database: _FileIdentity
+    journal: _FileIdentity | None
+
+
+@dataclass(frozen=True)
 class InventoryRow:
     sequence: int
     relative_path: str
@@ -229,6 +241,107 @@ class WorkspaceSnapshot:
     occurrences: tuple[OccurrenceRow, ...]
 
 
+class WorkspaceRunLock:
+    """A process-lifetime advisory lock for one workspace path."""
+
+    def __init__(self, workspace: Path) -> None:
+        self.path = Path(os.fspath(workspace) + ".lock")
+        self.descriptor: int | None = None
+
+    def __enter__(self) -> "WorkspaceRunLock":
+        flags = (
+            os.O_RDWR
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        created = False
+        try:
+            descriptor = os.open(
+                self.path, flags | os.O_CREAT | os.O_EXCL, 0o600
+            )
+            created = True
+        except FileExistsError:
+            try:
+                descriptor = os.open(self.path, flags)
+            except OSError as exc:
+                raise WorkspaceError("workspace_lock_file_unsafe") from exc
+        except OSError as exc:
+            raise WorkspaceError("workspace_lock_creation_failed") from exc
+
+        try:
+            if created:
+                os.fchmod(descriptor, 0o600)
+            value = os.fstat(descriptor)
+            if not stat.S_ISREG(value.st_mode):
+                raise WorkspaceError("workspace_lock_not_regular")
+            if value.st_nlink != 1:
+                raise WorkspaceError("workspace_lock_link_count_invalid")
+            if stat.S_IMODE(value.st_mode) != 0o600:
+                raise WorkspaceError("workspace_lock_mode_invalid")
+            try:
+                path_value = self.path.lstat()
+            except OSError as exc:
+                raise WorkspaceError("workspace_lock_replaced") from exc
+            if (
+                path_value.st_dev,
+                path_value.st_ino,
+            ) != (
+                value.st_dev,
+                value.st_ino,
+            ):
+                raise WorkspaceError("workspace_lock_replaced")
+            try:
+                fcntl.flock(
+                    descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB
+                )
+            except BlockingIOError as exc:
+                raise WorkspaceError("workspace_already_in_use") from exc
+            except OSError as exc:
+                if exc.errno in (errno.EACCES, errno.EAGAIN):
+                    raise WorkspaceError("workspace_already_in_use") from exc
+                raise WorkspaceError("workspace_lock_failed") from exc
+            locked_value = os.fstat(descriptor)
+            try:
+                path_value = self.path.lstat()
+            except OSError as exc:
+                raise WorkspaceError("workspace_lock_changed") from exc
+            if (
+                locked_value.st_dev,
+                locked_value.st_ino,
+                locked_value.st_nlink,
+                stat.S_IMODE(locked_value.st_mode),
+            ) != (
+                path_value.st_dev,
+                path_value.st_ino,
+                path_value.st_nlink,
+                stat.S_IMODE(path_value.st_mode),
+            ):
+                raise WorkspaceError("workspace_lock_changed")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        self.descriptor = descriptor
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self.descriptor is None:
+            return
+        descriptor = self.descriptor
+        self.descriptor = None
+        unlock_error: OSError | None = None
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        except OSError as exc:
+            unlock_error = exc
+        finally:
+            os.close(descriptor)
+        if unlock_error is not None and exc_info[0] is None:
+            raise WorkspaceError(
+                "workspace_lock_release_failed"
+            ) from unlock_error
+
+
 def create_workspace(
     path: Path,
     *,
@@ -258,6 +371,7 @@ def create_workspace(
     try:
         if _require_workspace_file(path) != created_identity:
             raise WorkspaceError("workspace_replaced_during_creation")
+        _preflight_workspace_sidecars(path)
         connection = sqlite3.connect(path)
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA journal_mode = DELETE")
@@ -376,7 +490,8 @@ def load_workspace(path: Path) -> WorkspaceSnapshot:
 
 
 def _load_workspace_read_only(path: Path) -> WorkspaceSnapshot:
-    before = _require_workspace_file(path)
+    preflight = _preflight_workspace_sidecars(path)
+    before = preflight.database
     connection: sqlite3.Connection | None = None
     try:
         connection = sqlite3.connect(_read_only_uri(path), uri=True)
@@ -404,7 +519,10 @@ def _load_workspace_read_only(path: Path) -> WorkspaceSnapshot:
     except WorkspaceError:
         raise
     except sqlite3.OperationalError as exc:
-        if _is_readonly_recovery_error(exc) and _journal_path(path).exists():
+        if (
+            _is_readonly_recovery_error(exc)
+            and preflight.journal is not None
+        ):
             raise _HotJournalRecoveryRequired() from exc
         raise WorkspaceError("workspace_database_invalid") from exc
     except (sqlite3.DatabaseError, UnicodeError, TypeError, ValueError) as exc:
@@ -432,7 +550,7 @@ class WorkspaceWriter:
         self.connection: sqlite3.Connection | None = None
 
     def __enter__(self) -> "WorkspaceWriter":
-        before = _require_workspace_file(self.path)
+        before = _preflight_workspace_sidecars(self.path).database
         connection: sqlite3.Connection | None = None
         try:
             connection = sqlite3.connect(self.path)
@@ -954,9 +1072,12 @@ def _validate_checkpoint_payload(
 
 
 def _recover_hot_delete_journal(path: Path) -> None:
-    database_before = _require_workspace_file(path)
+    preflight = _preflight_workspace_sidecars(path)
+    database_before = preflight.database
+    journal_before = preflight.journal
+    if journal_before is None:
+        raise WorkspaceError("workspace_hot_journal_missing")
     journal = _journal_path(path)
-    _require_journal_file(journal)
     connection: sqlite3.Connection | None = None
     try:
         connection = sqlite3.connect(path)
@@ -1004,20 +1125,318 @@ def _require_workspace_file(path: Path) -> _FileIdentity:
     return _identity_from_stat(value)
 
 
-def _require_journal_file(path: Path) -> _FileIdentity:
+def _preflight_workspace_sidecars(path: Path) -> _SidecarPreflight:
+    database = _require_workspace_file(path)
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(os.fspath(path) + suffix)
+        descriptor_and_identity = _open_validated_sidecar(
+            sidecar, suffix[1:]
+        )
+        if descriptor_and_identity is None:
+            continue
+        descriptor, _ = descriptor_and_identity
+        os.close(descriptor)
+        raise WorkspaceError(f"workspace_{suffix[1:]}_not_permitted")
+
+    journal = _journal_path(path)
+    descriptor_and_identity = _open_validated_sidecar(journal, "journal")
+    if descriptor_and_identity is None:
+        return _SidecarPreflight(database=database, journal=None)
+    descriptor, journal_identity = descriptor_and_identity
     try:
-        value = path.lstat()
-    except FileNotFoundError as exc:
-        raise WorkspaceError("workspace_hot_journal_missing") from exc
-    if stat.S_ISLNK(value.st_mode) or not stat.S_ISREG(value.st_mode):
-        raise WorkspaceError("workspace_hot_journal_not_regular")
-    if value.st_nlink != 1:
-        raise WorkspaceError("workspace_hot_journal_link_count_invalid")
-    if stat.S_IMODE(value.st_mode) != 0o600:
-        raise WorkspaceError("workspace_hot_journal_mode_invalid")
-    if value.st_size <= 0:
+        _validate_hot_delete_journal(
+            database_path=path,
+            database_identity=database,
+            journal_path=journal,
+            journal_descriptor=descriptor,
+            journal_identity=journal_identity,
+        )
+    finally:
+        os.close(descriptor)
+
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(os.fspath(path) + suffix)
+        descriptor_and_identity = _open_validated_sidecar(
+            sidecar, suffix[1:]
+        )
+        if descriptor_and_identity is None:
+            continue
+        descriptor, _ = descriptor_and_identity
+        os.close(descriptor)
+        raise WorkspaceError(f"workspace_{suffix[1:]}_not_permitted")
+    if _require_sidecar_identity(journal, "journal") != journal_identity:
+        raise WorkspaceError("workspace_hot_journal_changed_during_preflight")
+    if _require_workspace_file(path) != database:
+        raise WorkspaceError("workspace_changed_during_sidecar_preflight")
+    return _SidecarPreflight(database=database, journal=journal_identity)
+
+
+def _open_validated_sidecar(
+    path: Path, kind: str
+) -> tuple[int, _FileIdentity] | None:
+    try:
+        before = path.lstat()
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+        raise WorkspaceError(f"workspace_{kind}_not_regular")
+
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise WorkspaceError(f"workspace_{kind}_open_failed") from exc
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode):
+            raise WorkspaceError(f"workspace_{kind}_not_regular")
+        if opened.st_nlink != 1:
+            raise WorkspaceError(f"workspace_{kind}_link_count_invalid")
+        if stat.S_IMODE(opened.st_mode) != 0o600:
+            raise WorkspaceError(f"workspace_{kind}_mode_invalid")
+        identity = _identity_from_stat(opened)
+        if _identity_from_stat(before) != identity:
+            raise WorkspaceError(f"workspace_{kind}_replaced_before_open")
+        try:
+            after = path.lstat()
+        except OSError as exc:
+            raise WorkspaceError(f"workspace_{kind}_replaced_during_open") from exc
+        if _identity_from_stat(after) != identity:
+            raise WorkspaceError(f"workspace_{kind}_replaced_during_open")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor, identity
+
+
+def _require_sidecar_identity(path: Path, kind: str) -> _FileIdentity:
+    descriptor_and_identity = _open_validated_sidecar(path, kind)
+    if descriptor_and_identity is None:
+        raise WorkspaceError(f"workspace_{kind}_missing")
+    descriptor, identity = descriptor_and_identity
+    os.close(descriptor)
+    return identity
+
+
+def _validate_hot_delete_journal(
+    *,
+    database_path: Path,
+    database_identity: _FileIdentity,
+    journal_path: Path,
+    journal_descriptor: int,
+    journal_identity: _FileIdentity,
+) -> None:
+    if journal_identity.size <= 0:
         raise WorkspaceError("workspace_hot_journal_empty")
-    return _identity_from_stat(value)
+
+    database_descriptor = _open_database_descriptor(
+        database_path, database_identity
+    )
+    try:
+        database_header = _pread_exact(database_descriptor, 100, 0)
+        database_after = _identity_from_stat(os.fstat(database_descriptor))
+    finally:
+        os.close(database_descriptor)
+    if database_after != database_identity:
+        raise WorkspaceError("workspace_changed_during_journal_validation")
+    if (
+        len(database_header) != 100
+        or database_header[:16] != _SQLITE_HEADER
+    ):
+        raise WorkspaceError("workspace_hot_journal_database_header_invalid")
+    database_page_size = int.from_bytes(database_header[16:18], "big")
+    if database_page_size == 1:
+        database_page_size = _MAX_SQLITE_PAGE_SIZE
+    if not _valid_page_size(database_page_size):
+        raise WorkspaceError("workspace_hot_journal_page_size_invalid")
+    database_page_count = int.from_bytes(database_header[28:32], "big")
+    if (
+        database_page_count < 1
+        or database_identity.size
+        < database_page_count * database_page_size
+    ):
+        raise WorkspaceError("workspace_hot_journal_database_size_invalid")
+
+    offset = 0
+    validated_headers = 0
+    while offset < journal_identity.size:
+        header = _pread_exact(journal_descriptor, 28, offset)
+        if len(header) != 28:
+            raise WorkspaceError("workspace_hot_journal_malformed")
+        magic = header[:8]
+        record_count = int.from_bytes(header[8:12], "big")
+        nonce = int.from_bytes(header[12:16], "big")
+        initial_page_count = int.from_bytes(header[16:20], "big")
+        sector_size = int.from_bytes(header[20:24], "big")
+        page_size = int.from_bytes(header[24:28], "big")
+
+        if magic != _JOURNAL_MAGIC:
+            if (
+                validated_headers > 0
+                and magic == b"\0" * 8
+                and record_count == 0
+                and initial_page_count == database_page_count
+                and sector_size >= _MIN_SQLITE_PAGE_SIZE
+                and sector_size <= _MAX_SQLITE_PAGE_SIZE
+                and _power_of_two(sector_size)
+                and page_size == database_page_size
+                and offset + sector_size <= journal_identity.size
+                and not any(
+                    _pread_exact(
+                        journal_descriptor,
+                        sector_size - 28,
+                        offset + 28,
+                    )
+                )
+            ):
+                break
+            raise WorkspaceError("workspace_hot_journal_malformed")
+        if (
+            record_count < 1
+            or record_count == 0xFFFFFFFF
+            or initial_page_count != database_page_count
+            or initial_page_count < 1
+            or sector_size < _MIN_SQLITE_PAGE_SIZE
+            or sector_size > _MAX_SQLITE_PAGE_SIZE
+            or not _power_of_two(sector_size)
+            or page_size != database_page_size
+            or not _valid_page_size(page_size)
+        ):
+            raise WorkspaceError("workspace_hot_journal_malformed")
+        header_padding = _pread_exact(
+            journal_descriptor, sector_size - 28, offset + 28
+        )
+        if (
+            len(header_padding) != sector_size - 28
+            or any(header_padding)
+        ):
+            raise WorkspaceError("workspace_hot_journal_malformed")
+
+        record_size = page_size + 8
+        records_start = offset + sector_size
+        records_end = records_start + record_count * record_size
+        if records_end > journal_identity.size:
+            raise WorkspaceError("workspace_hot_journal_malformed")
+        for record_index in range(record_count):
+            record_offset = records_start + record_index * record_size
+            record = _pread_exact(
+                journal_descriptor, record_size, record_offset
+            )
+            if len(record) != record_size:
+                raise WorkspaceError("workspace_hot_journal_malformed")
+            page_number = int.from_bytes(record[:4], "big")
+            if page_number < 1 or page_number > initial_page_count:
+                raise WorkspaceError("workspace_hot_journal_malformed")
+            page = record[4 : 4 + page_size]
+            stored_checksum = int.from_bytes(record[-4:], "big")
+            if stored_checksum != _journal_checksum(page, nonce):
+                raise WorkspaceError("workspace_hot_journal_malformed")
+        validated_headers += 1
+        if records_end == journal_identity.size:
+            break
+        next_offset = _align_up(records_end, sector_size)
+        if next_offset > journal_identity.size:
+            padding = _pread_exact(
+                journal_descriptor,
+                journal_identity.size - records_end,
+                records_end,
+            )
+            if any(padding):
+                raise WorkspaceError("workspace_hot_journal_malformed")
+            break
+        padding = _pread_exact(
+            journal_descriptor, next_offset - records_end, records_end
+        )
+        if len(padding) != next_offset - records_end or any(padding):
+            raise WorkspaceError("workspace_hot_journal_malformed")
+        if next_offset == journal_identity.size:
+            break
+        offset = next_offset
+
+    if validated_headers < 1:
+        raise WorkspaceError("workspace_hot_journal_malformed")
+    journal_after = _identity_from_stat(os.fstat(journal_descriptor))
+    if journal_after != journal_identity:
+        raise WorkspaceError("workspace_hot_journal_changed_during_preflight")
+    if _require_sidecar_identity(journal_path, "journal") != journal_identity:
+        raise WorkspaceError("workspace_hot_journal_replaced_during_preflight")
+
+
+def _open_database_descriptor(
+    path: Path, expected: _FileIdentity
+) -> int:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise WorkspaceError("workspace_database_open_failed") from exc
+    try:
+        value = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(value.st_mode)
+            or stat.S_IMODE(value.st_mode) != 0o600
+            or _identity_from_stat(value) != expected
+        ):
+            raise WorkspaceError("workspace_replaced_before_database_open")
+        try:
+            path_value = path.lstat()
+        except OSError as exc:
+            raise WorkspaceError(
+                "workspace_replaced_before_database_open"
+            ) from exc
+        if _identity_from_stat(path_value) != expected:
+            raise WorkspaceError("workspace_replaced_before_database_open")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _pread_exact(descriptor: int, size: int, offset: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = size
+    while remaining > 0:
+        chunk = os.pread(descriptor, remaining, offset)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        offset += len(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _valid_page_size(value: int) -> bool:
+    return (
+        _MIN_SQLITE_PAGE_SIZE <= value <= _MAX_SQLITE_PAGE_SIZE
+        and _power_of_two(value)
+    )
+
+
+def _power_of_two(value: int) -> bool:
+    return value > 0 and value & (value - 1) == 0
+
+
+def _align_up(value: int, alignment: int) -> int:
+    return (value + alignment - 1) // alignment * alignment
+
+
+def _journal_checksum(page: bytes, nonce: int) -> int:
+    checksum = nonce
+    index = len(page) - 200
+    while index > 0:
+        checksum = (checksum + page[index]) & 0xFFFFFFFF
+        index -= 200
+    return checksum
 
 
 def _identity_from_stat(value: os.stat_result) -> _FileIdentity:

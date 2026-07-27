@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import multiprocessing
 import os
 from pathlib import Path
+import shutil
 import sqlite3
+import stat
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -17,6 +22,7 @@ from stellaris_mod_translator.workspace import (
     InventoryRow,
     OccurrenceRow,
     WorkspaceError,
+    WorkspaceRunLock,
     WorkspaceWriter,
     create_workspace,
     load_workspace,
@@ -58,6 +64,71 @@ def paths(tmp_path: Path) -> tuple[Path, Path]:
         tmp_path / "candidate",
         tmp_path / "job.smt-workspace.sqlite3",
     )
+
+
+def make_empty_workspace(tmp_path: Path) -> Path:
+    workspace = tmp_path / "empty.smt-workspace.sqlite3"
+    digest = "0" * 64
+    create_workspace(
+        workspace,
+        source_path="/synthetic/source",
+        output_path="/synthetic/output",
+        source_tree_sha256=digest,
+        inventory_sha256=digest,
+        parser_order_version="synthetic-parser",
+        model_tag="synthetic:1",
+        model_digest="sha256:synthetic",
+        prompt_profile_hash=digest,
+        inventory=(),
+        occurrences=(),
+    )
+    return workspace
+
+
+def parallel_resume_worker(
+    source: str,
+    output: str,
+    workspace: str,
+    calls: object,
+    inventory_calls: object,
+    entered: object,
+    release: object,
+    results: object,
+) -> None:
+    class BarrierClient:
+        def exact_model(self, tag: str) -> dict[str, str]:
+            with inventory_calls.get_lock():
+                inventory_calls.value += 1
+            return {"tag": tag, "digest": "sha256:synthetic"}
+
+        def translate(self, *, tag: str, text: str) -> str:
+            with calls.get_lock():
+                calls.value += 1
+            entered.set()
+            if not release.wait(10):
+                raise RuntimeError("parallel_test_barrier_timeout")
+            return "RU " + text
+
+    try:
+        report = translate_mod(
+            Path(source),
+            Path(output),
+            "synthetic:1",
+            workspace=Path(workspace),
+            resume=True,
+            client_factory=BarrierClient,
+        )
+    except BaseException as exc:
+        results.put(("error", type(exc).__name__, str(exc)))
+    else:
+        results.put(("success", report["status"], ""))
+
+
+def lock_holder(workspace: str, acquired: object) -> None:
+    with WorkspaceRunLock(Path(workspace)):
+        acquired.set()
+        while True:
+            time.sleep(60)
 
 
 def crash_after_publish(
@@ -503,6 +574,243 @@ def test_hardlinked_workspace_is_rejected_before_sqlite_open(
         )
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [b"", b"\0" * 4096, b"not-a-sqlite-journal" * 256],
+    ids=["empty", "zero-filled", "arbitrary-nonzero"],
+)
+def test_malformed_journal_is_rejected_before_sqlite_open_without_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    payload: bytes,
+) -> None:
+    workspace = make_empty_workspace(tmp_path)
+    source = make_source(tmp_path)
+    output = tmp_path / "candidate"
+    journal = Path(os.fspath(workspace) + "-journal")
+    journal.write_bytes(payload)
+    journal.chmod(0o600)
+    database_before = hashlib.sha256(workspace.read_bytes()).hexdigest()
+
+    def forbidden_connect(*args: object, **kwargs: object) -> None:
+        raise AssertionError("sqlite_opened_before_sidecar_preflight")
+
+    monkeypatch.setattr(workspace_module.sqlite3, "connect", forbidden_connect)
+    with pytest.raises(SafetyError, match="hot_journal_(empty|malformed)"):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            resume=True,
+            client_factory=SyntheticClient,
+        )
+
+    assert journal.read_bytes() == payload
+    assert hashlib.sha256(workspace.read_bytes()).hexdigest() == database_before
+
+
+@pytest.mark.parametrize("suffix", ["-wal", "-shm"])
+def test_wal_and_shm_are_rejected_before_sqlite_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    suffix: str,
+) -> None:
+    workspace = make_empty_workspace(tmp_path)
+    source = make_source(tmp_path)
+    output = tmp_path / "candidate"
+    sidecar = Path(os.fspath(workspace) + suffix)
+    sidecar.write_bytes(b"synthetic-sidecar")
+    sidecar.chmod(0o600)
+    database_before = hashlib.sha256(workspace.read_bytes()).hexdigest()
+
+    def forbidden_connect(*args: object, **kwargs: object) -> None:
+        raise AssertionError("sqlite_opened_before_sidecar_preflight")
+
+    monkeypatch.setattr(workspace_module.sqlite3, "connect", forbidden_connect)
+    with pytest.raises(SafetyError, match=f"{suffix[1:]}_not_permitted"):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            resume=True,
+            client_factory=SyntheticClient,
+        )
+
+    assert sidecar.read_bytes() == b"synthetic-sidecar"
+    assert hashlib.sha256(workspace.read_bytes()).hexdigest() == database_before
+
+
+@pytest.mark.parametrize(
+    ("kind", "error"),
+    [
+        ("symlink", "journal_not_regular"),
+        ("hardlink", "journal_link_count_invalid"),
+        ("wrong-mode", "journal_mode_invalid"),
+    ],
+)
+def test_unsafe_journal_identity_is_rejected_before_sqlite_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    error: str,
+) -> None:
+    workspace = make_empty_workspace(tmp_path)
+    journal = Path(os.fspath(workspace) + "-journal")
+    target = tmp_path / "journal-target"
+    target.write_bytes(b"x" * 4096)
+    target.chmod(0o600)
+    if kind == "symlink":
+        journal.symlink_to(target)
+    elif kind == "hardlink":
+        os.link(target, journal)
+    else:
+        journal.write_bytes(b"x" * 4096)
+        journal.chmod(0o644)
+
+    def forbidden_connect(*args: object, **kwargs: object) -> None:
+        raise AssertionError("sqlite_opened_before_sidecar_preflight")
+
+    monkeypatch.setattr(workspace_module.sqlite3, "connect", forbidden_connect)
+    with pytest.raises(WorkspaceError, match=error):
+        load_workspace(workspace)
+
+
+def test_fifo_journal_fails_fast_without_sqlite_open_or_mutation(
+    tmp_path: Path,
+) -> None:
+    workspace = make_empty_workspace(tmp_path)
+    journal = Path(os.fspath(workspace) + "-journal")
+    os.mkfifo(journal, 0o600)
+    database_before = hashlib.sha256(workspace.read_bytes()).hexdigest()
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    code = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from stellaris_mod_translator.workspace import "
+        "WorkspaceError, load_workspace\n"
+        "try:\n"
+        "    load_workspace(Path(sys.argv[1]))\n"
+        "except WorkspaceError as exc:\n"
+        "    print(exc)\n"
+        "    raise SystemExit(23)\n"
+        "raise SystemExit(99)\n"
+    )
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.fspath(source_root)
+
+    result = subprocess.run(
+        [sys.executable, "-c", code, os.fspath(workspace)],
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+        timeout=3,
+    )
+
+    assert result.returncode == 23
+    assert result.stdout.strip() == "workspace_journal_not_regular"
+    assert hashlib.sha256(workspace.read_bytes()).hexdigest() == database_before
+    assert stat.S_ISFIFO(journal.lstat().st_mode)
+
+
+def test_parallel_resume_has_one_model_caller_and_one_checkpoint_writer(
+    tmp_path: Path,
+) -> None:
+    source = make_source(
+        tmp_path,
+        b'l_english:\n one:0 "Deterministic sentence"\n',
+    )
+    output, workspace = paths(tmp_path)
+
+    class PendingClient(SyntheticClient):
+        def translate(self, *, tag: str, text: str) -> str:
+            raise OllamaError("synthetic transport stop")
+
+    with pytest.raises(OllamaError, match="synthetic transport stop"):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            client_factory=PendingClient,
+        )
+    before = load_workspace(workspace)
+    assert before.job.run_count == 1
+    assert before.job.completed_count == 0
+
+    context = multiprocessing.get_context("spawn")
+    calls = context.Value("i", 0)
+    inventory_calls = context.Value("i", 0)
+    entered = context.Event()
+    release = context.Event()
+    results = context.Queue()
+    arguments = (
+        os.fspath(source),
+        os.fspath(output),
+        os.fspath(workspace),
+        calls,
+        inventory_calls,
+        entered,
+        release,
+        results,
+    )
+    first = context.Process(target=parallel_resume_worker, args=arguments)
+    second = context.Process(target=parallel_resume_worker, args=arguments)
+    first.start()
+    assert entered.wait(5)
+    second.start()
+    second.join(5)
+    assert not second.is_alive()
+    release.set()
+    first.join(10)
+    assert not first.is_alive()
+    assert first.exitcode == 0
+    assert second.exitcode == 0
+
+    outcomes = [results.get(timeout=2), results.get(timeout=2)]
+    assert sorted(item[0] for item in outcomes) == ["error", "success"]
+    assert any(
+        item[0] == "error" and item[2] == "workspace_already_in_use"
+        for item in outcomes
+    )
+    assert calls.value == 1
+    assert inventory_calls.value == 2
+    snapshot = load_workspace(workspace)
+    assert snapshot.job.run_count == 2
+    assert snapshot.job.completed_count == 1
+    assert snapshot.job.state == "completed"
+    assert (
+        output / "localisation/russian/demo_l_russian.yml"
+    ).read_bytes() == (
+        b'l_russian:\n one:0 "RU Deterministic sentence"\n'
+    )
+
+
+def test_workspace_lock_is_released_by_kernel_after_process_kill(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "kill-recovery.smt-workspace.sqlite3"
+    context = multiprocessing.get_context("spawn")
+    acquired = context.Event()
+    process = context.Process(
+        target=lock_holder, args=(os.fspath(workspace), acquired)
+    )
+    process.start()
+    assert acquired.wait(5)
+    process.terminate()
+    process.join(5)
+    assert not process.is_alive()
+
+    with WorkspaceRunLock(workspace):
+        pass
+
+    lock_path = Path(os.fspath(workspace) + ".lock")
+    assert stat.S_ISREG(lock_path.lstat().st_mode)
+    assert stat.S_IMODE(lock_path.stat().st_mode) == 0o600
+
+
 def test_real_hot_delete_journal_is_recovered_before_readonly_validation(
     tmp_path: Path,
 ) -> None:
@@ -574,6 +882,159 @@ def test_real_hot_delete_journal_is_recovered_before_readonly_validation(
     assert snapshot.job.completed_count == 0
     assert all(row.state == "pending" for row in snapshot.occurrences)
     assert not journal.exists()
+
+
+def test_published_tree_change_between_manifest_passes_blocks_completion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = make_source(tmp_path)
+    output, workspace = paths(tmp_path)
+    real_hash_output_file = engine._hash_output_file
+    changed = False
+
+    def change_report_while_next_yml_is_read(
+        digest: object, relative: Path, path: Path
+    ) -> object:
+        nonlocal changed
+        if (
+            not changed
+            and path.suffix == ".yml"
+            and output in path.parents
+        ):
+            report = output / "translation-report.json"
+            report.write_bytes(report.read_bytes() + b" ")
+            changed = True
+        return real_hash_output_file(digest, relative, path)
+
+    monkeypatch.setattr(
+        engine, "_hash_output_file", change_report_while_next_yml_is_read
+    )
+    with pytest.raises(
+        SafetyError, match="finalization_output_tree_unstable"
+    ):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            client_factory=SyntheticClient,
+        )
+
+    assert changed is True
+    snapshot = load_workspace(workspace)
+    assert snapshot.job.state == "in_progress"
+    assert snapshot.job.finalization_state == "intent"
+    assert output.is_dir()
+
+
+def test_lost_success_after_completion_commit_resumes_idempotently(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = make_source(tmp_path)
+    output, workspace = paths(tmp_path)
+    real_complete = engine._complete_workspace
+
+    def complete_then_lose_success(
+        workspace_path: Path, *, output_identity: object
+    ) -> None:
+        real_complete(
+            workspace_path,
+            output_identity=output_identity,
+        )
+        raise SafetyError("synthetic_success_response_lost")
+
+    monkeypatch.setattr(
+        engine, "_complete_workspace", complete_then_lose_success
+    )
+    with pytest.raises(
+        SafetyError, match="synthetic_success_response_lost"
+    ):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            client_factory=SyntheticClient,
+        )
+    monkeypatch.setattr(engine, "_complete_workspace", real_complete)
+
+    committed = load_workspace(workspace)
+    assert committed.job.state == "completed"
+    run_count = committed.job.run_count
+    workspace_hash = hashlib.sha256(workspace.read_bytes()).hexdigest()
+    output_inode = output.stat().st_ino
+    published_report = json.loads(
+        (output / "translation-report.json").read_text()
+    )
+    factory_calls = 0
+
+    def forbidden_client_factory() -> SyntheticClient:
+        nonlocal factory_calls
+        factory_calls += 1
+        raise AssertionError("completed_resume_created_model_client")
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        workspace=workspace,
+        resume=True,
+        client_factory=forbidden_client_factory,
+    )
+
+    assert report == published_report
+    assert factory_calls == 0
+    assert output.stat().st_ino == output_inode
+    assert hashlib.sha256(workspace.read_bytes()).hexdigest() == workspace_hash
+    resumed = load_workspace(workspace)
+    assert resumed.job.state == "completed"
+    assert resumed.job.run_count == run_count
+
+
+@pytest.mark.parametrize("tamper", ["missing", "changed"])
+def test_completed_resume_rejects_missing_or_changed_output_read_only(
+    tmp_path: Path,
+    tamper: str,
+) -> None:
+    source = make_source(tmp_path)
+    output, workspace = paths(tmp_path)
+    translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        workspace=workspace,
+        client_factory=SyntheticClient,
+    )
+    if tamper == "missing":
+        shutil.rmtree(output)
+        expected_error = "completed_workspace_output_missing"
+    else:
+        report = output / "translation-report.json"
+        report.write_bytes(report.read_bytes() + b" ")
+        expected_error = "finalization_output_identity_mismatch"
+    workspace_hash = hashlib.sha256(workspace.read_bytes()).hexdigest()
+    factory_calls = 0
+
+    def forbidden_client_factory() -> SyntheticClient:
+        nonlocal factory_calls
+        factory_calls += 1
+        raise AssertionError("completed_resume_created_model_client")
+
+    with pytest.raises(SafetyError, match=expected_error):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            resume=True,
+            client_factory=forbidden_client_factory,
+        )
+
+    assert factory_calls == 0
+    assert hashlib.sha256(workspace.read_bytes()).hexdigest() == workspace_hash
+    assert load_workspace(workspace).job.state == "completed"
 
 
 def test_echo_results_are_not_stored_and_resume_never_recalls_model(

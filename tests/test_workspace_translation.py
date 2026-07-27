@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import sqlite3
@@ -842,7 +843,7 @@ def test_publication_race_preserves_destination_and_keeps_workspace_in_progress(
     assert list(tmp_path.glob(".candidate.tmp-*")) == []
 
 
-def test_completed_workspace_cannot_be_resumed_or_republished(
+def test_completed_workspace_resume_is_idempotent_and_not_republished(
     tmp_path: Path,
 ) -> None:
     source = make_source(tmp_path)
@@ -855,16 +856,24 @@ def test_completed_workspace_cannot_be_resumed_or_republished(
         client_factory=lambda: SyntheticClient(),
     )
     client = SyntheticClient()
+    output_inode = output.stat().st_ino
+    workspace_before = hashlib.sha256(workspace.read_bytes()).hexdigest()
+    run_count = load_workspace(workspace).job.run_count
 
-    with pytest.raises(SafetyError, match="workspace_already_completed"):
-        translate_mod(
-            source,
-            output,
-            "synthetic:1",
-            workspace=workspace,
-            resume=True,
-            client_factory=lambda: client,
-        )
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        workspace=workspace,
+        resume=True,
+        client_factory=lambda: client,
+    )
 
     assert client.inventory_calls == 0
     assert client.calls == []
+    assert output.stat().st_ino == output_inode
+    assert hashlib.sha256(workspace.read_bytes()).hexdigest() == workspace_before
+    assert load_workspace(workspace).job.run_count == run_count
+    assert report == json.loads(
+        (output / "translation-report.json").read_text()
+    )

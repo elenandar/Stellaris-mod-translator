@@ -110,8 +110,9 @@ human review. Наличие кириллицы не является техни
 флаг `--resume`. Workspace-режим несовместим с `--dry-run` и
 `--max-occurrences-per-file`; source, workspace и intended output не могут
 пересекаться. Пока хотя бы один поддержанный occurrence остаётся `pending`,
-output отсутствует. Завершённый workspace нельзя продолжить или использовать
-для повторной публикации.
+output отсутствует. `--resume` завершённого workspace работает только как
+идемпотентное read-only подтверждение уже опубликованного exact output и
+никогда не вызывает модель или повторную публикацию.
 
 Workspace — private local data: он содержит сохранённые переводы и не должен
 попадать в Git, backup общего доступа, issue или PR. Файл создаётся с mode
@@ -121,6 +122,12 @@ sidecars. В БД не копируются raw source files или полный
 только изменивший span проверенный model result. Для `accepted_unchanged`
 model result всегда `NULL`, а финальный render воспроизводит original source
 span; model echo не создаёт скрытую копию английского корпуса в workspace.
+Соседний mode-`0600` файл `<workspace>.lock` хранит process-lifetime advisory
+lease. Lease захватывается до SQLite recovery/preflight, `run_count`, создания
+клиента, model call и finalization и удерживается до возврата или исключения.
+Конкурирующий процесс немедленно получает `workspace_already_in_use`; kernel
+автоматически снимает lease при обычном exit и при kill/crash. Сам lock-файл
+может безопасно остаться на диске и повторно используется следующим процессом.
 
 После каждого законченного occurrence terminal state
 `accepted_changed`, `accepted_unchanged` или `model_fallback` фиксируется
@@ -133,13 +140,18 @@ path, parser/order version, prompt profile и exact model tag/digest до пер
 отправляются. Если остановка произошла после model call, но до SQLite commit,
 только этот незафиксированный вызов может повториться.
 
-Обычный resume preflight открывает workspace read-only и включает SQLite
-`query_only`. Единственное разрешённое изменение до успешной валидации —
-необходимый SQLite rollback hot `DELETE` journal после отдельной проверки, что
-БД и journal являются одиночными regular files с ожидаемыми mode/link count.
-После rollback весь strict read-only preflight выполняется заново. Любой другой
-sidecar, link/type/mode/schema mismatch или SQLite failure останавливает запуск
-контролируемой ошибкой.
+До любого SQLite open preflight проверяет БД и возможные `-journal`, `-wal`,
+`-shm` через `lstat` и descriptors с `O_NOFOLLOW`/`O_NONBLOCK`. Для
+DELETE-journal workspace любой `-wal` или `-shm` запрещён. Journal должен быть
+одиночным regular mode-`0600` файлом и structurally valid hot rollback
+journal: проверяются SQLite magic, linkage к DB page size/count, sector/header
+границы, committed page records и checksums. FIFO, socket, device, symlink,
+hardlink, неверный mode, empty, zero-filled и malformed journal отклоняются до
+SQLite и не удаляются. Обычный resume затем открывает workspace read-only с
+`query_only`; единственное разрешённое изменение до успешной валидации —
+rollback уже проверенного hot `DELETE` journal. Физическая identity БД и
+journal повторно проверяется вокруг recovery, а после rollback весь strict
+read-only preflight выполняется заново.
 
 Сохранённые результаты не считаются доверенными: перед resume и финальным
 render каждый `accepted_changed` повторно проходит текущий
@@ -158,7 +170,10 @@ per-entry fallback, чтобы не менять принятую семанти
 каталоге и сохраняет durable finalization intent с точной identity всего output
 tree: relative paths, file/directory types и file bytes. Только после этого
 выполняется atomic no-clobber rename, а отдельная завершающая transaction
-переводит workspace в `completed`.
+переводит workspace в `completed`. Перед этой transaction уже опубликованный
+tree читается двумя независимыми полными descriptor-checked проходами.
+Path/type/bytes и stat identities обоих manifests должны полностью совпасть;
+только стабильная logical identity сравнивается с durable intent.
 
 Если процесс остановлен после intent, но до rename, `--resume` без новых model
 calls заново строит и проверяет тот же tree, публикует его и завершает
@@ -167,7 +182,10 @@ tree из проверенных source и checkpoints, требует точн�
 intent и уже опубликованного tree, не обращается к Ollama, не публикует его
 повторно и выполняет только completion transaction. Missing/extra/changed file,
 symlink, special file или hardlink означает fail-closed без изменения
-output/workspace.
+output/workspace. Если completion transaction уже закоммитилась, но успешный
+ответ процесса потерян, следующий `--resume` выполняет те же read-only
+source/config/provenance и stable-tree проверки, возвращает существующий
+truthful report как успешный идемпотентный результат и не меняет `run_count`.
 
 Отчёт честно фиксирует, что в момент создания workspace был `in_progress` и
 сам отчёт не аттестует более поздний completion; он содержит resumability
@@ -180,6 +198,15 @@ MVP-4 пока подтверждён только synthetic data: private mods 
 использовались. Candidate остаётся отдельным от active game paths, не
 регистрируется в launcher и всегда требует human review. Применение реального
 `pilot-02` — отдельный будущий live gate с новым явным разрешением владельца.
+Advisory lease и два manifest-прохода закрывают нормальную process concurrency
+и обнаруживаемые изменения дерева, но не являются абсолютной защитой от
+hostile same-UID процесса, который сознательно обходит lease и успевает
+подменять и восстанавливать paths/bytes/stat между проверками.
+
+Текущий synthetic validation baseline: `264 passed` при полном
+`python3 -m pytest -W error`; отдельные regressions покрывают unsafe SQLite
+sidecars, настоящий hot journal, parallel resume, crash/finalization,
+stable-tree reconciliation, completed resume и legacy single-pass semantics.
 
 ## Локальный editorial review pack
 
