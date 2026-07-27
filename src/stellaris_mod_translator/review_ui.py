@@ -16,13 +16,14 @@ FULL_REVIEW_HTML_SHELL = r"""<!doctype html>
 button,input,select,textarea{font:inherit}button,select,input,textarea{color:var(--text);background:#111722;border:1px solid var(--line);border-radius:8px}
 button{padding:.55rem .8rem;cursor:pointer}button:hover:not(:disabled){border-color:var(--accent)}button:disabled{cursor:not-allowed;opacity:.45}
 main{max-width:1500px;margin:auto;padding:18px}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.title{font-size:1.35rem;font-weight:700}.muted{color:var(--muted)}.summary{margin-top:4px}.progress{height:10px;background:#242c3a;border-radius:8px;overflow:hidden;min-width:220px}.progress>span{display:block;height:100%;background:var(--accent)}
-.filters{display:grid;grid-template-columns:minmax(230px,2fr) repeat(4,minmax(135px,1fr));gap:10px;margin:16px 0}.filters input,.filters select{padding:.6rem}.attention{display:flex;align-items:center;gap:7px;padding:.55rem;border:1px solid var(--line);border-radius:8px;background:#111722}
+.title{font-size:1.35rem;font-weight:700}.muted{color:var(--muted)}.summary{margin-top:4px}.progress{height:10px;background:#242c3a;border-radius:8px;overflow:hidden;min-width:220px}.progress>span{display:block;height:100%;background:var(--accent)}.progress-details{max-width:930px;margin-top:8px}
+.filters{display:grid;grid-template-columns:minmax(230px,2fr) repeat(5,minmax(135px,1fr));gap:10px;margin:16px 0}.filters input,.filters select{padding:.6rem}.attention{display:flex;align-items:center;gap:7px;padding:.55rem;border:1px solid var(--line);border-radius:8px;background:#111722}
 .results{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-6px 0 10px}.pager{display:flex;align-items:center;gap:8px}
+.batch{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.batch .selected{margin-right:auto;font-weight:650}
 .layout{display:grid;grid-template-columns:minmax(250px,330px) 1fr;gap:14px}.list{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;max-height:76vh;overflow:auto}
-.list button{width:100%;text-align:left;margin-bottom:6px;white-space:pre-line}.list button.active{border-color:var(--accent);background:#1b2b30}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.list-row{display:grid;grid-template-columns:auto 1fr;gap:7px;align-items:start;margin-bottom:6px}.list-row>input{margin:.8rem .15rem 0 .25rem}.list-row button{width:100%;text-align:left;white-space:pre-line}.list-row button.active{border-color:var(--accent);background:#1b2b30}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
 .metadata{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);margin-bottom:12px}.status{color:var(--warn)}.warnings{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.warning-chip{display:inline-block;padding:2px 7px;border:1px solid #816d3e;border-radius:6px;color:var(--warn);background:#2d281d}.accept-warning{padding:10px;border:1px solid #816d3e;border-radius:8px;background:#2d281d;color:var(--warn);margin:10px 0}
+.warning-chip{display:inline-block;padding:2px 7px;border:1px solid #816d3e;border-radius:6px;color:var(--warn);background:#2d281d}.accept-warning,.repeat-warning{padding:10px;border:1px solid #816d3e;border-radius:8px;background:#2d281d;color:var(--warn);margin:10px 0}.context-row,.repeat-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}
 .columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}.spanbox{min-height:130px;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:#111722;border:1px solid var(--line);border-radius:9px}
 .atom{display:inline-block;padding:1px 6px;margin:1px 2px;border:1px solid #52706d;border-radius:5px;color:var(--accent);background:#172725;font-family:ui-monospace,monospace}
 .field{margin-top:14px}.field>label{display:block;font-weight:650;margin-bottom:6px}.editor{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px}.editor textarea{min-height:84px;min-width:170px;flex:1;padding:9px;resize:vertical}
@@ -42,6 +43,7 @@ main{max-width:1500px;margin:auto;padding:18px}.top{display:flex;gap:12px;align-
     </div>
     <div><div id="progressText"></div><div class="progress"><span id="progressBar"></span></div></div>
   </div>
+  <div class="muted progress-details" id="progressDetails"></div>
   <div class="storage-warning hidden" id="storageWarning" role="alert"></div>
   <div class="help hidden" id="helpPanel">
     <strong>Клавиши вне полей ввода</strong>:
@@ -52,7 +54,7 @@ main{max-width:1500px;margin:auto;padding:18px}.top{display:flex;gap:12px;align-
     <button id="closeHelp" type="button">Закрыть</button>
   </div>
   <div class="filters">
-    <input id="search" type="search" placeholder="Поиск по файлу, оригиналу или переводу">
+    <input id="search" type="search" placeholder="Поиск по key, файлу, оригиналу или переводу">
     <label class="attention"><input id="attentionFilter" type="checkbox"> Требует внимания</label>
     <select id="fileFilter"><option value="">Все файлы</option></select>
     <select id="statusFilter">
@@ -75,6 +77,11 @@ main{max-width:1500px;margin:auto;padding:18px}.top{display:flex;gap:12px;align-
       <option value="leading_boundary_whitespace_changed">Изменён ведущий пробел</option>
       <option value="trailing_boundary_whitespace_changed">Изменён завершающий пробел</option>
     </select>
+    <select id="repeatFilter">
+      <option value="">Все группы повторов</option>
+      <option value="exact_repeat">Только точные повторы</option>
+      <option value="inconsistent">Несогласованные повторы</option>
+    </select>
   </div>
   <div class="results">
     <span id="resultCount"></span>
@@ -84,12 +91,31 @@ main{max-width:1500px;margin:auto;padding:18px}.top{display:flex;gap:12px;align-
       <button id="pageNext" type="button">Страница →</button>
     </div>
   </div>
+  <div class="batch">
+    <span class="selected" id="selectedCount">Выбрано на странице: 0</span>
+    <button id="selectUnreviewedPage" type="button">Выбрать непроверенные на текущей странице</button>
+    <button id="clearSelection" type="button">Снять выбор</button>
+    <button id="batchAccept" type="button" disabled>Принять выбранные</button>
+    <button id="batchReject" type="button" disabled>Отклонить выбранные</button>
+    <button id="undoBatch" type="button" disabled>Отменить последнее групповое действие</button>
+  </div>
   <div class="layout">
     <nav class="list" id="entryList" aria-label="Occurrences"></nav>
     <section class="card">
       <div id="empty">Нет записей для выбранного фильтра.</div>
       <div id="review" class="hidden">
-        <div class="metadata"><span id="path"></span><span id="line"></span><span class="status" id="status"></span></div>
+        <div class="metadata"><span id="path"></span><span id="line"></span><span id="key"></span><span id="ordinal"></span><span class="status" id="status"></span></div>
+        <div class="context-row">
+          <strong>Контекст файла:</strong>
+          <button id="previousContext" type="button">← Предыдущая запись файла</button>
+          <button id="nextContext" type="button">Следующая запись файла →</button>
+        </div>
+        <div class="repeat-row">
+          <strong id="repeatInfo">Точных повторов: 1</strong>
+          <button id="repeatPrevious" type="button">← Предыдущий повтор</button>
+          <button id="repeatNext" type="button">Следующий повтор →</button>
+        </div>
+        <div class="repeat-warning hidden" id="repeatWarning">У одинакового source есть разные candidate-варианты. Каждое решение остаётся индивидуальным.</div>
         <div class="warnings" id="warnings"></div>
         <div class="accept-warning hidden" id="acceptWarning">Принять здесь означает сохранить английский текст. Для перевода выберите «Редактировать».</div>
         <div class="columns">
@@ -140,6 +166,10 @@ const allowedWarnings=new Set(["model_fallback","accepted_unchanged","leading_bo
 const storageKey="stellaris-review-pack:"+pack.pack_fingerprint;
 const byId=new Map(pack.entries.map(entry=>[entry.id,entry]));
 const entryIndexById=new Map(pack.entries.map((entry,index)=>[entry.id,index]));
+const repeatGroupsBySignature=new Map();
+for(const record of pack.entries){const signature=JSON.stringify([record.source_segments,record.protected_atoms]);const records=repeatGroupsBySignature.get(signature)||[];records.push(record);repeatGroupsBySignature.set(signature,records)}
+const repeatGroupById=new Map();
+for(const records of repeatGroupsBySignature.values())if(records.length>1){const inconsistent=new Set(records.map(record=>JSON.stringify(record.candidate_segments))).size>1;const group={records,inconsistent};for(const record of records)repeatGroupById.set(record.id,group)}
 const statusLabels={
   accepted_changed:"Перевод изменён",
   accepted_unchanged:"Оставлен английский",
@@ -159,14 +189,38 @@ let saveTimer=null;
 let visible=[];
 let pageIndex=0;
 let currentId=pack.entries.length?pack.entries[0].id:null;
+let selected=new Set();
+let undoState=null;
 const el=id=>document.getElementById(id);
 const defaults=record=>({decision:"unreviewed",edited_segments:record.candidate_segments.slice(),note:"",tags:[],glossary_candidate:false});
 const cloneItem=item=>({decision:item.decision,edited_segments:item.edited_segments.slice(),note:item.note,tags:item.tags.slice(),glossary_candidate:item.glossary_candidate});
 const currentState=record=>state.get(record.id)||defaults(record);
 const renderedState=record=>drafts.has(record.id)?drafts.get(record.id).item:currentState(record);
 function arraysEqual(left,right){return left.length===right.length&&left.every((value,index)=>value===right[index])}
+function itemsEqual(left,right){return left.decision===right.decision&&arraysEqual(left.edited_segments,right.edited_segments)&&left.note===right.note&&arraysEqual(left.tags,right.tags)&&left.glossary_candidate===right.glossary_candidate}
 function isDefaultItem(record,item){const baseline=defaults(record);return item.decision===baseline.decision&&arraysEqual(item.edited_segments,baseline.edited_segments)&&item.note===""&&item.tags.length===0&&item.glossary_candidate===false}
 function normalizeSparseMap(value){const result=new Map();for(const [id,item] of value){const record=byId.get(id);if(!record)throw new Error("unknown occurrence ID");validateStoredItem(record,item);if(!isDefaultItem(record,item))result.set(id,cloneItem(item))}return result}
+function undoDocument(value=undoState){
+  if(value===null)return null;
+  return {undo_schema_version:1,pack_fingerprint:pack.pack_fingerprint,decision:value.decision,entries:value.entries.map(entry=>({occurrence_id:entry.occurrence_id,before:cloneItem(entry.before),after:cloneItem(entry.after)}))}
+}
+function validateUndoDocument(value,stateValue=null){
+  if(!value||typeof value!=="object"||Array.isArray(value)||!exactFields(value,["undo_schema_version","pack_fingerprint","decision","entries"]))throw new Error("invalid batch undo document");
+  if(value.undo_schema_version!==1||value.pack_fingerprint!==pack.pack_fingerprint||!["accept","reject"].includes(value.decision)||!Array.isArray(value.entries)||value.entries.length===0||value.entries.length>PAGE_SIZE)throw new Error("invalid batch undo identity");
+  const seen=new Set();const entries=[];
+  for(const entry of value.entries){
+    if(!entry||typeof entry!=="object"||Array.isArray(entry)||!exactFields(entry,["occurrence_id","before","after"]))throw new Error("invalid batch undo entry");
+    const record=byId.get(entry.occurrence_id);if(!record||seen.has(record.id))throw new Error("invalid batch undo occurrence");
+    if(!entry.before||typeof entry.before!=="object"||Array.isArray(entry.before)||!exactFields(entry.before,["decision","edited_segments","note","tags","glossary_candidate"]))throw new Error("invalid batch undo prior state");
+    if(!entry.after||typeof entry.after!=="object"||Array.isArray(entry.after)||!exactFields(entry.after,["decision","edited_segments","note","tags","glossary_candidate"]))throw new Error("invalid batch undo resulting state");
+    validateStoredItem(record,entry.before);validateStoredItem(record,entry.after);
+    if(entry.before.decision!=="unreviewed"||entry.after.decision!==value.decision||!arraysEqual(entry.after.edited_segments,record.candidate_segments)||entry.after.note!==entry.before.note||!arraysEqual(entry.after.tags,entry.before.tags)||entry.after.glossary_candidate!==entry.before.glossary_candidate)throw new Error("invalid batch undo transition");
+    if(stateValue!==null&&!itemsEqual(stateValue.get(record.id)||defaults(record),entry.after))throw new Error("batch undo no longer matches current state");
+    seen.add(record.id);entries.push({occurrence_id:record.id,before:cloneItem(entry.before),after:cloneItem(entry.after)})
+  }
+  return {decision:value.decision,entries}
+}
+function clearUndo(){undoState=null}
 function appendSpan(container,segments,atoms){
   container.replaceChildren();
   segments.forEach((segment,index)=>{
@@ -241,29 +295,46 @@ function sparseDocument(stateValue=state){
   const changes=[];for(const record of pack.entries){const item=stateValue.get(record.id);if(item){validateStoredItem(record,item);if(!isDefaultItem(record,item))changes.push(decisionRecord(record,item))}}
   return {storage_schema_version:1,pack_fingerprint:pack.pack_fingerprint,changes}
 }
-function validateSparseDocument(documentValue){
-  if(!documentValue||typeof documentValue!=="object"||Array.isArray(documentValue)||!exactFields(documentValue,["storage_schema_version","pack_fingerprint","changes"]))throw new Error("invalid sparse storage document");
-  if(documentValue.storage_schema_version!==1||documentValue.pack_fingerprint!==pack.pack_fingerprint||!Array.isArray(documentValue.changes))throw new Error("invalid sparse storage identity");
-  const next=new Map();for(const item of documentValue.changes){const [record,normalized]=validateDecisionRecord(item);if(next.has(record.id))throw new Error("duplicate occurrence ID");if(!isDefaultItem(record,normalized))next.set(record.id,normalized)}return next
+function validateSparseChanges(changes){
+  if(!Array.isArray(changes))throw new Error("invalid sparse storage changes");
+  const next=new Map();for(const item of changes){const [record,normalized]=validateDecisionRecord(item);if(next.has(record.id))throw new Error("duplicate occurrence ID");if(!isDefaultItem(record,normalized))next.set(record.id,normalized)}return next
 }
+function storageDocument(stateValue=state,undoValue=undoState){
+  const sparse=sparseDocument(stateValue);
+  return {storage_schema_version:2,pack_fingerprint:pack.pack_fingerprint,changes:sparse.changes,last_batch_undo:undoDocument(undoValue)}
+}
+function validateStorageDocument(documentValue){
+  if(!documentValue||typeof documentValue!=="object"||Array.isArray(documentValue))throw new Error("invalid sparse storage document");
+  if(documentValue.storage_schema_version===1){
+    if(!exactFields(documentValue,["storage_schema_version","pack_fingerprint","changes"])||documentValue.pack_fingerprint!==pack.pack_fingerprint)throw new Error("invalid sparse storage identity");
+    return {state:validateSparseChanges(documentValue.changes),undo:null,undoDiscarded:false}
+  }
+  if(documentValue.storage_schema_version!==2||!exactFields(documentValue,["storage_schema_version","pack_fingerprint","changes","last_batch_undo"])||documentValue.pack_fingerprint!==pack.pack_fingerprint)throw new Error("invalid sparse storage identity");
+  const next=validateSparseChanges(documentValue.changes);
+  let nextUndo=null;let undoDiscarded=false;
+  if(documentValue.last_batch_undo!==null){try{nextUndo=validateUndoDocument(documentValue.last_batch_undo,next)}catch(error){undoDiscarded=true}}
+  return {state:next,undo:nextUndo,undoDiscarded}
+}
+function validateSparseDocument(documentValue){return validateStorageDocument(documentValue).state}
 function renderStorageWarning(){el("storageWarning").textContent=storageFailureMessage;el("storageWarning").classList.toggle("hidden",!storageFailureMessage)}
 function persistSparse(){
-  try{localStorage.setItem(storageKey,JSON.stringify(sparseDocument()));return true}
+  try{localStorage.setItem(storageKey,JSON.stringify(storageDocument()));return true}
   catch(error){storageFailureMessage="Локальное сохранение недоступно. Валидные решения остаются в памяти и доступны для экспорта: "+error.message;renderStorageWarning();return false}
 }
 function save(nextState=state){state=normalizeSparseMap(nextState);persistSparse();updateProgress()}
-function setStateMemory(record,item){validateStoredItem(record,item);const next=new Map(state);if(isDefaultItem(record,item))next.delete(record.id);else next.set(record.id,cloneItem(item));state=next}
+function setStateMemory(record,item){validateStoredItem(record,item);if(undoState!==null&&undoState.entries.some(entry=>entry.occurrence_id===record.id)&&!itemsEqual(currentState(record),item))undoState=null;const next=new Map(state);if(isDefaultItem(record,item))next.delete(record.id);else next.set(record.id,cloneItem(item));state=next}
 function persistRecord(record,item){setStateMemory(record,item);persistSparse();updateProgress()}
 function scheduleTextSave(){if(saveTimer!==null)clearTimeout(saveTimer);saveTimer=setTimeout(()=>flushText(),TEXT_DEBOUNCE_MS)}
+function settleDraftsInMemory(){if(saveTimer!==null){clearTimeout(saveTimer);saveTimer=null}for(const [id,draft] of [...drafts])if(draft.valid)drafts.delete(id)}
 function flushText(){
-  if(saveTimer!==null){clearTimeout(saveTimer);saveTimer=null}
-  for(const [id,draft] of [...drafts])if(draft.valid)drafts.delete(id);
+  settleDraftsInMemory();
   persistSparse();updateProgress()
 }
 function updateDraft(record,item){
   const draft={item:cloneItem(item),valid:true,error:""};
   try{validateStoredItem(record,draft.item);setStateMemory(record,draft.item);showError("")}
   catch(error){draft.valid=false;draft.error=error.message;showError("Редактирование отклонено: "+error.message)}
+  if(!draft.valid)selected.delete(record.id);
   drafts.set(record.id,draft);scheduleTextSave();updateProgress()
 }
 function showError(message){el("error").textContent=message}
@@ -273,22 +344,40 @@ function updateDraftAwareField(record,field,value,persistImmediately=false){
   if(persistImmediately)persistSparse();else scheduleTextSave();updateProgress();
   if(draft&&!draft.valid)showError("Редактирование отклонено: "+draft.error);else showError("")
 }
-function reviewedCount(){let count=0;for(const record of pack.entries)if(currentState(record).decision!=="unreviewed")count++;return count}
+function hasInvalidDraft(record){const draft=drafts.get(record.id);return Boolean(draft&&!draft.valid)}
+function hasValidDecision(record){return currentState(record).decision!=="unreviewed"&&!hasInvalidDraft(record)}
+function currentPageRecords(){const start=pageIndex*PAGE_SIZE;return visible.slice(start,start+PAGE_SIZE)}
+function selectionEligible(record){return currentState(record).decision==="unreviewed"&&!hasInvalidDraft(record)}
+function reconcileSelection(){const allowed=new Set(currentPageRecords().filter(selectionEligible).map(record=>record.id));selected=new Set([...selected].filter(id=>allowed.has(id)))}
+function clearSelected(renderNow=true){selected.clear();if(renderNow){renderList();updateProgress()}}
 function updateProgress(){
-  const reviewed=reviewedCount();el("progressText").textContent=reviewed+" / "+pack.entries.length+" проверено";el("progressBar").style.width=(pack.entries.length?reviewed/pack.entries.length*100:0)+"%";
-  const hasInvalid=[...drafts.values()].some(draft=>!draft.valid);el("finalExport").disabled=reviewed!==pack.entries.length||hasInvalid
+  const exactUnreviewed=pack.entries.filter(record=>currentState(record).decision==="unreviewed").length;
+  const invalidEdits=pack.entries.filter(record=>currentState(record).decision==="edit"&&hasInvalidDraft(record)).length;
+  const unresolved=pack.entries.filter(record=>!hasValidDecision(record));const reviewed=pack.entries.length-unresolved.length;
+  const attentionRemaining=unresolved.filter(needsAttention).length;
+  const fallbackRemaining=unresolved.filter(record=>record.status==="model_fallback").length;
+  const unchangedRemaining=unresolved.filter(record=>record.status==="accepted_unchanged").length;
+  const whitespaceRemaining=unresolved.filter(record=>record.warnings.some(warning=>warning==="leading_boundary_whitespace_changed"||warning==="trailing_boundary_whitespace_changed")).length;
+  const inconsistentGroupsRemaining=[...repeatGroupsBySignature.values()].filter(records=>records.length>1&&new Set(records.map(record=>JSON.stringify(record.candidate_segments))).size>1&&records.some(record=>!hasValidDecision(record))).length;
+  el("progressText").textContent=reviewed+" / "+pack.entries.length+" проверено";
+  el("progressBar").style.width=(pack.entries.length?reviewed/pack.entries.length*100:0)+"%";
+  el("progressDetails").textContent="Непроверенные: "+exactUnreviewed+" · невалидные edits: "+invalidEdits+" · без валидного решения: "+unresolved.length+" · требует внимания: "+attentionRemaining+" · fallback модели: "+fallbackRemaining+" · accepted unchanged: "+unchangedRemaining+" · whitespace warnings: "+whitespaceRemaining+" · несогласованных групп повторов: "+inconsistentGroupsRemaining;
+  el("selectedCount").textContent="Выбрано на странице: "+selected.size;
+  el("batchAccept").disabled=selected.size===0;el("batchReject").disabled=selected.size===0;el("clearSelection").disabled=selected.size===0;el("undoBatch").disabled=undoState===null;
+  el("finalExport").disabled=reviewed!==pack.entries.length
 }
-function searchable(record){return [record.path,record.status,...record.source_segments,...record.candidate_segments].join("\n").toLocaleLowerCase()}
+function searchable(record){return [record.key,record.path,record.status,...record.source_segments,...record.candidate_segments].join("\n").toLocaleLowerCase()}
 function needsAttention(record){return record.status==="model_fallback"||record.status==="accepted_unchanged"||record.warnings.some(warning=>warning==="leading_boundary_whitespace_changed"||warning==="trailing_boundary_whitespace_changed")}
 function applyFilters(keepEmpty=false,preserveCurrent=false){
-  const query=el("search").value.toLocaleLowerCase();const file=el("fileFilter").value;const status=el("statusFilter").value;const decision=el("decisionFilter").value;const warning=el("warningFilter").value;const attention=el("attentionFilter").checked;
-  visible=pack.entries.filter(record=>(!file||record.path===file)&&(!status||record.status===status)&&(!decision||currentState(record).decision===decision)&&(!warning||record.warnings.includes(warning))&&(!attention||needsAttention(record))&&(!query||searchable(record).includes(query)));
+  const query=el("search").value.toLocaleLowerCase();const file=el("fileFilter").value;const status=el("statusFilter").value;const decision=el("decisionFilter").value;const warning=el("warningFilter").value;const attention=el("attentionFilter").checked;const repeat=el("repeatFilter").value;
+  visible=pack.entries.filter(record=>{const group=repeatGroupById.get(record.id);return (!file||record.path===file)&&(!status||record.status===status)&&(!decision||currentState(record).decision===decision)&&(!warning||record.warnings.includes(warning))&&(!attention||needsAttention(record))&&(!repeat||(repeat==="exact_repeat"&&Boolean(group))||(repeat==="inconsistent"&&Boolean(group&&group.inconsistent)))&&(!query||searchable(record).includes(query))});
   const visibleIndex=visible.findIndex(record=>record.id===currentId);if(visibleIndex<0){if(!keepEmpty&&!preserveCurrent)currentId=visible.length?visible[0].id:null;pageIndex=0}else pageIndex=Math.floor(visibleIndex/PAGE_SIZE);
   render()
 }
 function renderList(){
   const list=el("entryList");list.replaceChildren();const pageCount=Math.max(1,Math.ceil(visible.length/PAGE_SIZE));if(pageIndex>=pageCount)pageIndex=pageCount-1;
-  const start=pageIndex*PAGE_SIZE;for(const record of visible.slice(start,start+PAGE_SIZE)){const button=document.createElement("button");button.type="button";button.className=record.id===currentId?"active":"";const item=currentState(record);button.textContent=record.path+" · строка "+record.line+"\n"+statusLabels[record.status]+" · "+decisionLabels[item.decision];button.addEventListener("click",()=>{flushText();currentId=record.id;render()});list.append(button)}
+  reconcileSelection();
+  const start=pageIndex*PAGE_SIZE;for(const record of visible.slice(start,start+PAGE_SIZE)){const row=document.createElement("div");row.className="list-row";const checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.checked=selected.has(record.id);checkbox.disabled=!selectionEligible(record);checkbox.setAttribute("aria-label","Выбрать запись "+record.key);checkbox.addEventListener("change",()=>{if(checkbox.checked){if(!selectionEligible(record)){checkbox.checked=false;showError("Можно выбрать только валидную непроверенную запись текущей страницы")}else selected.add(record.id)}else selected.delete(record.id);updateProgress()});const button=document.createElement("button");button.type="button";button.className=record.id===currentId?"active":"";const item=currentState(record);button.textContent=record.key+" · "+record.path+" · строка "+record.line+"\n"+statusLabels[record.status]+" · "+decisionLabels[item.decision];button.addEventListener("click",()=>{flushText();currentId=record.id;render()});row.append(checkbox,button);list.append(row)}
   el("resultCount").textContent="Найдено: "+visible.length;el("pageInfo").textContent=visible.length?"Страница "+(pageIndex+1)+" / "+pageCount:"Страница 0 / 0";el("pagePrevious").disabled=pageIndex<=0;el("pageNext").disabled=pageIndex>=pageCount-1
 }
 function renderEditor(record,item){
@@ -297,13 +386,67 @@ function renderEditor(record,item){
 }
 function render(){
   renderList();updateProgress();renderStorageWarning();const record=byId.get(currentId);el("empty").classList.toggle("hidden",Boolean(record));el("review").classList.toggle("hidden",!record);if(!record)return;
-  const item=renderedState(record);el("path").textContent=record.path;el("line").textContent="строка "+record.line;el("status").textContent=statusLabels[record.status]+" ("+record.status+")";
+  const item=renderedState(record);el("path").textContent=record.path;el("line").textContent="строка "+record.line;el("key").textContent="key: "+record.key;el("ordinal").textContent="occurrence ordinal: "+record.occurrence_ordinal;el("status").textContent=statusLabels[record.status]+" ("+record.status+")";
+  el("previousContext").disabled=!record.previous_in_file_id;el("nextContext").disabled=!record.next_in_file_id;
+  const repeatGroup=repeatGroupById.get(record.id);const repeatIndex=repeatGroup?repeatGroup.records.findIndex(value=>value.id===record.id):-1;
+  el("repeatInfo").textContent=repeatGroup?"Точных повторов: "+repeatGroup.records.length+" · текущий "+(repeatIndex+1)+" / "+repeatGroup.records.length:"Точных повторов: 1";
+  el("repeatPrevious").disabled=!repeatGroup||repeatIndex<=0;el("repeatNext").disabled=!repeatGroup||repeatIndex>=repeatGroup.records.length-1;
+  el("repeatWarning").classList.toggle("hidden",!repeatGroup||!repeatGroup.inconsistent);
   const warnings=el("warnings");warnings.replaceChildren();for(const warning of record.warnings){const chip=document.createElement("span");chip.className="warning-chip";chip.textContent=warningLabels[warning]+" ("+warning+")";warnings.append(chip)}
   el("acceptWarning").classList.toggle("hidden",record.status!=="model_fallback"&&record.status!=="accepted_unchanged");
   appendSpan(el("sourceText"),record.source_segments,record.protected_atoms);appendSpan(el("candidateText"),record.candidate_segments,record.protected_atoms);
   const atoms=el("atoms");atoms.replaceChildren();if(!record.protected_atoms.length)atoms.textContent="Нет";for(const value of record.protected_atoms){const chip=document.createElement("span");chip.className="atom";chip.textContent=value;atoms.append(chip)}
   el("decision").value=item.decision;el("note").value=item.note;el("glossary").checked=item.glossary_candidate;el("editorField").classList.toggle("hidden",item.decision!=="edit");renderEditor(record,item);
   for(const input of el("tags").querySelectorAll("input"))input.checked=item.tags.includes(input.value)
+}
+function resetFilters(){
+  el("search").value="";el("attentionFilter").checked=false;el("fileFilter").value="";el("statusFilter").value="";el("decisionFilter").value="";el("warningFilter").value="";el("repeatFilter").value=""
+}
+function navigateToRecord(id){
+  if(!byId.has(id))return;flushText();selected.clear();
+  if(!visible.some(record=>record.id===id)){resetFilters();visible=pack.entries.slice()}
+  currentId=id;pageIndex=Math.floor(visible.findIndex(record=>record.id===id)/PAGE_SIZE);render()
+}
+function validateBatchSelection(){
+  if(selected.size===0)throw new Error("не выбрано ни одной записи");
+  const page=currentPageRecords();const pageIds=new Set(page.map(record=>record.id));
+  if(selected.size>PAGE_SIZE)throw new Error("выбор превышает размер текущей страницы");
+  const records=page.filter(record=>selected.has(record.id));
+  if(records.length!==selected.size)throw new Error("выбор содержит скрытую запись или запись другой страницы");
+  for(const record of records){
+    if(!byId.has(record.id)||!pageIds.has(record.id))throw new Error("выбор содержит неизвестную запись");
+    if(currentState(record).decision!=="unreviewed")throw new Error("существующее решение нельзя перезаписать групповым действием");
+    if(hasInvalidDraft(record))throw new Error("невалидную редакцию нельзя использовать в групповом действии");
+    validateStoredItem(record,currentState(record))
+  }
+  return records
+}
+function batchConfirmationMessage(decision,records){
+  const counts=new Map();for(const record of records)counts.set(record.status,(counts.get(record.status)||0)+1);
+  const distribution=[...counts].sort(([left],[right])=>left.localeCompare(right)).map(([status,count])=>status+": "+count).join(", ");
+  const attention=records.filter(needsAttention).length;const warnings=records.filter(record=>record.warnings.length>0).length;
+  const label=decision==="accept"?"принять":"отклонить";
+  return "Подтвердите: "+label+" "+records.length+" записей. Status: "+distribution+". Требуют внимания: "+attention+". С warning: "+warnings+". Это отдельное редакторское решение для каждой выбранной строки."
+}
+function applyBatchDecision(decision){
+  try{
+    if(!["accept","reject"].includes(decision))throw new Error("недопустимое групповое решение");
+    const records=validateBatchSelection();
+    if(!confirm(batchConfirmationMessage(decision,records)))return void showError("Групповое действие отменено.");
+    const next=new Map(state);const entries=[];
+    for(const record of records){const before=cloneItem(currentState(record));const after=cloneItem(before);after.decision=decision;after.edited_segments=record.candidate_segments.slice();entries.push({occurrence_id:record.id,before,after});if(isDefaultItem(record,after))next.delete(record.id);else next.set(record.id,after)}
+    const normalized=normalizeSparseMap(next);const nextUndo=validateUndoDocument({undo_schema_version:1,pack_fingerprint:pack.pack_fingerprint,decision,entries},normalized);
+    settleDraftsInMemory();state=normalized;undoState=nextUndo;selected.clear();persistSparse();applyFilters(false,Boolean(el("decisionFilter").value));showError("")
+  }catch(error){showError("Групповое действие отклонено: "+error.message)}
+}
+function undoLastBatch(){
+  try{
+    if(undoState===null)throw new Error("нет группового действия для отмены");
+    const validated=validateUndoDocument(undoDocument(),state);const next=new Map(state);
+    for(const entry of validated.entries){const record=byId.get(entry.occurrence_id);if(!record)throw new Error("unknown undo occurrence");if(isDefaultItem(record,entry.before))next.delete(record.id);else next.set(record.id,cloneItem(entry.before))}
+    const normalized=normalizeSparseMap(next);
+    settleDraftsInMemory();state=normalized;undoState=null;selected.clear();persistSparse();applyFilters();showError("")
+  }catch(error){showError("Отмена отклонена: "+error.message)}
 }
 function neighboringVisibleRecord(delta){
   const index=visible.findIndex(record=>record.id===currentId);if(index>=0){const next=index+delta;return next>=0&&next<visible.length?visible[next]:null}
@@ -313,7 +456,7 @@ function move(delta){
   flushText();const record=neighboringVisibleRecord(delta);if(!record)return;currentId=record.id;pageIndex=Math.floor(visible.findIndex(value=>value.id===record.id)/PAGE_SIZE);render()
 }
 function setDecision(decision,advance=false){
-  const record=byId.get(currentId);if(!record)return;flushText();const item=cloneItem(currentState(record));item.decision=decision;if(decision!=="edit"){item.edited_segments=record.candidate_segments.slice();drafts.delete(record.id)}persistRecord(record,item);
+  const record=byId.get(currentId);if(!record)return;flushText();selected.delete(record.id);const item=cloneItem(currentState(record));item.decision=decision;if(decision!=="edit"){item.edited_segments=record.candidate_segments.slice();drafts.delete(record.id)}persistRecord(record,item);
   const decisionFilter=el("decisionFilter").value;applyFilters(false,Boolean(decisionFilter));
   if(advance){const nextRecord=neighboringVisibleRecord(1);if(nextRecord){currentId=nextRecord.id;pageIndex=Math.floor(visible.findIndex(value=>value.id===nextRecord.id)/PAGE_SIZE);render()}}
   if(decision==="edit"){const area=el("editor").querySelector("textarea");if(area)area.focus()}
@@ -324,19 +467,26 @@ function downloadDocument(finalMode){
 }
 for(const file of [...new Set(pack.entries.map(record=>record.path))].sort()){const option=document.createElement("option");option.value=file;option.textContent=file;el("fileFilter").append(option)}
 for(const tag of allowedTags){const label=document.createElement("label");const input=document.createElement("input");input.type="checkbox";input.value=tag;input.addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const tags=[...el("tags").querySelectorAll("input:checked")].map(node=>node.value);try{updateDraftAwareField(record,"tags",tags,true)}catch(error){render();showError("Изменение отклонено: "+error.message)}});label.append(input,document.createTextNode(" "+tag));el("tags").append(label)}
-for(const id of ["search","attentionFilter","fileFilter","statusFilter","decisionFilter","warningFilter"])el(id).addEventListener(id==="search"?"input":"change",()=>applyFilters());
+for(const id of ["search","attentionFilter","fileFilter","statusFilter","decisionFilter","warningFilter","repeatFilter"])el(id).addEventListener(id==="search"?"input":"change",()=>{selected.clear();applyFilters()});
 el("decision").addEventListener("change",()=>setDecision(el("decision").value));
 el("note").addEventListener("input",()=>{const record=byId.get(currentId);if(!record)return;try{updateDraftAwareField(record,"note",el("note").value)}catch(error){render();showError("Комментарий отклонён: "+error.message)}});
 el("note").addEventListener("blur",flushText);
 el("glossary").addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;try{updateDraftAwareField(record,"glossary_candidate",el("glossary").checked,true)}catch(error){render();showError("Изменение отклонено: "+error.message)}});
 el("previous").addEventListener("click",()=>move(-1));el("next").addEventListener("click",()=>move(1));
-el("pagePrevious").addEventListener("click",()=>{flushText();if(pageIndex>0){pageIndex--;currentId=visible[pageIndex*PAGE_SIZE].id;render()}});
-el("pageNext").addEventListener("click",()=>{flushText();if((pageIndex+1)*PAGE_SIZE<visible.length){pageIndex++;currentId=visible[pageIndex*PAGE_SIZE].id;render()}});
+el("previousContext").addEventListener("click",()=>{const record=byId.get(currentId);if(record&&record.previous_in_file_id)navigateToRecord(record.previous_in_file_id)});
+el("nextContext").addEventListener("click",()=>{const record=byId.get(currentId);if(record&&record.next_in_file_id)navigateToRecord(record.next_in_file_id)});
+el("repeatPrevious").addEventListener("click",()=>{const group=repeatGroupById.get(currentId);if(!group)return;const index=group.records.findIndex(record=>record.id===currentId);if(index>0)navigateToRecord(group.records[index-1].id)});
+el("repeatNext").addEventListener("click",()=>{const group=repeatGroupById.get(currentId);if(!group)return;const index=group.records.findIndex(record=>record.id===currentId);if(index>=0&&index+1<group.records.length)navigateToRecord(group.records[index+1].id)});
+el("selectUnreviewedPage").addEventListener("click",()=>{selected=new Set(currentPageRecords().filter(selectionEligible).map(record=>record.id));renderList();updateProgress();showError("")});
+el("clearSelection").addEventListener("click",()=>{clearSelected();showError("")});
+el("batchAccept").addEventListener("click",()=>applyBatchDecision("accept"));el("batchReject").addEventListener("click",()=>applyBatchDecision("reject"));el("undoBatch").addEventListener("click",undoLastBatch);
+el("pagePrevious").addEventListener("click",()=>{flushText();if(pageIndex>0){selected.clear();pageIndex--;currentId=visible[pageIndex*PAGE_SIZE].id;render()}});
+el("pageNext").addEventListener("click",()=>{flushText();if((pageIndex+1)*PAGE_SIZE<visible.length){selected.clear();pageIndex++;currentId=visible[pageIndex*PAGE_SIZE].id;render()}});
 el("draftExport").addEventListener("click",()=>{try{downloadDocument(false);showError("")}catch(error){showError("Экспорт черновика отклонён: "+error.message)}});
 el("finalExport").addEventListener("click",()=>{try{downloadDocument(true);showError("")}catch(error){showError("Финальный экспорт отклонён: "+error.message)}});
 el("importButton").addEventListener("click",()=>el("importFile").click());
-el("importFile").addEventListener("change",async event=>{try{const file=event.target.files[0];if(!file)return;if(file.size>MAX_JSON_BYTES)throw new Error("файл превышает лимит 4 MiB");const text=await file.text();if(new TextEncoder().encode(text).byteLength>MAX_JSON_BYTES)throw new Error("файл превышает лимит 4 MiB");const nextState=validateDocument(JSON.parse(text));state=nextState;drafts.clear();persistSparse();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
-el("clear").addEventListener("click",()=>{if(confirm("Удалить все локальные решения для этого pack?")){state=new Map();drafts.clear();try{localStorage.removeItem(storageKey)}catch(error){storageFailureMessage="Локальное хранилище недоступно, но решения очищены в памяти: "+error.message}applyFilters();showError("")}});
+el("importFile").addEventListener("change",async event=>{selected.clear();renderList();updateProgress();try{const file=event.target.files[0];if(!file)return;if(file.size>MAX_JSON_BYTES)throw new Error("файл превышает лимит 4 MiB");const text=await file.text();if(new TextEncoder().encode(text).byteLength>MAX_JSON_BYTES)throw new Error("файл превышает лимит 4 MiB");const nextState=validateDocument(JSON.parse(text));state=nextState;drafts.clear();clearUndo();persistSparse();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
+el("clear").addEventListener("click",()=>{if(confirm("Удалить все локальные решения для этого pack?")){state=new Map();drafts.clear();selected.clear();clearUndo();try{localStorage.removeItem(storageKey)}catch(error){storageFailureMessage="Локальное хранилище недоступно, но решения очищены в памяти: "+error.message}applyFilters();showError("")}});
 function toggleHelp(force){const show=force===undefined?el("helpPanel").classList.contains("hidden"):force;el("helpPanel").classList.toggle("hidden",!show)}
 el("helpButton").addEventListener("click",()=>toggleHelp());el("closeHelp").addEventListener("click",()=>toggleHelp(false));
 function interactiveTarget(target){if(!target)return false;const tag=(target.tagName||"").toUpperCase();return ["INPUT","TEXTAREA","SELECT","BUTTON"].includes(tag)||target.isContentEditable}
@@ -351,7 +501,7 @@ document.addEventListener("keydown",event=>{if(interactiveTarget(event.target))r
   else if(key==="k"||key==="K"||key==="ArrowUp"||key==="ArrowLeft"){event.preventDefault();move(-1)}
 });
 if(typeof window!=="undefined")window.addEventListener("pagehide",flushText);
-try{const saved=localStorage.getItem(storageKey);if(saved)state=validateSparseDocument(JSON.parse(saved))}
+try{const saved=localStorage.getItem(storageKey);if(saved){const restored=validateStorageDocument(JSON.parse(saved));state=restored.state;undoState=restored.undo;if(restored.undoDiscarded)storageFailureMessage="Сохранённые решения загружены, но устаревший или повреждённый batch undo безопасно отброшен."}}
 catch(error){state=new Map();storageFailureMessage="Локальное сохранение не загружено: "+error.message}
 el("scopeSummary").textContent="Полный candidate · unsupported: "+pack.summary.unsupported+" · skipped files: "+pack.summary.skipped_files+" · whitespace warnings: "+pack.summary.whitespace_warning_entries;
 applyFilters();

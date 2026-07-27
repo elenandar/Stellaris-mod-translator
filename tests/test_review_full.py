@@ -172,6 +172,27 @@ def test_schema_v3_full_candidate_builds_pack_schema_v2_with_warnings(
     assert pack["review_scope"] == "full_candidate"
     assert pack["candidate_report_schema_version"] == 3
     assert len(pack["entries"]) == 6
+    assert [entry["key"] for entry in pack["entries"]] == [
+        "changed",
+        "unchanged",
+        "fallback",
+        "leading",
+        "trailing",
+        "atom",
+    ]
+    assert [entry["occurrence_ordinal"] for entry in pack["entries"]] == list(
+        range(6)
+    )
+    assert pack["entries"][0]["previous_in_file_id"] is None
+    assert (
+        pack["entries"][0]["next_in_file_id"]
+        == pack["entries"][1]["id"]
+    )
+    assert (
+        pack["entries"][-1]["previous_in_file_id"]
+        == pack["entries"][-2]["id"]
+    )
+    assert pack["entries"][-1]["next_in_file_id"] is None
     assert all(
         set(entry["warnings"]).issubset(review.WARNING_FLAGS)
         for entry in pack["entries"]
@@ -191,6 +212,35 @@ def test_schema_v3_full_candidate_builds_pack_schema_v2_with_warnings(
     assert summary["schema_version"] == 2
     assert summary["review_scope"] == "full_candidate"
     assert summary["candidate_report_schema_version"] == 3
+    assert pack["pack_fingerprint"] == review._sha256_json(
+        {
+            "schema_version": 2,
+            "review_scope": "full_candidate",
+            "candidate_report_schema_version": 3,
+            "candidate_report_sha256": (
+                summary["identities"]["candidate_report_sha256"]
+            ),
+            "source_localisation_sha256": (
+                summary["identities"]["source_localisation_sha256"]
+            ),
+            "candidate_localisation_sha256": (
+                summary["identities"]["candidate_localisation_sha256"]
+            ),
+            "model": {
+                "tag": "synthetic-review:1",
+                "digest": MODEL_DIGEST,
+            },
+            "occurrence_ids": [entry["id"] for entry in pack["entries"]],
+            "warning_flags": [
+                {
+                    "occurrence_id": entry["id"],
+                    "warnings": entry["warnings"],
+                }
+                for entry in pack["entries"]
+            ],
+            "summary": pack["summary"],
+        }
+    )
 
 
 def test_boundary_whitespace_flags_only_outer_human_span_boundaries() -> None:
@@ -665,9 +715,45 @@ def test_full_ui_sparse_storage_exports_imports_keyboard_and_dom_window(
     )
     runtime = tmp_path / "full-review-runtime.js"
     runtime.write_text(extract_runtime(output))
+    runtime_pack = extract_pack(output)
+    repeat_indexes = [1000, 1001, 1002]
+    for index in repeat_indexes:
+        runtime_pack["entries"][index]["source_segments"] = [
+            "Exact repeat ",
+            " tail",
+        ]
+        runtime_pack["entries"][index]["protected_atoms"] = ["$NAME$"]
+    runtime_pack["entries"][1000]["candidate_segments"] = [
+        "Точный повтор ",
+        " хвост",
+    ]
+    runtime_pack["entries"][1001]["candidate_segments"] = [
+        "Точный повтор ",
+        " хвост",
+    ]
+    runtime_pack["entries"][1002]["candidate_segments"] = [
+        "Другой вариант ",
+        " хвост",
+    ]
+    runtime_pack["entries"][1003]["source_segments"] = [
+        "Exact repeat  ",
+        " tail",
+    ]
+    runtime_pack["entries"][1003]["candidate_segments"] = [
+        "Почти повтор ",
+        " хвост",
+    ]
+    runtime_pack["entries"][1003]["protected_atoms"] = ["$NAME$"]
+    runtime_pack["entries"][4]["status"] = "model_fallback"
+    runtime_pack["entries"][4]["warnings"] = ["model_fallback"]
+    runtime_pack["entries"][5]["status"] = "accepted_unchanged"
+    runtime_pack["entries"][5]["warnings"] = ["accepted_unchanged"]
+    runtime_pack["entries"][6]["warnings"] = [
+        "leading_boundary_whitespace_changed"
+    ]
     encoded_pack = base64.b64encode(
         json.dumps(
-            extract_pack(output),
+            runtime_pack,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -761,11 +847,16 @@ class StubElement {
 }
 const ids = [
   "review-data", "fingerprint", "scopeSummary", "progressText",
-  "progressBar", "storageWarning", "helpPanel", "closeHelp", "search",
+  "progressBar", "progressDetails", "storageWarning", "helpPanel", "closeHelp",
+  "search",
   "attentionFilter", "fileFilter", "statusFilter", "decisionFilter",
-  "warningFilter", "resultCount", "pagePrevious", "pageInfo", "pageNext",
+  "warningFilter", "repeatFilter", "resultCount", "pagePrevious", "pageInfo",
+  "pageNext", "selectedCount", "selectUnreviewedPage", "clearSelection",
+  "batchAccept", "batchReject", "undoBatch",
   "entryList", "empty", "review", "path", "line", "status", "warnings",
-  "acceptWarning", "sourceText", "candidateText", "atoms", "decision",
+  "key", "ordinal", "previousContext", "nextContext", "repeatInfo",
+  "repeatPrevious", "repeatNext", "repeatWarning", "acceptWarning",
+  "sourceText", "candidateText", "atoms", "decision",
   "editorField", "editor", "note", "tags", "glossary", "previous", "next",
   "draftExport", "finalExport", "importButton", "helpButton", "clear",
   "importFile", "error"
@@ -773,8 +864,8 @@ const ids = [
 const elements = new Map(ids.map(id => [id, new StubElement("div", id)]));
 for (const id of [
   "search", "attentionFilter", "fileFilter", "statusFilter",
-  "decisionFilter", "warningFilter", "decision", "note", "glossary",
-  "importFile"
+  "decisionFilter", "warningFilter", "repeatFilter", "decision", "note",
+  "glossary", "importFile"
 ]) {
   elements.get(id).tagName = id === "note" ? "TEXTAREA" : "INPUT";
 }
@@ -795,6 +886,7 @@ globalThis.document = {
 globalThis.window = {addEventListener() {}};
 globalThis.localStorage = {
   values: new Map(),
+  setCounts: new Map(),
   fail: false,
   getItem(key) {
     if (this.fail) throw new Error("synthetic quota");
@@ -802,6 +894,7 @@ globalThis.localStorage = {
   },
   setItem(key, value) {
     if (this.fail) throw new Error("synthetic quota");
+    this.setCounts.set(key, (this.setCounts.get(key) || 0) + 1);
     this.values.set(key, value);
   },
   removeItem(key) {
@@ -809,7 +902,12 @@ globalThis.localStorage = {
     this.values.delete(key);
   }
 };
-globalThis.confirm = () => true;
+globalThis.confirmResult = true;
+globalThis.lastConfirmMessage = "";
+globalThis.confirm = message => {
+  globalThis.lastConfirmMessage = String(message);
+  return globalThis.confirmResult;
+};
 globalThis.URL = {
   createObjectURL(blob) {
     globalThis.capturedBlob = blob;
@@ -827,6 +925,401 @@ async function fireDocument(type, event) {
   const initialRows = elements.get("entryList").children.length;
   await elements.get("pageNext").fire("click");
   const secondPageRows = elements.get("entryList").children.length;
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;applyFilters()
+  `);
+  const keyAndOrdinalRendered = vm.runInThisContext(
+    `el("key").textContent==="key: "+pack.entries[0].key`
+    + `&&el("ordinal").textContent==="occurrence ordinal: "+pack.entries[0].occurrence_ordinal`
+    + `&&searchable(pack.entries[0]).includes(pack.entries[0].key)`
+  );
+  await elements.get("nextContext").fire("click");
+  const nextContextNavigated = vm.runInThisContext(
+    "currentId===pack.entries[1].id"
+  );
+  await elements.get("previousContext").fire("click");
+  const previousContextNavigated = vm.runInThisContext(
+    "currentId===pack.entries[0].id"
+  );
+  elements.get("search").value = vm.runInThisContext("pack.entries[1200].key");
+  await elements.get("search").fire("input");
+  const keySearchExact = vm.runInThisContext(
+    "visible.length===1&&visible[0].id===pack.entries[1200].id"
+    + "&&currentId===pack.entries[1200].id"
+    + '&&el("key").textContent==="key: "+pack.entries[1200].key'
+  );
+  vm.runInThisContext(
+    "resetFilters();currentId=pack.entries[1000].id;pageIndex=0;applyFilters()"
+  );
+  const exactRepeatGrouping = vm.runInThisContext(
+    "repeatGroupById.get(currentId).records.length===3"
+    + "&&repeatGroupById.get(currentId).inconsistent===true"
+    + '&&el("repeatInfo").textContent.includes("Точных повторов: 3")'
+    + '&&!el("repeatWarning").classList.contains("hidden")'
+  );
+  await elements.get("repeatNext").fire("click");
+  const repeatNextNavigated = vm.runInThisContext(
+    "currentId===pack.entries[1001].id"
+  );
+  await elements.get("repeatPrevious").fire("click");
+  const repeatPreviousNavigated = vm.runInThisContext(
+    "currentId===pack.entries[1000].id"
+  );
+  elements.get("repeatFilter").value = "inconsistent";
+  await elements.get("repeatFilter").fire("change");
+  const inconsistentRepeatFilterExact = vm.runInThisContext(
+    "visible.length===3"
+    + "&&visible.every(record=>[1000,1001,1002]"
+    + ".map(index=>pack.entries[index].id).includes(record.id))"
+    + "&&!visible.some(record=>record.id===pack.entries[1003].id)"
+  );
+  elements.get("repeatFilter").value = "exact_repeat";
+  await elements.get("repeatFilter").fire("change");
+  const noFuzzyGrouping = vm.runInThisContext(
+    "visible.length===3"
+    + "&&!visible.some(record=>record.id===pack.entries[1003].id)"
+  );
+  vm.runInThisContext(
+    "resetFilters();currentId=pack.entries[0].id;pageIndex=0;applyFilters()"
+  );
+  await elements.get("selectUnreviewedPage").fire("click");
+  const pageLocalSelectionCount = vm.runInThisContext(
+    "selected.size===100"
+    + '&&el("selectedCount").textContent==="Выбрано на странице: 100"'
+  );
+  await elements.get("pageNext").fire("click");
+  const pageChangeClearsSelection = vm.runInThisContext("selected.size===0");
+  await elements.get("pagePrevious").fire("click");
+  await elements.get("selectUnreviewedPage").fire("click");
+  elements.get("search").value = "scale.5";
+  await elements.get("search").fire("input");
+  const searchChangeClearsSelection = vm.runInThisContext("selected.size===0");
+  vm.runInThisContext(
+    "resetFilters();currentId=pack.entries[0].id;pageIndex=0;applyFilters()"
+  );
+  await elements.get("selectUnreviewedPage").fire("click");
+  elements.get("statusFilter").value = "accepted_changed";
+  await elements.get("statusFilter").fire("change");
+  const filterChangeClearsSelection = vm.runInThisContext("selected.size===0");
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;
+    {
+      const record=pack.entries[0];
+      const item=defaults(record);
+      item.note="batch metadata";
+      item.tags=["terminology"];
+      item.glossary_candidate=true;
+      state.set(record.id,item)
+    }
+    applyFilters()
+  `);
+  await elements.get("selectUnreviewedPage").fire("click");
+  const beforeCancelledBatch = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+  );
+  globalThis.confirmResult = false;
+  await elements.get("batchAccept").fire("click");
+  const confirmationCancelAtomic = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+    + "===" + JSON.stringify(beforeCancelledBatch)
+    + "&&selected.size===100&&undoState===null"
+  );
+  globalThis.confirmResult = true;
+  vm.runInThisContext("selected.clear();render()");
+  const beforeZeroBatch = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+  );
+  await elements.get("batchReject").fire("click");
+  const zeroSelectionRejected = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+    + "===" + JSON.stringify(beforeZeroBatch)
+    + '&&el("error").textContent.includes("не выбрано")'
+  );
+  vm.runInThisContext(
+    "selected=new Set([pack.entries[0].id,pack.entries[100].id]);updateProgress()"
+  );
+  const beforeHiddenBatch = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+  );
+  await elements.get("batchAccept").fire("click");
+  const hiddenSelectionRejectedAtomically = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+    + "===" + JSON.stringify(beforeHiddenBatch)
+    + "&&undoState===null"
+  );
+  vm.runInThisContext(`
+    {
+      const record=pack.entries[1];
+      const item=defaults(record);item.decision="accept";
+      state.set(record.id,item);selected=new Set([record.id])
+    }
+  `);
+  const beforeReviewedBatch = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+  );
+  await elements.get("batchReject").fire("click");
+  const reviewedNotOverwritten = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+    + "===" + JSON.stringify(beforeReviewedBatch)
+    + "&&currentState(pack.entries[1]).decision==='accept'"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;
+    {
+      const record=pack.entries[0];
+      const item=defaults(record);
+      item.note="batch metadata";
+      item.tags=["terminology"];
+      item.glossary_candidate=true;
+      state.set(record.id,item)
+    }
+    applyFilters();
+    localStorage.setCounts.set(storageKey,0)
+  `);
+  await elements.get("selectUnreviewedPage").fire("click");
+  await elements.get("batchAccept").fire("click");
+  const batchAcceptAtomic = vm.runInThisContext(
+    "pack.entries.slice(0,100).every("
+    + "record=>currentState(record).decision==='accept')"
+    + "&&pack.entries.slice(100).every("
+    + "record=>currentState(record).decision==='unreviewed')"
+  );
+  const batchPreservesMetadata = vm.runInThisContext(
+    "currentState(pack.entries[0]).note==='batch metadata'"
+    + "&&currentState(pack.entries[0]).tags.length===1"
+    + "&&currentState(pack.entries[0]).tags[0]==='terminology'"
+    + "&&currentState(pack.entries[0]).glossary_candidate===true"
+  );
+  const batchSingleSparseSave = vm.runInThisContext(
+    "localStorage.setCounts.get(storageKey)===1"
+  );
+  const confirmationIsExplicit = (
+    globalThis.lastConfirmMessage.includes("100")
+    && globalThis.lastConfirmMessage.includes("Status:")
+    && globalThis.lastConfirmMessage.includes("Требуют внимания: 3")
+    && globalThis.lastConfirmMessage.includes(
+      "отдельное редакторское решение для каждой выбранной строки"
+    )
+  );
+  const progressCountersImmediate = vm.runInThisContext(
+    'el("progressText").textContent==="100 / 1678 проверено"'
+    + '&&el("progressDetails").textContent.includes('
+    + '"Непроверенные: 1578")'
+    + '&&el("progressDetails").textContent.includes('
+    + '"невалидные edits: 0")'
+    + '&&el("progressDetails").textContent.includes('
+    + '"несогласованных групп повторов: 1")'
+    + '&&el("selectedCount").textContent==="Выбрано на странице: 0"'
+  );
+  const undoStoredForExactPack = vm.runInThisContext(
+    "JSON.parse(localStorage.getItem(storageKey)).last_batch_undo"
+    + ".pack_fingerprint===pack.pack_fingerprint"
+    + "&&JSON.parse(localStorage.getItem(storageKey)).last_batch_undo"
+    + ".entries.length===100"
+  );
+  const validUndoDocument = vm.runInThisContext(
+    "JSON.stringify(undoDocument())"
+  );
+  const beforeInvalidUndo = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+  );
+  vm.runInThisContext(`
+    undoState={
+      decision:"accept",
+      entries:[{
+        occurrence_id:"0".repeat(64),
+        before:defaults(pack.entries[0]),
+        after:defaults(pack.entries[0])
+      }]
+    };
+    undoLastBatch()
+  `);
+  const undoValidationFailureAtomic = vm.runInThisContext(
+    "JSON.stringify(sparseDocument())"
+    + "===" + JSON.stringify(beforeInvalidUndo)
+    + '&&el("error").textContent.startsWith("Отмена отклонена:")'
+  );
+  vm.runInThisContext(
+    "undoState=validateUndoDocument(JSON.parse("
+    + JSON.stringify(validUndoDocument)
+    + "))"
+  );
+  vm.runInThisContext(
+    "navigateToRecord(pack.entries[1500].id);setDecision('accept',false)"
+  );
+  vm.runInThisContext("undoLastBatch()");
+  const undoRestoresExactPriorState = vm.runInThisContext(
+    "pack.entries.slice(0,100).every("
+    + "record=>currentState(record).decision==='unreviewed')"
+    + "&&currentState(pack.entries[0]).note==='batch metadata'"
+    + "&&currentState(pack.entries[0]).tags[0]==='terminology'"
+    + "&&currentState(pack.entries[0]).glossary_candidate===true"
+  );
+  const undoPreservesUnrelatedIndividualChange = vm.runInThisContext(
+    "currentState(pack.entries[1500]).decision==='accept'"
+  );
+  const undoConsumed = vm.runInThisContext(
+    "undoState===null"
+    + "&&JSON.parse(localStorage.getItem(storageKey)).last_batch_undo===null"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;applyFilters()
+  `);
+  let firstCheckbox = elements.get("entryList").children[0].children[0];
+  firstCheckbox.checked = true;
+  await firstCheckbox.fire("change");
+  await elements.get("batchReject").fire("click");
+  const batchRejectExact = vm.runInThisContext(
+    "currentState(pack.entries[0]).decision==='reject'"
+    + "&&pack.entries.slice(1).every("
+    + "record=>currentState(record).decision==='unreviewed')"
+  );
+  const reviewedCheckboxDisabled = (
+    elements.get("entryList").children[0].children[0].disabled === true
+  );
+  await elements.get("clear").fire("click");
+  const clearResetsUndo = vm.runInThisContext(
+    "state.size===0&&undoState===null&&selected.size===0"
+    + "&&localStorage.getItem(storageKey)===null"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;
+    applyFilters();persistSparse()
+  `);
+  const legacySparseV1Compatible = vm.runInThisContext(
+    "validateStorageDocument(sparseDocument()).state.size===0"
+    + "&&validateStorageDocument(sparseDocument()).undo===null"
+  );
+  const persistedBeforeStorageFailure = localStorage.getItem(
+    vm.runInThisContext("storageKey")
+  );
+  firstCheckbox = elements.get("entryList").children[0].children[0];
+  firstCheckbox.checked = true;
+  await firstCheckbox.fire("change");
+  localStorage.fail = true;
+  await elements.get("batchAccept").fire("click");
+  globalThis.capturedBlob = undefined;
+  vm.runInThisContext("downloadDocument(false)");
+  const failedStorageDraftBytes = Buffer.from(
+    await globalThis.capturedBlob.arrayBuffer()
+  );
+  const failedStorageDraft = JSON.parse(
+    failedStorageDraftBytes.toString("utf8")
+  );
+  const storageFailureKeepsMemoryExport = (
+    vm.runInThisContext(
+      "currentState(pack.entries[0]).decision==='accept'&&undoState!==null"
+    )
+    && failedStorageDraft.decisions[0].decision === "accept"
+  );
+  localStorage.fail = false;
+  const storageEnvelopeFailureCoherent = vm.runInThisContext(
+    "(()=>{const restored=validateStorageDocument(JSON.parse("
+    + JSON.stringify(persistedBeforeStorageFailure)
+    + "));return restored.state.size===0&&restored.undo===null})()"
+  );
+  vm.runInThisContext(`
+    {
+      const restored=validateStorageDocument(JSON.parse(
+        ${JSON.stringify(persistedBeforeStorageFailure)}
+      ));
+      state=restored.state;undoState=restored.undo;
+    }
+    drafts.clear();selected.clear();currentId=pack.entries[0].id;
+    pageIndex=0;applyFilters()
+  `);
+  firstCheckbox = elements.get("entryList").children[0].children[0];
+  firstCheckbox.checked = true;
+  await firstCheckbox.fire("change");
+  await elements.get("batchAccept").fire("click");
+  let secondCheckbox = elements.get("entryList").children[1].children[0];
+  secondCheckbox.checked = true;
+  await secondCheckbox.fire("change");
+  await elements.get("batchReject").fire("click");
+  const newBatchReplacesUndo = vm.runInThisContext(
+    "undoState.decision==='reject'&&undoState.entries.length===1"
+    + "&&undoState.entries[0].occurrence_id===pack.entries[1].id"
+  );
+  vm.runInThisContext("undoLastBatch()");
+  const latestBatchOnlyUndo = vm.runInThisContext(
+    "currentState(pack.entries[0]).decision==='accept'"
+    + "&&currentState(pack.entries[1]).decision==='unreviewed'"
+    + "&&undoState===null"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;applyFilters()
+  `);
+  firstCheckbox = elements.get("entryList").children[0].children[0];
+  firstCheckbox.checked = true;
+  await firstCheckbox.fire("change");
+  await elements.get("batchAccept").fire("click");
+  const coherentBatchEnvelope = JSON.parse(
+    localStorage.getItem(vm.runInThisContext("storageKey"))
+  );
+  const corruptedUndoEnvelope = JSON.parse(
+    JSON.stringify(coherentBatchEnvelope)
+  );
+  corruptedUndoEnvelope.last_batch_undo.entries[0].after.note =
+    "stale undo sentinel";
+  const staleUndoSalvagesDecisions = vm.runInThisContext(
+    "(()=>{const restored=validateStorageDocument("
+    + JSON.stringify(corruptedUndoEnvelope)
+    + ");return restored.state.get(pack.entries[0].id).decision==='accept'"
+    + "&&restored.undo===null&&restored.undoDiscarded===true})()"
+  );
+  vm.runInThisContext("setDecision('reject',false)");
+  const sameBatchDecisionMutationReloads = vm.runInThisContext(
+    "(()=>{const restored=validateStorageDocument(JSON.parse("
+    + "localStorage.getItem(storageKey)));"
+    + "return restored.state.get(pack.entries[0].id).decision==='reject'"
+    + "&&restored.undo===null&&restored.undoDiscarded===false})()"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;applyFilters()
+  `);
+  firstCheckbox = elements.get("entryList").children[0].children[0];
+  firstCheckbox.checked = true;
+  await firstCheckbox.fire("change");
+  await elements.get("batchAccept").fire("click");
+  vm.runInThisContext(
+    "updateDraftAwareField(pack.entries[0],'note','post batch note',true)"
+  );
+  const sameBatchMetadataMutationReloads = vm.runInThisContext(
+    "(()=>{const restored=validateStorageDocument(JSON.parse("
+    + "localStorage.getItem(storageKey)));const item=restored.state.get("
+    + "pack.entries[0].id);return item.decision==='accept'"
+    + "&&item.note==='post batch note'&&restored.undo===null"
+    + "&&restored.undoDiscarded===false})()"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    {
+      const record=pack.entries[0];
+      drafts.set(record.id,{
+        item:defaults(record),valid:false,error:"invalid selection sentinel"
+      })
+    }
+    resetFilters();currentId=pack.entries[0].id;pageIndex=0;applyFilters()
+  `);
+  const invalidDraftCheckboxDisabled = (
+    elements.get("entryList").children[0].children[0].disabled === true
+  );
+  await elements.get("selectUnreviewedPage").fire("click");
+  const invalidDraftNotSelected = vm.runInThisContext(
+    "selected.size===99&&!selected.has(pack.entries[0].id)"
+  );
+  vm.runInThisContext(`
+    state=new Map();drafts.clear();selected.clear();undoState=null;
+    resetFilters();localStorage.values.clear();localStorage.setCounts.clear();
+    currentId=pack.entries[0].id;pageIndex=0;applyFilters()
+  `);
   vm.runInThisContext("currentId=pack.entries[0].id;pageIndex=0;render()");
   const beforeTextStorage = localStorage.getItem(
     vm.runInThisContext("storageKey")
@@ -883,6 +1376,19 @@ async function fireDocument(type, event) {
     decisions: finalDocument.decisions.slice().reverse()
   };
   const reorderedText = JSON.stringify(reorderedDocument);
+  vm.runInThisContext(`
+    {
+      const record=pack.entries[0];
+      const before=defaults(record);
+      const after=defaults(record);after.decision="accept";
+      undoState={
+        decision:"accept",
+        entries:[{occurrence_id:record.id,before,after}]
+      }
+    }
+    selected=new Set([pack.entries[0].id]);
+    persistSparse();updateProgress()
+  `);
   elements.get("importFile").files = [{
     size: Buffer.byteLength(reorderedText),
     text: async () => reorderedText
@@ -895,12 +1401,17 @@ async function fireDocument(type, event) {
     "state.size===pack.entries.length"
     + "&&pack.entries.every(record=>currentState(record).decision==='accept')"
   );
+  const legacyImportResetsBatchState = vm.runInThisContext(
+    "undoState===null&&selected.size===0"
+    + "&&JSON.parse(localStorage.getItem(storageKey)).last_batch_undo===null"
+  );
   const beforeInvalidImport = vm.runInThisContext(
     "JSON.stringify(sparseDocument())"
   );
   const invalidDocument = JSON.parse(finalBytes.toString("utf8"));
   invalidDocument.pack_fingerprint = "0".repeat(64);
   const invalidText = JSON.stringify(invalidDocument);
+  vm.runInThisContext("selected=new Set([pack.entries[0].id]);updateProgress()");
   elements.get("importFile").files = [{
     size: Buffer.byteLength(invalidText),
     text: async () => invalidText
@@ -910,6 +1421,9 @@ async function fireDocument(type, event) {
   );
   const atomicInvalidImport = beforeInvalidImport === vm.runInThisContext(
     "JSON.stringify(sparseDocument())"
+  );
+  const invalidImportClearsSelection = vm.runInThisContext(
+    "selected.size===0"
   );
   vm.runInThisContext(`
     el("search").value="";
@@ -1093,11 +1607,22 @@ async function fireDocument(type, event) {
   const lastValidTranslation = vm.runInThisContext(
     "fullTranslation(byId.get(currentId),currentState(byId.get(currentId)))"
   );
+  const validEditCounters = vm.runInThisContext(
+    'el("progressText").textContent==="1678 / 1678 проверено"'
+    + '&&el("progressDetails").textContent.includes("Непроверенные: 0")'
+    + '&&el("progressDetails").textContent.includes("невалидные edits: 0")'
+  );
   editArea = elements.get("editor").querySelector("textarea");
   editArea.value = "$INVALID_BYTES";
   await editArea.fire("input");
   const invalidDraftPresent = vm.runInThisContext(
     "drafts.has(currentId)&&drafts.get(currentId).valid===false"
+  );
+  const invalidEditCounters = vm.runInThisContext(
+    'el("progressText").textContent==="1677 / 1678 проверено"'
+    + '&&el("progressDetails").textContent.includes("Непроверенные: 0")'
+    + '&&el("progressDetails").textContent.includes("невалидные edits: 1")'
+    + '&&el("progressDetails").textContent.includes("без валидного решения: 1")'
   );
   globalThis.capturedBlob = undefined;
   vm.runInThisContext("downloadDocument(false)");
@@ -1159,6 +1684,11 @@ async function fireDocument(type, event) {
     && tagFinalAfterRepair.tags.includes("terminology")
     && tagDraftAfterRepair.edited_translation === "VALID TAG REPAIR"
     && !JSON.stringify(tagDraftAfterRepair).includes("$INVALID_BYTES")
+  );
+  const repairedEditCounters = vm.runInThisContext(
+    'el("progressText").textContent==="1678 / 1678 проверено"'
+    + '&&el("progressDetails").textContent.includes("Непроверенные: 0")'
+    + '&&el("progressDetails").textContent.includes("невалидные edits: 0")'
   );
   vm.runInThisContext(`
     state=new Map(pack.entries.map(record=>{
@@ -1438,6 +1968,46 @@ async function fireDocument(type, event) {
   process.stdout.write(JSON.stringify({
     initialRows,
     secondPageRows,
+    keyAndOrdinalRendered,
+    nextContextNavigated,
+    previousContextNavigated,
+    keySearchExact,
+    exactRepeatGrouping,
+    repeatNextNavigated,
+    repeatPreviousNavigated,
+    inconsistentRepeatFilterExact,
+    noFuzzyGrouping,
+    pageLocalSelectionCount,
+    pageChangeClearsSelection,
+    searchChangeClearsSelection,
+    filterChangeClearsSelection,
+    confirmationCancelAtomic,
+    zeroSelectionRejected,
+    hiddenSelectionRejectedAtomically,
+    reviewedNotOverwritten,
+    batchAcceptAtomic,
+    batchPreservesMetadata,
+    batchSingleSparseSave,
+    confirmationIsExplicit,
+    progressCountersImmediate,
+    undoStoredForExactPack,
+    undoValidationFailureAtomic,
+    undoRestoresExactPriorState,
+    undoPreservesUnrelatedIndividualChange,
+    undoConsumed,
+    batchRejectExact,
+    reviewedCheckboxDisabled,
+    clearResetsUndo,
+    legacySparseV1Compatible,
+    storageFailureKeepsMemoryExport,
+    storageEnvelopeFailureCoherent,
+    newBatchReplacesUndo,
+    latestBatchOnlyUndo,
+    staleUndoSalvagesDecisions,
+    sameBatchDecisionMutationReloads,
+    sameBatchMetadataMutationReloads,
+    invalidDraftCheckboxDisabled,
+    invalidDraftNotSelected,
     textWasDebounced,
     sparseAfterBlurChanges: sparseAfterBlur.changes.length,
     sparseAfterDecisionChanges: sparseAfterDecision.changes.length,
@@ -1452,7 +2022,9 @@ async function fireDocument(type, event) {
     finalExactlyOneLf: finalBytes.at(-1) === 10 && finalBytes.at(-2) !== 10,
     importedCount,
     reorderedFullImportAccepted,
+    legacyImportResetsBatchState,
     atomicInvalidImport,
+    invalidImportClearsSelection,
     invalidImportCaseCount: invalidImportResults.length,
     completeImportFailuresAtomic,
     partialImportState1678Preserved,
@@ -1466,7 +2038,9 @@ async function fireDocument(type, event) {
     filteredSelectEditStayed,
     filteredSelectEditorFocused,
     filteredSelectCountIsStrict,
+    validEditCounters,
     invalidDraftPresent,
+    invalidEditCounters,
     invalidEditDraftDecisionCount: invalidEditDraftDocument.decisions.length,
     invalidEditDraftUsesLastValid,
     invalidEditDraftExcludesInvalidBytes,
@@ -1477,6 +2051,7 @@ async function fireDocument(type, event) {
     tagSavedDuringInvalidDraft,
     tagPersistedDuringInvalidDraft,
     tagSurvivesInvalidRepair,
+    repairedEditCounters,
     glossarySavedDuringInvalidDraft,
     glossaryPersistedDuringInvalidDraft,
     glossarySurvivesInvalidRepair,
@@ -1513,6 +2088,46 @@ async function fireDocument(type, event) {
     assert result == {
         "initialRows": 100,
         "secondPageRows": 100,
+        "keyAndOrdinalRendered": True,
+        "nextContextNavigated": True,
+        "previousContextNavigated": True,
+        "keySearchExact": True,
+        "exactRepeatGrouping": True,
+        "repeatNextNavigated": True,
+        "repeatPreviousNavigated": True,
+        "inconsistentRepeatFilterExact": True,
+        "noFuzzyGrouping": True,
+        "pageLocalSelectionCount": True,
+        "pageChangeClearsSelection": True,
+        "searchChangeClearsSelection": True,
+        "filterChangeClearsSelection": True,
+        "confirmationCancelAtomic": True,
+        "zeroSelectionRejected": True,
+        "hiddenSelectionRejectedAtomically": True,
+        "reviewedNotOverwritten": True,
+        "batchAcceptAtomic": True,
+        "batchPreservesMetadata": True,
+        "batchSingleSparseSave": True,
+        "confirmationIsExplicit": True,
+        "progressCountersImmediate": True,
+        "undoStoredForExactPack": True,
+        "undoValidationFailureAtomic": True,
+        "undoRestoresExactPriorState": True,
+        "undoPreservesUnrelatedIndividualChange": True,
+        "undoConsumed": True,
+        "batchRejectExact": True,
+        "reviewedCheckboxDisabled": True,
+        "clearResetsUndo": True,
+        "legacySparseV1Compatible": True,
+        "storageFailureKeepsMemoryExport": True,
+        "storageEnvelopeFailureCoherent": True,
+        "newBatchReplacesUndo": True,
+        "latestBatchOnlyUndo": True,
+        "staleUndoSalvagesDecisions": True,
+        "sameBatchDecisionMutationReloads": True,
+        "sameBatchMetadataMutationReloads": True,
+        "invalidDraftCheckboxDisabled": True,
+        "invalidDraftNotSelected": True,
         "textWasDebounced": True,
         "sparseAfterBlurChanges": 1,
         "sparseAfterDecisionChanges": 1,
@@ -1527,7 +2142,9 @@ async function fireDocument(type, event) {
         "finalExactlyOneLf": True,
         "importedCount": 1678,
         "reorderedFullImportAccepted": True,
+        "legacyImportResetsBatchState": True,
         "atomicInvalidImport": True,
+        "invalidImportClearsSelection": True,
         "invalidImportCaseCount": 5,
         "completeImportFailuresAtomic": True,
         "partialImportState1678Preserved": True,
@@ -1541,7 +2158,9 @@ async function fireDocument(type, event) {
         "filteredSelectEditStayed": True,
         "filteredSelectEditorFocused": True,
         "filteredSelectCountIsStrict": True,
+        "validEditCounters": True,
         "invalidDraftPresent": True,
+        "invalidEditCounters": True,
         "invalidEditDraftDecisionCount": 1678,
         "invalidEditDraftUsesLastValid": True,
         "invalidEditDraftExcludesInvalidBytes": True,
@@ -1552,6 +2171,7 @@ async function fireDocument(type, event) {
         "tagSavedDuringInvalidDraft": True,
         "tagPersistedDuringInvalidDraft": True,
         "tagSurvivesInvalidRepair": True,
+        "repairedEditCounters": True,
         "glossarySavedDuringInvalidDraft": True,
         "glossaryPersistedDuringInvalidDraft": True,
         "glossarySurvivesInvalidRepair": True,

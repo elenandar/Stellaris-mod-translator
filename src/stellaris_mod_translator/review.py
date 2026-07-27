@@ -720,6 +720,7 @@ def _validated_review_entries(
             "protected_atoms": source_atoms,
         }
         if full_candidate:
+            entry_data["key"] = source_entry.key
             entry_data["warnings"] = _warning_flags(
                 status,
                 source_segments,
@@ -728,6 +729,22 @@ def _validated_review_entries(
         entries.append(entry_data)
     if len({entry["id"] for entry in entries}) != len(entries):
         raise SafetyError("duplicate_occurrence_id")
+    if full_candidate:
+        entries_by_path: dict[str, list[dict[str, object]]] = {}
+        for entry in entries:
+            path = entry["path"]
+            assert isinstance(path, str)
+            entries_by_path.setdefault(path, []).append(entry)
+        for file_entries in entries_by_path.values():
+            for index, entry in enumerate(file_entries):
+                entry["previous_in_file_id"] = (
+                    file_entries[index - 1]["id"] if index > 0 else None
+                )
+                entry["next_in_file_id"] = (
+                    file_entries[index + 1]["id"]
+                    if index + 1 < len(file_entries)
+                    else None
+                )
 
     parser_unsupported = sum(
         1
