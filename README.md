@@ -9,12 +9,23 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-5C` обобщает `apply-review-decisions` для полного schema-v3 candidate,
-сохраняя прежний schema-v2 bounded-pilot path. Полное применение требует pin
-точных байтов `translation-report.json`, завершённый decisions JSON и всегда
-создаёт новый отдельный reviewed candidate. Оно не вызывает Ollama, не
-регистрируется в launcher и не меняет source/base candidate. Owner decision от
-26 июля 2026 года
+`MVP-5C` смержен в PR №18, а разрешённое владельцем live-применение полного
+decisions set завершилось отдельным private reviewed candidate: application
+report schema v2 сохранил `619 accept / 1030 edit / 29 reject`, exact
+localisation hash и явный technical residue `11 unsupported / 1 skipped`.
+Residue не маскируется: весь мод остаётся `editorially_approved=false`.
+
+`MVP-5H` добавляет `package-reviewed-mod`: команда превращает exact reviewed
+candidate в отдельный private no-clobber пакет локального мода. Пакет содержит
+только descriptors и `localisation/russian/**`; application report остаётся
+metadata authority и не копируется в игровой content. Создание пакета не
+устанавливает его, не регистрирует launcher, не меняет playset/load order и не
+запускает Stellaris. Первый private NSC3 package smoke прошёл с byte-identical
+localisation и нулевыми input/active/launcher mutations. Следующий отдельный
+gate — bounded live install, порядок после source dependency и внутриигровой
+smoke.
+
+Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
 исторический evidence и не являются runtime authority для нового CLI.
@@ -81,6 +92,17 @@ python3 -m stellaris_mod_translator apply-review-decisions \
   --candidate-report-sha256 64-lowercase-hex-report-pin \
   --decisions /path/to/final-full-decisions.json \
   --output /path/to/new-full-reviewed-candidate
+
+python3 -m stellaris_mod_translator package-reviewed-mod \
+  --reviewed-candidate /path/to/read-only-reviewed-candidate \
+  --application-report-sha256 64-lowercase-hex-report-pin \
+  --output /path/to/new-private-package \
+  --mod-slug example_ru_local \
+  --display-name "Example — Русская локализация (локальная)" \
+  --dependency-name "Example" \
+  --supported-version "4.4.*" \
+  --planned-install-root "/path/to/future/Stellaris/mod" \
+  --allow-technical-residue
 ```
 
 `--dry-run` не вызывает Ollama и ничего не записывает. Обычный запуск требует
@@ -313,6 +335,37 @@ status/counts, decision counts и technical residue. При unsupported
 occurrences или skipped files он честно сохраняет
 `editorially_approved=false`: эти residue bytes остаются без изменений, но для
 них не существовало безопасного editable span.
+
+## Упаковка reviewed candidate
+
+`package-reviewed-mod` принимает только full application report schema v2 со
+status `full_candidate_review_applied`, scope `full_candidate` и exact SHA-256
+его байтов. Команда заново вычисляет localisation hash и проверяет полный
+decision-count algebra, нулевые source/candidate/protected mutations, нулевые
+Ollama/network calls и отсутствие `unreviewed`/pending/deferred reviewable
+entries. Ненулевой technical residue требует явного
+`--allow-technical-residue` и без изменений переносится в
+`package-report.json`.
+
+Reviewed candidate имеет закрытый inventory: ровно
+`localisation/russian/**/*.yml` и `review-application-report.json`. Symlink,
+hardlink и special files запрещены; каждый YML должен иметь первый
+`l_russian:` header, не содержать placeholder residue, private paths или
+review/workspace/prompt artifacts. До атомарной публикации вход перечитывается
+и сравнивается с исходным snapshot.
+
+Пакет имеет форму `install/<slug>.mod`,
+`install/<slug>/descriptor.mod`, `install/<slug>/localisation/russian/**` и
+корневой `package-report.json`. Строгий descriptor renderer разрешает только
+`name`, `supported_version`, одну exact dependency и только во внешнем `.mod`
+planned absolute `path`. Quote, backslash, control/format Unicode, небезопасный
+slug, malformed/duplicate fields, `remote_file_id` и `replace_path`
+отклоняются. Публикация atomic no-clobber: занятый output не изменяется.
+
+`package-report.json` содержит только hashes, inventory, mod/install metadata,
+technical residue и нулевые mutation counters. Он не содержит localisation,
+decisions или prompts. Даже валидный пакет остаётся неустановленным: CLI не
+пишет в planned install root, launcher или active mod path.
 
 MVP-5C application и MVP-5D ускоренный editorial workflow не принимают решения
 автоматически. Synthetic regressions интерфейса исполняют настоящий JavaScript,

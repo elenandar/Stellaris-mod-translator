@@ -32,6 +32,7 @@ __pycache__/
 .ruff_cache/
 
 # Runtime and user data: never commit
+Ingame localisation/
 runtime/
 workspaces/
 workspace/

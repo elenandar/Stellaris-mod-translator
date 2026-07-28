@@ -67,9 +67,27 @@ launcher и active mod paths не читаются и не изменяются.
 требует отдельного следующего разрешения после review/merge механизма и
 локального final export.
 
+MVP-5C смержен в PR №18 как `43e0b5b`; затем exact full decisions set был
+применён в отдельный private reviewed candidate с application report schema v2,
+полным решением `1678 / 1678` reviewable occurrences и нулевыми
+source/candidate/Ollama/network mutations. Technical residue
+`11 unsupported / 1 skipped` сохранён явно, поэтому
+`editorially_approved=false`. MVP-5D смержен в PR №19 как `80cae5a`; его
+ускоренный review UI не меняет authority уже применённых human decisions.
+
+После этого владелец отдельно разрешил `MVP-5H`: reusable packaging command и
+ровно один private no-clobber NSC3 package вне active Stellaris paths.
+Application report остаётся pinned metadata authority, а игровой content
+ограничен строгими descriptors и byte-identical
+`localisation/russian/**`. Package creation не является active installation и
+не разрешает launcher/playset mutation или запуск игры. Следующий gate:
+bounded установка exact пакета, расположение после NSC3 и внутриигровой smoke.
+
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
-| MVP-5C — Full-candidate decision application | exact schema-v3 report pin, shared review validation, complete decisions set, lossless accept/edit/reject и full application report schema v2 | merged MVP-5B in PR №17 and schema-v3/full-pack contracts | full synthetic suite, adversarial semantic review; после review/merge — local final export и отдельное owner authorization для live application | **implemented for review; synthetic-only, no private decisions read, no live application, active installation or launcher** |
+| MVP-5H — Safe local-mod package | exact application-report pin, strict reviewed inventory, typed descriptor renderer, metadata-only package report и atomic no-clobber package publication | merged MVP-5C/MVP-5D, exact private reviewed candidate and explicit owner authorization | full synthetic suite, private package smoke and immutability checks; затем отдельный live-install/load-order/in-game gate | **implemented for review; private NSC3 package smoke PASS, active installation and launcher remain untouched** |
+| MVP-5D — Accelerated editorial workflow | paginated batch accept/reject, exact-set confirmation, atomic sparse state and bounded undo without automatic decisions | merged MVP-5C mechanism and owner-controlled private review | synthetic JS/browser regressions and complete human final export | **merged in PR №19 as `80cae5a`; no launcher or active installation** |
+| MVP-5C — Full-candidate decision application | exact schema-v3 report pin, shared review validation, complete decisions set, lossless accept/edit/reject и full application report schema v2 | merged MVP-5B in PR №17 and schema-v3/full-pack contracts | full synthetic suite, adversarial semantic review; затем exact owner-authorized private application | **merged in PR №18 as `43e0b5b`; live decisions applied to a private reviewed candidate, active installation and launcher remain untouched** |
 | MVP-5B — Full-candidate editorial review pack | strict schema-v3/report-pin validation, pack schema v2, warning flags, paginated UI, sparse persistence и draft/final decisions schema v1 export | merged MVP-4 at `81c9593` and exact immutable full candidate/report | full synthetic suite, browser smoke, exact private input recheck и local-only no-clobber pack | **merged in PR №17; no active installation or launcher** |
 | MVP-4 — Resumable full-mod translation | private SQLite workspace, immutable job/model/source provenance, SQLite-authoritative hot-journal rollback after structural preflight, run-wide lease, in-memory logical output identity, offline post-intent recovery, stable two-pass reconciliation, write-free completed resume и crash-recoverable exact-tree atomic no-clobber finalization | merged MVP-3 at `4dc79f9c` | full synthetic suite; затем отдельное owner authorization для любого private/live full-mod run | **final remediation validated for synthetic data — 266 tests; commit-phase rollback/offline intent/read-only completion covered; same-UID limitation documented; no private reads, live Ollama calls or active publication** |
 | MVP-3 — Apply editorial review decisions | complete decisions validation, occurrence-identity application, lossless human-span edits и atomic no-clobber reviewed candidate | merged MVP-2 and exact pilot-02 source/candidate/report identity | synthetic suite; затем completed human decisions JSON и отдельное owner authorization для live application | **mechanism implemented for synthetic review; private decisions not applied and output is not active** |

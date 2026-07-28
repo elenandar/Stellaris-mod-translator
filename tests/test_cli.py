@@ -365,3 +365,104 @@ def test_apply_review_help_lists_full_report_pin(
         parser().parse_args(["apply-review-decisions", "--help"])
     assert exc.value.code == 0
     assert "--candidate-report-sha256 SHA256" in capsys.readouterr().out
+
+
+def test_package_reviewed_mod_exposes_exact_interface() -> None:
+    args = parser().parse_args(
+        [
+            "package-reviewed-mod",
+            "--reviewed-candidate",
+            "/reviewed",
+            "--application-report-sha256",
+            "d" * 64,
+            "--output",
+            "/package",
+            "--mod-slug",
+            "example_ru_local",
+            "--display-name",
+            "Example — Русская локализация",
+            "--dependency-name",
+            "Example",
+            "--supported-version",
+            "4.4.*",
+            "--planned-install-root",
+            "/active/mod",
+            "--allow-technical-residue",
+        ]
+    )
+    assert args.reviewed_candidate == Path("/reviewed")
+    assert args.application_report_sha256 == "d" * 64
+    assert args.output == Path("/package")
+    assert args.mod_slug == "example_ru_local"
+    assert args.display_name == "Example — Русская локализация"
+    assert args.dependency_name == "Example"
+    assert args.supported_version == "4.4.*"
+    assert args.planned_install_root == Path("/active/mod")
+    assert args.allow_technical_residue is True
+
+
+def test_package_reviewed_mod_dispatches_without_ollama(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    received: tuple[object, ...] | None = None
+
+    def package(*args: object, **kwargs: object) -> dict[str, object]:
+        nonlocal received
+        received = (*args, kwargs)
+        return {"status": "reviewed_mod_package_created"}
+
+    monkeypatch.setattr(cli, "package_reviewed_mod", package)
+    result = main(
+        [
+            "package-reviewed-mod",
+            "--reviewed-candidate",
+            "/reviewed",
+            "--application-report-sha256",
+            "e" * 64,
+            "--output",
+            "/package",
+            "--mod-slug",
+            "example_ru_local",
+            "--display-name",
+            "Example — Русская локализация",
+            "--dependency-name",
+            "Example",
+            "--supported-version",
+            "4.4.*",
+            "--planned-install-root",
+            "/active/mod",
+            "--allow-technical-residue",
+        ]
+    )
+    assert result == 0
+    assert received == (
+        Path("/reviewed"),
+        "e" * 64,
+        Path("/package"),
+        "example_ru_local",
+        "Example — Русская локализация",
+        "Example",
+        "4.4.*",
+        Path("/active/mod"),
+        {"allow_technical_residue": True},
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "reviewed_mod_package_created"
+    }
+
+
+def test_package_reviewed_mod_help_lists_safety_arguments(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(["package-reviewed-mod", "--help"])
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    for option in (
+        "--reviewed-candidate REVIEWED_CANDIDATE",
+        "--application-report-sha256 SHA256",
+        "--planned-install-root PLANNED_INSTALL_ROOT",
+        "--allow-technical-residue",
+    ):
+        assert option in output
