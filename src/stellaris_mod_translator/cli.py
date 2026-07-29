@@ -8,6 +8,7 @@ import sys
 
 from .engine import SafetyError, inspect_mod, translate_mod
 from .ollama import OllamaError
+from .package_reviewed_mod import package_reviewed_mod
 from .review import build_review_pack
 from .review_application import apply_review_decisions
 
@@ -102,6 +103,32 @@ def parser() -> argparse.ArgumentParser:
     )
     apply_review.add_argument("--decisions", required=True, type=Path)
     apply_review.add_argument("--output", required=True, type=Path)
+
+    package = commands.add_parser(
+        "package-reviewed-mod",
+        help="build a private install package from a reviewed candidate",
+    )
+    package.add_argument("--reviewed-candidate", required=True, type=Path)
+    package.add_argument(
+        "--application-report-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    package.add_argument("--output", required=True, type=Path)
+    package.add_argument("--mod-slug", required=True)
+    package.add_argument("--display-name", required=True)
+    package.add_argument("--dependency-name", required=True)
+    package.add_argument("--supported-version", required=True)
+    package.add_argument("--planned-install-root", required=True, type=Path)
+    package.add_argument(
+        "--allow-technical-residue",
+        action="store_true",
+        help=(
+            "preserve explicitly acknowledged unsupported/skipped residue "
+            "without claiming full editorial approval"
+        ),
+    )
     return root
 
 
@@ -127,13 +154,25 @@ def main(argv: list[str] | None = None) -> int:
                 args.output,
                 candidate_report_sha256=args.candidate_report_sha256,
             )
-        else:
+        elif args.command == "apply-review-decisions":
             report = apply_review_decisions(
                 args.source_mod,
                 args.candidate,
                 args.decisions,
                 args.output,
                 candidate_report_sha256=args.candidate_report_sha256,
+            )
+        else:
+            report = package_reviewed_mod(
+                args.reviewed_candidate,
+                args.application_report_sha256,
+                args.output,
+                args.mod_slug,
+                args.display_name,
+                args.dependency_name,
+                args.supported_version,
+                args.planned_install_root,
+                allow_technical_residue=args.allow_technical_residue,
             )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
