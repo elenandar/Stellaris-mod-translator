@@ -166,6 +166,18 @@ class DescriptorSpec:
     path: str | None = None
 
 
+DirectoryIdentity = tuple[int, int]
+
+
+@dataclass(frozen=True)
+class PhysicalPathIdentity:
+    path: Path
+    anchor_identity: DirectoryIdentity
+    ancestor_identities: tuple[DirectoryIdentity, ...]
+    missing_parts: tuple[str, ...]
+    exact_exists: bool
+
+
 def package_reviewed_mod(
     reviewed_candidate: Path,
     application_report_sha256: str,
@@ -422,16 +434,19 @@ def _validated_package_output(candidate: Path, output: Path) -> Path:
     lexical = output.absolute()
     if output.exists() or output.is_symlink():
         raise SafetyError("output_must_not_exist")
+    _validated_absolute_path_text(lexical.as_posix(), "output")
+    parent = lexical.parent
+    if parent.is_symlink() and not parent.exists():
+        raise SafetyError("output_parent_missing")
     try:
-        parent = lexical.parent.resolve(strict=True)
+        parent_is_directory = parent.is_dir()
     except OSError as exc:
         raise SafetyError("output_parent_missing") from exc
-    if not parent.is_dir():
+    if not parent_is_directory:
         raise SafetyError("output_parent_not_directory")
-    resolved = parent / lexical.name
-    if _paths_overlap(candidate, resolved):
+    if _paths_overlap(candidate, lexical):
         raise SafetyError("reviewed_candidate_output_overlap")
-    return resolved
+    return lexical
 
 
 def _validated_mod_slug(value: str) -> str:
@@ -467,7 +482,7 @@ def _validated_planned_install_root(path: Path) -> tuple[str, Path]:
     )
     if canonical_text == "/":
         raise SafetyError("unsafe_planned_install_root")
-    return canonical_text, Path(canonical_text).resolve(strict=False)
+    return canonical_text, Path(canonical_text)
 
 
 def _validated_descriptor_path(value: str) -> str:
@@ -735,6 +750,7 @@ def _load_application_report(data: bytes) -> dict[str, object]:
         payload = json.loads(
             data.decode("utf-8"),
             object_pairs_hook=_unique_application_report_object,
+            parse_float=_reject_json_float,
             parse_constant=_reject_json_constant,
         )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
@@ -757,6 +773,10 @@ def _unique_application_report_object(
 
 def _reject_json_constant(value: str) -> object:
     raise ValueError(f"invalid JSON constant: {value}")
+
+
+def _reject_json_float(value: str) -> object:
+    raise ValueError(f"JSON float is forbidden: {value}")
 
 
 def _validate_application_report(
@@ -782,10 +802,11 @@ def _validate_application_report(
         ),
     }
     for key, expected in expected_scalars.items():
-        if report.get(key) != expected or (
-            isinstance(expected, int)
-            and isinstance(report.get(key), bool)
-        ):
+        actual = report.get(key)
+        if (
+            type(expected) is int
+            and (type(actual) is not int or actual != expected)
+        ) or (type(expected) is not int and actual != expected):
             raise SafetyError(f"application_report_{key}_mismatch")
     if report.get("output") != str(candidate_root):
         raise SafetyError("application_report_output_mismatch")
@@ -811,13 +832,14 @@ def _validate_application_report(
     reject = _report_count(counts, "reject")
     actually_changed = _report_count(counts, "actually_changed_spans")
     restored_english = _report_count(counts, "restored_english_spans")
-    if (
-        total_decisions <= 0
-        or accept + edit + reject != total_decisions
-        or actually_changed > edit + reject
-        or restored_english > reject
-    ):
-        raise SafetyError("application_report_decision_counts_invalid")
+    _validate_decision_count_algebra(
+        total_decisions=total_decisions,
+        accept=accept,
+        edit=edit,
+        reject=reject,
+        actually_changed=actually_changed,
+        restored_english=restored_english,
+    )
 
     summary = _require_object(report, "review_summary")
     _require_exact_fields(
@@ -995,6 +1017,25 @@ def _report_count(value: dict[str, object], key: str) -> int:
     return item
 
 
+def _validate_decision_count_algebra(
+    *,
+    total_decisions: int,
+    accept: int,
+    edit: int,
+    reject: int,
+    actually_changed: int,
+    restored_english: int,
+) -> None:
+    if (
+        total_decisions <= 0
+        or accept + edit + reject != total_decisions
+        or restored_english > actually_changed
+        or actually_changed > edit + restored_english
+        or restored_english > reject
+    ):
+        raise SafetyError("application_report_decision_counts_invalid")
+
+
 def _validate_path_relationships(
     output: Path,
     candidate: Path,
@@ -1006,17 +1047,26 @@ def _validate_path_relationships(
         report, "base_candidate"
     )
     named_paths = (
-        ("source", source),
-        ("base_candidate", base_candidate),
-        ("reviewed_candidate", candidate),
-        ("install_root", install_root),
+        ("output", output, False),
+        ("source", source, True),
+        ("base_candidate", base_candidate, True),
+        ("reviewed_candidate", candidate, True),
+        ("install_root", install_root, False),
     )
-    for label, path in named_paths:
-        if _paths_overlap(output, path):
-            raise SafetyError(f"output_{label}_overlap")
-    for first_index, (first_label, first) in enumerate(named_paths):
-        for second_label, second in named_paths[first_index + 1 :]:
-            if _paths_overlap(first, second):
+    physical_paths = {
+        label: _physical_path_identity(
+            path,
+            label=label,
+            must_exist=must_exist,
+        )
+        for label, path, must_exist in named_paths
+    }
+    for first_index, (first_label, first, _) in enumerate(named_paths):
+        for second_label, second, _ in named_paths[first_index + 1 :]:
+            if _paths_overlap(first, second) or _physical_paths_overlap(
+                physical_paths[first_label],
+                physical_paths[second_label],
+            ):
                 raise SafetyError(
                     f"{first_label}_{second_label}_overlap"
                 )
@@ -1029,7 +1079,7 @@ def _validated_report_authority_path(
     if not isinstance(value, str):
         raise SafetyError(f"application_report_{key}_invalid")
     text = _validated_absolute_path_text(value, f"report_{key}")
-    return Path(text).resolve(strict=False)
+    return Path(text)
 
 
 def _paths_overlap(left: Path, right: Path) -> bool:
@@ -1038,6 +1088,120 @@ def _paths_overlap(left: Path, right: Path) -> bool:
         or left in right.parents
         or right in left.parents
     )
+
+
+def _physical_path_identity(
+    path: Path,
+    *,
+    label: str,
+    must_exist: bool,
+) -> PhysicalPathIdentity:
+    if not path.is_absolute():
+        raise SafetyError(f"{label}_physical_identity_unavailable")
+    cursor = path
+    missing_reversed: list[str] = []
+    while True:
+        try:
+            value = os.stat(cursor, follow_symlinks=True)
+        except FileNotFoundError as exc:
+            if cursor.is_symlink() or cursor.parent == cursor:
+                raise SafetyError(
+                    f"{label}_physical_identity_unavailable"
+                ) from exc
+            missing_reversed.append(cursor.name)
+            cursor = cursor.parent
+            continue
+        except OSError as exc:
+            raise SafetyError(
+                f"{label}_physical_identity_unavailable"
+            ) from exc
+        if not stat.S_ISDIR(value.st_mode):
+            raise SafetyError(f"{label}_physical_identity_not_directory")
+        break
+
+    missing_parts = tuple(reversed(missing_reversed))
+    if must_exist and missing_parts:
+        raise SafetyError(f"{label}_physical_identity_unavailable")
+    ancestor_identities: list[DirectoryIdentity] = []
+    ancestor = cursor
+    while True:
+        ancestor_identities.append(
+            _stable_physical_directory_identity(ancestor, label=label)
+        )
+        parent = ancestor.parent
+        if parent == ancestor:
+            break
+        ancestor = parent
+    return PhysicalPathIdentity(
+        path=path,
+        anchor_identity=ancestor_identities[0],
+        ancestor_identities=tuple(ancestor_identities),
+        missing_parts=missing_parts,
+        exact_exists=not missing_parts,
+    )
+
+
+def _stable_physical_directory_identity(
+    path: Path,
+    *,
+    label: str,
+) -> DirectoryIdentity:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+    )
+    try:
+        before = os.stat(path, follow_symlinks=True)
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise SafetyError(
+            f"{label}_physical_identity_unavailable"
+        ) from exc
+    try:
+        opened = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        after = os.stat(path, follow_symlinks=True)
+    except OSError as exc:
+        raise SafetyError(
+            f"{label}_physical_identity_unavailable"
+        ) from exc
+    identities = tuple(
+        (value.st_dev, value.st_ino)
+        for value in (before, opened, after)
+    )
+    if (
+        any(not stat.S_ISDIR(value.st_mode) for value in (before, opened, after))
+        or identities[0] != identities[1]
+        or identities[1] != identities[2]
+    ):
+        raise SafetyError(f"{label}_physical_identity_changed")
+    return identities[1]
+
+
+def _physical_paths_overlap(
+    left: PhysicalPathIdentity,
+    right: PhysicalPathIdentity,
+) -> bool:
+    if (
+        left.exact_exists
+        and left.anchor_identity in right.ancestor_identities
+    ):
+        return True
+    if (
+        right.exact_exists
+        and right.anchor_identity in left.ancestor_identities
+    ):
+        return True
+    if (
+        not left.exact_exists
+        and not right.exact_exists
+        and left.anchor_identity == right.anchor_identity
+    ):
+        raise SafetyError("physical_path_separation_unproven")
+    return False
 
 
 def _validate_private_content_absent(

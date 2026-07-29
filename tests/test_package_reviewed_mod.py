@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import unicodedata
 
 import pytest
 
@@ -412,6 +413,30 @@ def test_application_report_identity_is_strict(
 
 
 @pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("schema_version", 2.0),
+        ("schema_version", True),
+        ("schema_version", "2"),
+        ("review_pack_schema_version", 2.0),
+        ("review_pack_schema_version", True),
+        ("review_pack_schema_version", "2"),
+        ("candidate_report_schema_version", 3.0),
+        ("candidate_report_schema_version", True),
+        ("candidate_report_schema_version", "3"),
+    ],
+)
+def test_application_report_version_fields_require_exact_int(
+    tmp_path: Path, key: str, value: object
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    inputs.report[key] = value
+    inputs.report_pin = _write_report(inputs.candidate, inputs.report)
+    with pytest.raises(SafetyError, match="application_report|JSON"):
+        _run(inputs)
+
+
+@pytest.mark.parametrize(
     "key",
     [
         "source_mutations",
@@ -443,6 +468,93 @@ def test_application_report_requires_complete_decision_algebra(
         SafetyError, match="application_report_decision_counts_invalid"
     ):
         _run(inputs)
+
+
+def test_decision_algebra_rejects_restored_span_not_changed(
+    tmp_path: Path,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    counts = inputs.report["counts"]
+    assert isinstance(counts, dict)
+    counts.update(
+        {
+            "accept": 0,
+            "edit": 1,
+            "reject": 1,
+            "actually_changed_spans": 0,
+            "restored_english_spans": 1,
+        }
+    )
+    inputs.report_pin = _write_report(inputs.candidate, inputs.report)
+    with pytest.raises(
+        SafetyError, match="application_report_decision_counts_invalid"
+    ):
+        _run(inputs)
+
+
+def test_decision_algebra_rejects_changes_beyond_edits_and_restores(
+    tmp_path: Path,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    counts = inputs.report["counts"]
+    assert isinstance(counts, dict)
+    counts.update(
+        {
+            "accept": 0,
+            "edit": 1,
+            "reject": 1,
+            "actually_changed_spans": 2,
+            "restored_english_spans": 0,
+        }
+    )
+    inputs.report_pin = _write_report(inputs.candidate, inputs.report)
+    with pytest.raises(
+        SafetyError, match="application_report_decision_counts_invalid"
+    ):
+        _run(inputs)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("accept", 1.0),
+        ("edit", True),
+        ("reject", -1),
+        ("actually_changed_spans", 1.0),
+        ("restored_english_spans", True),
+    ],
+)
+def test_decision_counters_reject_float_bool_and_negative(
+    tmp_path: Path, key: str, value: object
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    counts = inputs.report["counts"]
+    assert isinstance(counts, dict)
+    counts[key] = value
+    inputs.report_pin = _write_report(inputs.candidate, inputs.report)
+    with pytest.raises(SafetyError, match="application_report|JSON"):
+        _run(inputs)
+
+
+def test_decision_algebra_accepts_unchanged_edit(tmp_path: Path) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    counts = inputs.report["counts"]
+    assert isinstance(counts, dict)
+    counts["actually_changed_spans"] = 0
+    inputs.report_pin = _write_report(inputs.candidate, inputs.report)
+    report = _run(inputs)
+    assert report["status"] == "reviewed_mod_package_created"
+
+
+def test_decision_algebra_accepts_current_real_relationship() -> None:
+    packaging._validate_decision_count_algebra(
+        total_decisions=1678,
+        accept=619,
+        edit=1030,
+        reject=29,
+        actually_changed=1035,
+        restored_english=5,
+    )
 
 
 def test_application_report_rejects_pending_review_entries(
@@ -767,6 +879,117 @@ def test_candidate_and_install_root_overlap_is_rejected(
             planned_install_root=inputs.candidate
             / "localisation/russian",
         )
+
+
+def _case_alias(path: Path) -> Path:
+    alias = path.with_name(path.name.swapcase())
+    if (
+        alias == path
+        or not alias.exists()
+        or not os.path.samefile(path, alias)
+    ):
+        pytest.skip("filesystem does not expose case-insensitive aliases")
+    return alias
+
+
+def test_output_inside_source_via_case_alias_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    output = _case_alias(inputs.source) / "new-package"
+
+    def forbid_temp_tree(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("temporary package tree must not be created")
+
+    monkeypatch.setattr(packaging.tempfile, "mkdtemp", forbid_temp_tree)
+    with pytest.raises(SafetyError, match="output_source_overlap"):
+        _run(inputs, output=output)
+    assert not output.exists()
+
+
+def test_output_inside_install_root_via_case_alias_is_rejected(
+    tmp_path: Path,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    output = _case_alias(inputs.planned_install_root) / "new-package"
+    with pytest.raises(
+        SafetyError, match="output_install_root_overlap"
+    ):
+        _run(inputs, output=output)
+    assert not output.exists()
+
+
+def test_authority_roots_via_portable_physical_alias_are_rejected(
+    tmp_path: Path,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    alias = tmp_path / "source-alias"
+    alias.symlink_to(inputs.source, target_is_directory=True)
+    inputs.report["base_candidate"] = alias.as_posix()
+    inputs.report_pin = _write_report(inputs.candidate, inputs.report)
+    with pytest.raises(
+        SafetyError, match="source_base_candidate_overlap"
+    ):
+        _run(inputs)
+
+
+def test_unicode_normalization_alias_overlap_is_rejected_when_supported(
+    tmp_path: Path,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    composed = tmp_path / "caf\u00e9"
+    composed.mkdir()
+    decomposed = tmp_path / unicodedata.normalize("NFD", "caf\u00e9")
+    if (
+        composed == decomposed
+        or not decomposed.exists()
+        or not os.path.samefile(composed, decomposed)
+    ):
+        pytest.skip(
+            "filesystem does not expose Unicode normalization aliases"
+        )
+    output = decomposed / "new-package"
+    with pytest.raises(
+        SafetyError, match="output_install_root_overlap"
+    ):
+        _run(
+            inputs,
+            output=output,
+            planned_install_root=composed,
+        )
+    assert not output.exists()
+
+
+def test_physical_overlap_algorithm_detects_portable_alias(
+    tmp_path: Path,
+) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    real_identity = packaging._physical_path_identity(
+        real,
+        label="real",
+        must_exist=True,
+    )
+    alias_identity = packaging._physical_path_identity(
+        alias,
+        label="alias",
+        must_exist=True,
+    )
+    assert packaging._physical_paths_overlap(
+        real_identity, alias_identity
+    )
+
+
+def test_safe_independent_physical_roots_package_successfully(
+    tmp_path: Path,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    output = inputs.output_parent / "independent-package"
+    _run(inputs, output=output)
+    assert output.is_dir()
 
 
 def test_no_clobber_collision_preserves_existing_package(
