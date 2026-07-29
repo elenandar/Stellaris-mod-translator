@@ -892,6 +892,70 @@ def _case_alias(path: Path) -> Path:
     return alias
 
 
+def _forbid_temp_tree(
+    *_args: object, **_kwargs: object
+) -> str:
+    raise AssertionError("temporary package tree must not be created")
+
+
+@pytest.mark.parametrize(
+    ("authority", "expected_error"),
+    [
+        ("source", "output_source_overlap"),
+        ("base_candidate", "output_base_candidate_overlap"),
+        ("reviewed_candidate", "output_reviewed_candidate_overlap"),
+        ("install_root", "output_install_root_overlap"),
+    ],
+)
+def test_output_inside_nested_authority_via_symlink_is_rejected_before_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    authority: str,
+    expected_error: str,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    roots = {
+        "source": inputs.source,
+        "base_candidate": inputs.base_candidate,
+        "reviewed_candidate": inputs.candidate,
+        "install_root": inputs.planned_install_root,
+    }
+    nested = roots[authority] / "localisation/russian/nested"
+    nested.mkdir(parents=True, exist_ok=True)
+    alias = tmp_path / f"{authority}-nested-alias"
+    alias.symlink_to(nested, target_is_directory=True)
+    output = alias / "new-package"
+
+    monkeypatch.setattr(
+        packaging.tempfile, "mkdtemp", _forbid_temp_tree
+    )
+    with pytest.raises(SafetyError, match=expected_error):
+        _run(inputs, output=output)
+    assert not output.exists()
+
+
+def test_nested_authority_symlink_overlap_is_rejected_before_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    nested = inputs.source / "nested"
+    nested.mkdir()
+    alias = tmp_path / "base-candidate-nested-alias"
+    alias.symlink_to(nested, target_is_directory=True)
+    inputs.report["base_candidate"] = alias.as_posix()
+    inputs.report_pin = _write_report(inputs.candidate, inputs.report)
+
+    monkeypatch.setattr(
+        packaging.tempfile, "mkdtemp", _forbid_temp_tree
+    )
+    with pytest.raises(
+        SafetyError, match="source_base_candidate_overlap"
+    ):
+        _run(inputs)
+    assert not (inputs.output_parent / "package").exists()
+
+
 def test_output_inside_source_via_case_alias_is_rejected(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -899,10 +963,9 @@ def test_output_inside_source_via_case_alias_is_rejected(
     inputs = _synthetic_inputs(tmp_path)
     output = _case_alias(inputs.source) / "new-package"
 
-    def forbid_temp_tree(*_args: object, **_kwargs: object) -> str:
-        raise AssertionError("temporary package tree must not be created")
-
-    monkeypatch.setattr(packaging.tempfile, "mkdtemp", forbid_temp_tree)
+    monkeypatch.setattr(
+        packaging.tempfile, "mkdtemp", _forbid_temp_tree
+    )
     with pytest.raises(SafetyError, match="output_source_overlap"):
         _run(inputs, output=output)
     assert not output.exists()
@@ -910,9 +973,13 @@ def test_output_inside_source_via_case_alias_is_rejected(
 
 def test_output_inside_install_root_via_case_alias_is_rejected(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     inputs = _synthetic_inputs(tmp_path)
     output = _case_alias(inputs.planned_install_root) / "new-package"
+    monkeypatch.setattr(
+        packaging.tempfile, "mkdtemp", _forbid_temp_tree
+    )
     with pytest.raises(
         SafetyError, match="output_install_root_overlap"
     ):
@@ -922,12 +989,16 @@ def test_output_inside_install_root_via_case_alias_is_rejected(
 
 def test_authority_roots_via_portable_physical_alias_are_rejected(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     inputs = _synthetic_inputs(tmp_path)
     alias = tmp_path / "source-alias"
     alias.symlink_to(inputs.source, target_is_directory=True)
     inputs.report["base_candidate"] = alias.as_posix()
     inputs.report_pin = _write_report(inputs.candidate, inputs.report)
+    monkeypatch.setattr(
+        packaging.tempfile, "mkdtemp", _forbid_temp_tree
+    )
     with pytest.raises(
         SafetyError, match="source_base_candidate_overlap"
     ):
@@ -936,6 +1007,7 @@ def test_authority_roots_via_portable_physical_alias_are_rejected(
 
 def test_unicode_normalization_alias_overlap_is_rejected_when_supported(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     inputs = _synthetic_inputs(tmp_path)
     composed = tmp_path / "caf\u00e9"
@@ -950,6 +1022,9 @@ def test_unicode_normalization_alias_overlap_is_rejected_when_supported(
             "filesystem does not expose Unicode normalization aliases"
         )
     output = decomposed / "new-package"
+    monkeypatch.setattr(
+        packaging.tempfile, "mkdtemp", _forbid_temp_tree
+    )
     with pytest.raises(
         SafetyError, match="output_install_root_overlap"
     ):

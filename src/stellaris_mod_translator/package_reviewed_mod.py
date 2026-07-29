@@ -1122,19 +1122,34 @@ def _physical_path_identity(
     missing_parts = tuple(reversed(missing_reversed))
     if must_exist and missing_parts:
         raise SafetyError(f"{label}_physical_identity_unavailable")
-    ancestor_identities: list[DirectoryIdentity] = []
-    ancestor = cursor
+    anchor_identity = _stable_physical_directory_identity(
+        cursor, label=label
+    )
+    try:
+        physical_anchor = cursor.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise SafetyError(
+            f"{label}_physical_identity_unavailable"
+        ) from exc
+    physical_anchor_identity = _stable_physical_directory_identity(
+        physical_anchor, label=label
+    )
+    if physical_anchor_identity != anchor_identity:
+        raise SafetyError(f"{label}_physical_identity_changed")
+
+    ancestor_identities = [anchor_identity]
+    ancestor = physical_anchor
     while True:
-        ancestor_identities.append(
-            _stable_physical_directory_identity(ancestor, label=label)
-        )
         parent = ancestor.parent
         if parent == ancestor:
             break
         ancestor = parent
+        ancestor_identities.append(
+            _stable_physical_directory_identity(ancestor, label=label)
+        )
     return PhysicalPathIdentity(
         path=path,
-        anchor_identity=ancestor_identities[0],
+        anchor_identity=anchor_identity,
         ancestor_identities=tuple(ancestor_identities),
         missing_parts=missing_parts,
         exact_exists=not missing_parts,
