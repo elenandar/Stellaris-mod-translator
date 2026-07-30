@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import sys
 
+from .consolidate_reviewed_mod import consolidate_reviewed_mod
 from .engine import SafetyError, inspect_mod, translate_mod
 from .ollama import OllamaError
 from .package_reviewed_mod import package_reviewed_mod
@@ -129,6 +130,94 @@ def parser() -> argparse.ArgumentParser:
             "without claiming full editorial approval"
         ),
     )
+    consolidate = commands.add_parser(
+        "consolidate-reviewed-mod",
+        help=(
+            "build a fresh package from a reviewed candidate and a "
+            "pinned owner-reviewed replace supplement"
+        ),
+    )
+    consolidate.add_argument(
+        "--reviewed-candidate", required=True, type=Path
+    )
+    consolidate.add_argument(
+        "--application-report-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument("--main-package", required=True, type=Path)
+    consolidate.add_argument(
+        "--main-package-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--supplement-package", required=True, type=Path
+    )
+    consolidate.add_argument(
+        "--supplement-package-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--supplement-report-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--supplement-payload-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--supplement-localisation-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--supplement-source-mod", required=True, type=Path
+    )
+    consolidate.add_argument(
+        "--supplement-source-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--supplement-mapping-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--supplement-content-mapping-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--owner-smoke-evidence", required=True, type=Path
+    )
+    consolidate.add_argument(
+        "--owner-smoke-evidence-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument("--output", required=True, type=Path)
+    consolidate.add_argument("--mod-slug", required=True)
+    consolidate.add_argument("--display-name", required=True)
+    consolidate.add_argument("--dependency-name", required=True)
+    consolidate.add_argument("--supported-version", required=True)
+    consolidate.add_argument(
+        "--planned-install-root", required=True, type=Path
+    )
     return root
 
 
@@ -162,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.output,
                 candidate_report_sha256=args.candidate_report_sha256,
             )
-        else:
+        elif args.command == "package-reviewed-mod":
             report = package_reviewed_mod(
                 args.reviewed_candidate,
                 args.application_report_sha256,
@@ -173,6 +262,30 @@ def main(argv: list[str] | None = None) -> int:
                 args.supported_version,
                 args.planned_install_root,
                 allow_technical_residue=args.allow_technical_residue,
+            )
+        else:
+            report = consolidate_reviewed_mod(
+                args.reviewed_candidate,
+                args.application_report_sha256,
+                args.main_package,
+                args.main_package_sha256,
+                args.supplement_package,
+                args.supplement_package_sha256,
+                args.supplement_report_sha256,
+                args.supplement_payload_sha256,
+                args.supplement_localisation_sha256,
+                args.supplement_source_mod,
+                args.supplement_source_sha256,
+                args.supplement_mapping_sha256,
+                args.supplement_content_mapping_sha256,
+                args.owner_smoke_evidence,
+                args.owner_smoke_evidence_sha256,
+                args.output,
+                args.mod_slug,
+                args.display_name,
+                args.dependency_name,
+                args.supported_version,
+                args.planned_install_root,
             )
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
