@@ -202,10 +202,19 @@ def parser() -> argparse.ArgumentParser:
         metavar="SHA256",
     )
     consolidate.add_argument(
-        "--owner-smoke-evidence", required=True, type=Path
+        "--technical-smoke-evidence", required=True, type=Path
     )
     consolidate.add_argument(
-        "--owner-smoke-evidence-sha256",
+        "--technical-smoke-evidence-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    consolidate.add_argument(
+        "--owner-visual-confirmation", required=True, type=Path
+    )
+    consolidate.add_argument(
+        "--owner-visual-confirmation-sha256",
         required=True,
         type=_sha256_pin,
         metavar="SHA256",
@@ -278,8 +287,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.supplement_source_sha256,
                 args.supplement_mapping_sha256,
                 args.supplement_content_mapping_sha256,
-                args.owner_smoke_evidence,
-                args.owner_smoke_evidence_sha256,
+                args.technical_smoke_evidence,
+                args.technical_smoke_evidence_sha256,
+                args.owner_visual_confirmation,
+                args.owner_visual_confirmation_sha256,
                 args.output,
                 args.mod_slug,
                 args.display_name,

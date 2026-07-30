@@ -98,14 +98,17 @@ provider calls или candidate bytes. Этап не удаляет и не ми
 основного reviewed candidate и exact owner-reviewed qualified replace
 supplement в один fresh private no-clobber package. Две provenance-ветви и
 алгебра `1678 + 9 + 11 = 1698` остаются явными; новый descriptor зависит только
-от NSC3. Этап не переписывает старый application report, не создаёт фиктивный
-decisions set, не удаляет прежние packages и не меняет active installation,
-launcher/playset или load order. Installation migration и повторный game smoke
-остаются отдельным следующим gate.
+от NSC3. Remediation отдельно bind-ит historical full-localisation identity,
+bounded manifest всей текущей source generation, technical main-menu status и
+authoritative owner visual confirmation. Этап не переписывает старый
+application report, не создаёт фиктивный decisions set, не удаляет прежние
+packages и не меняет active installation, launcher/playset или load order.
+Installation migration и повторный game smoke остаются отдельным следующим
+gate.
 
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
-| MVP-5M — Trusted reviewed-package consolidation | две pinned provenance-ветви, strict qualified-replace/source/smoke validation и fresh atomic no-clobber native package | merged MVP-5L, exact reviewed candidate, owner-reviewed replace supplement и authoritative smoke evidence | adversarial/full suite, exact private pre/post identities, bounded Sol Ultra diff-review и materialized-package recheck | **implemented for draft review; active installation migration, launcher and game smoke are separate gates** |
+| MVP-5M — Trusted reviewed-package consolidation | две pinned provenance-ветви, full-localisation/source-generation binding, раздельные technical smoke и owner visual authorities и fresh atomic no-clobber native package | merged MVP-5L, exact reviewed candidate, owner-reviewed replace supplement, technical smoke evidence и owner visual confirmation | adversarial/full suite, exact private pre/post identities, bounded Sol Ultra diff-review и materialized-package recheck | **remediation implemented for draft review; active installation migration, launcher and game smoke are separate gates** |
 | MVP-5L — Native qualified replace layer | exact `localisation/english/replace/**` discovery, collision-free mapping в `localisation/russian/replace/**` и сквозное сохранение через review/application/package | merged MVP-5H and verified canonical NSC3 source layout | synthetic lossless/collision/workspace/review/application/package suite, read-only aggregated NSC3 inspect and bounded Sol Ultra diff-review | **implemented for draft review; active patch migration, launcher and game smoke are separate gates** |
 | MVP-5H — Safe local-mod package | exact application-report pin, strict reviewed inventory, typed descriptor renderer, metadata-only package report и atomic no-clobber package publication | merged MVP-5C/MVP-5D, exact private reviewed candidate and explicit owner authorization | full synthetic suite, private package smoke and immutability checks; затем отдельный live-install/load-order/in-game gate | **implemented for review; private NSC3 package smoke PASS, active installation and launcher remain untouched** |
 | MVP-5D — Accelerated editorial workflow | paginated batch accept/reject, exact-set confirmation, atomic sparse state and bounded undo without automatic decisions | merged MVP-5C mechanism and owner-controlled private review | synthetic JS/browser regressions and complete human final export | **merged in PR №19 as `80cae5a`; no launcher or active installation** |

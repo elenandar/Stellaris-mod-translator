@@ -56,11 +56,22 @@ from .publication import (
 )
 
 
-CONSOLIDATED_PACKAGE_REPORT_SCHEMA_VERSION = 2
-CONSOLIDATION_MODE = "reviewed_plus_owner_replace_supplement_v1"
+CONSOLIDATED_PACKAGE_REPORT_SCHEMA_VERSION = 3
+CONSOLIDATION_MODE = "reviewed_plus_owner_replace_supplement_v2"
 PACKAGE_REPORT_NAME = "package-report.json"
 MAX_SUPPLEMENT_REPORT_BYTES = 1024 * 1024
-MAX_OWNER_EVIDENCE_BYTES = 1024 * 1024
+MAX_TECHNICAL_SMOKE_EVIDENCE_BYTES = 1024 * 1024
+MAX_OWNER_VISUAL_CONFIRMATION_BYTES = 64 * 1024
+MAX_SOURCE_GENERATION_FILE_BYTES = 2 * 1024 * 1024 * 1024
+MAX_SOURCE_GENERATION_AGGREGATE_BYTES = 32 * 1024 * 1024 * 1024
+MAX_SOURCE_GENERATION_FILES = 250_000
+MAX_SOURCE_GENERATION_DIRECTORIES = 250_000
+SOURCE_GENERATION_MANIFEST_DOMAIN = (
+    b"stellaris-mod-translator/source-generation-manifest/v1"
+)
+OWNER_VISUAL_CONFIRMATION_SCHEMA = (
+    "stellaris_mod_translator.owner_visual_confirmation"
+)
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 UTC_TIMESTAMP_RE = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T"
@@ -128,7 +139,7 @@ SUPPLEMENT_DESCRIPTOR_DETAIL_FIELDS = frozenset(
 SUPPLEMENT_PRIVACY_FIELDS = frozenset(
     {"private_text_output", "raw_source_or_localisation_duplicated_in_report"}
 )
-OWNER_EVIDENCE_FIELDS = frozenset(
+TECHNICAL_SMOKE_EVIDENCE_FIELDS = frozenset(
     {
         "schema_version",
         "captured_at_utc",
@@ -158,6 +169,20 @@ OWNER_EVIDENCE_FIELDS = frozenset(
         "private_text_output",
         "evidence",
         "next",
+    }
+)
+OWNER_VISUAL_CONFIRMATION_FIELDS = frozenset(
+    {
+        "schema",
+        "schema_version",
+        "authoritative",
+        "status",
+        "supplement_package_sha256",
+        "supplement_localisation_sha256",
+        "verified_replace_entries",
+        "technical_final_status_sha256",
+        "private_text_output",
+        "confirmed_at_utc",
     }
 )
 BASE_TRANSLATION_REPORT_FIELDS = frozenset(
@@ -190,14 +215,38 @@ class StableTreeSnapshot:
 
 
 @dataclass(frozen=True)
+class SourceGenerationFile:
+    relative: Path
+    stat_identity: tuple[int, int, int, int, int, int, int]
+    size: int
+    sha256: str
+
+
+@dataclass(frozen=True)
+class SourceGenerationSnapshot:
+    root: Path
+    root_identity: tuple[int, int, int, int, int, int, int]
+    directories: tuple[
+        tuple[str, tuple[int, int, int, int, int, int, int]], ...
+    ]
+    files: tuple[SourceGenerationFile, ...]
+    manifest_sha256: str
+    aggregate_bytes: int
+    localisation_sha256: str
+    localisation_file_count: int
+
+
+@dataclass(frozen=True)
 class ConsolidationInputs:
     main: ReviewedCandidateSnapshot
     main_package: StableTreeSnapshot
     supplement: StableTreeSnapshot
     source_root: Path
+    source_generation: SourceGenerationSnapshot
     source_replace: StableTreeSnapshot
     base_report: StableFile
-    owner_evidence: StableFile
+    technical_smoke_evidence: StableFile
+    owner_visual_confirmation: StableFile
     supplement_report: dict[str, object]
     application_report: dict[str, object]
     supplement_localisation: StableFile
@@ -221,8 +270,10 @@ def consolidate_reviewed_mod(
     supplement_source_sha256: str,
     supplement_mapping_sha256: str,
     supplement_content_mapping_sha256: str,
-    owner_smoke_evidence: Path,
-    owner_smoke_evidence_sha256: str,
+    technical_smoke_evidence: Path,
+    technical_smoke_evidence_sha256: str,
+    owner_visual_confirmation: Path,
+    owner_visual_confirmation_sha256: str,
     output: Path,
     mod_slug: str,
     display_name: str,
@@ -243,7 +294,12 @@ def consolidate_reviewed_mod(
         "supplement_content_mapping_sha256": (
             supplement_content_mapping_sha256
         ),
-        "owner_smoke_evidence_sha256": owner_smoke_evidence_sha256,
+        "technical_smoke_evidence_sha256": (
+            technical_smoke_evidence_sha256
+        ),
+        "owner_visual_confirmation_sha256": (
+            owner_visual_confirmation_sha256
+        ),
     }
     for label, value in pins.items():
         _validated_sha256_pin(value, label)
@@ -259,8 +315,11 @@ def consolidate_reviewed_mod(
     source_root = _validated_existing_directory(
         supplement_source_mod, "supplement_source"
     )
-    evidence_path = _validated_existing_file(
-        owner_smoke_evidence, "owner_smoke_evidence"
+    technical_smoke_path = _validated_existing_file(
+        technical_smoke_evidence, "technical_smoke_evidence"
+    )
+    owner_confirmation_path = _validated_existing_file(
+        owner_visual_confirmation, "owner_visual_confirmation"
     )
     slug = _validated_mod_slug(mod_slug)
     name = _validated_descriptor_text(display_name, "display_name")
@@ -288,8 +347,14 @@ def consolidate_reviewed_mod(
         supplement_content_mapping_sha256=(
             supplement_content_mapping_sha256
         ),
-        evidence_path=evidence_path,
-        owner_smoke_evidence_sha256=owner_smoke_evidence_sha256,
+        technical_smoke_path=technical_smoke_path,
+        technical_smoke_evidence_sha256=(
+            technical_smoke_evidence_sha256
+        ),
+        owner_confirmation_path=owner_confirmation_path,
+        owner_visual_confirmation_sha256=(
+            owner_visual_confirmation_sha256
+        ),
         dependency_name=dependency,
     )
     _validate_path_relationships(
@@ -305,7 +370,8 @@ def consolidate_reviewed_mod(
         main_package=main_package_root,
         supplement=supplement_root,
         install_root=install_root,
-        evidence=evidence_path,
+        technical_smoke_evidence=technical_smoke_path,
+        owner_visual_confirmation=owner_confirmation_path,
     )
     report_source = _validated_report_authority_path(
         inputs.application_report, "source_mod"
@@ -439,8 +505,10 @@ def _snapshot_and_validate_inputs(
     supplement_source_sha256: str,
     supplement_mapping_sha256: str,
     supplement_content_mapping_sha256: str,
-    evidence_path: Path,
-    owner_smoke_evidence_sha256: str,
+    technical_smoke_path: Path,
+    technical_smoke_evidence_sha256: str,
+    owner_confirmation_path: Path,
+    owner_visual_confirmation_sha256: str,
     dependency_name: str,
 ) -> ConsolidationInputs:
     main = _snapshot_reviewed_candidate(candidate_root)
@@ -522,6 +590,21 @@ def _snapshot_and_validate_inputs(
         supplement_report,
     )
 
+    source_generation = _snapshot_source_generation(source_root)
+    application_source_localisation_sha256 = application_hashes.get(
+        "source_localisation_sha256"
+    )
+    if (
+        not isinstance(application_source_localisation_sha256, str)
+        or SHA256_RE.fullmatch(
+            application_source_localisation_sha256
+        )
+        is None
+        or source_generation.localisation_sha256
+        != application_source_localisation_sha256
+    ):
+        raise SafetyError("historical_source_localisation_hash_mismatch")
+
     source_replace_root = _validated_descendant_directory(
         source_root,
         Path("localisation/english/replace"),
@@ -532,13 +615,23 @@ def _snapshot_and_validate_inputs(
         label="supplement_source_replace",
         max_file_bytes=MAX_LOCALISATION_FILE_BYTES,
     )
-    owner_evidence = _read_stable_regular_file(
-        evidence_path,
-        evidence_path,
-        max_bytes=MAX_OWNER_EVIDENCE_BYTES,
+    technical_smoke = _read_stable_regular_file(
+        technical_smoke_path,
+        technical_smoke_path,
+        max_bytes=MAX_TECHNICAL_SMOKE_EVIDENCE_BYTES,
     )
-    if owner_evidence.sha256 != owner_smoke_evidence_sha256:
-        raise SafetyError("owner_smoke_evidence_pin_mismatch")
+    if technical_smoke.sha256 != technical_smoke_evidence_sha256:
+        raise SafetyError("technical_smoke_evidence_pin_mismatch")
+    owner_confirmation = _read_stable_regular_file(
+        owner_confirmation_path,
+        owner_confirmation_path,
+        max_bytes=MAX_OWNER_VISUAL_CONFIRMATION_BYTES,
+    )
+    if (
+        owner_confirmation.sha256
+        != owner_visual_confirmation_sha256
+    ):
+        raise SafetyError("owner_visual_confirmation_pin_mismatch")
 
     (
         supplement_localisation,
@@ -569,18 +662,36 @@ def _snapshot_and_validate_inputs(
             / source_localisation.relative
         ),
     )
-    evidence = _load_strict_json(
-        owner_evidence.data, "owner_smoke_evidence"
+    technical_evidence = _load_strict_json(
+        technical_smoke.data, "technical_smoke_evidence"
     )
-    _validate_owner_evidence(evidence, supplement_entries)
+    _validate_technical_smoke_evidence(
+        technical_evidence, supplement_entries
+    )
+    owner_confirmation_data = _load_strict_json(
+        owner_confirmation.data, "owner_visual_confirmation"
+    )
+    _validate_owner_visual_confirmation(
+        owner_confirmation_data,
+        supplement_package_sha256=supplement_package_sha256,
+        supplement_localisation_sha256=(
+            supplement_localisation_sha256
+        ),
+        verified_replace_entries=supplement_entries,
+        technical_final_status_sha256=(
+            technical_smoke_evidence_sha256
+        ),
+    )
     return ConsolidationInputs(
         main=main,
         main_package=main_package,
         supplement=supplement,
         source_root=source_root,
+        source_generation=source_generation,
         source_replace=source_replace,
         base_report=base_report,
-        owner_evidence=owner_evidence,
+        technical_smoke_evidence=technical_smoke,
+        owner_visual_confirmation=owner_confirmation,
         supplement_report=supplement_report,
         application_report=application_report,
         supplement_localisation=supplement_localisation,
@@ -1151,11 +1262,13 @@ def _entry_identities(parsed: ParsedFile) -> list[tuple[str, str]]:
     return result
 
 
-def _validate_owner_evidence(
+def _validate_technical_smoke_evidence(
     evidence: dict[str, object], entry_count: int
 ) -> None:
     _require_exact_fields(
-        evidence, OWNER_EVIDENCE_FIELDS, "owner_smoke_evidence"
+        evidence,
+        TECHNICAL_SMOKE_EVIDENCE_FIELDS,
+        "technical_smoke_evidence",
     )
     expected: dict[str, object] = {
         "schema_version": 1,
@@ -1179,29 +1292,31 @@ def _validate_owner_evidence(
     }
     for key, value in expected.items():
         _require_exact_value(
-            evidence, key, value, "owner_smoke_evidence"
+            evidence, key, value, "technical_smoke_evidence"
         )
     captured = evidence.get("captured_at_utc")
     if not isinstance(captured, str) or UTC_TIMESTAMP_RE.fullmatch(
         captured
     ) is None:
-        raise SafetyError("owner_smoke_evidence_timestamp_invalid")
+        raise SafetyError("technical_smoke_evidence_timestamp_invalid")
     for key in (
         "next",
     ):
         value = evidence.get(key)
         if not isinstance(value, str) or not value:
-            raise SafetyError(f"owner_smoke_evidence_{key}_invalid")
+            raise SafetyError(
+                f"technical_smoke_evidence_{key}_invalid"
+            )
     evidence_path = evidence.get("evidence")
     if (
         not isinstance(evidence_path, str)
         or not Path(evidence_path).is_absolute()
         or _validated_absolute_path_text(
-            evidence_path, "owner_evidence_path"
+            evidence_path, "technical_smoke_evidence_path"
         )
         != evidence_path
     ):
-        raise SafetyError("owner_smoke_evidence_path_invalid")
+        raise SafetyError("technical_smoke_evidence_path_invalid")
     for key in (
         "new_relevant_log_errors",
         "crash",
@@ -1216,9 +1331,48 @@ def _validate_owner_evidence(
         "private_text_output",
     ):
         if _require_nonnegative_int(
-            evidence, key, "owner_smoke_evidence"
+            evidence, key, "technical_smoke_evidence"
         ) != 0:
-            raise SafetyError(f"owner_smoke_evidence_{key}_nonzero")
+            raise SafetyError(
+                f"technical_smoke_evidence_{key}_nonzero"
+            )
+
+
+def _validate_owner_visual_confirmation(
+    evidence: dict[str, object],
+    *,
+    supplement_package_sha256: str,
+    supplement_localisation_sha256: str,
+    verified_replace_entries: int,
+    technical_final_status_sha256: str,
+) -> None:
+    label = "owner_visual_confirmation"
+    _require_exact_fields(
+        evidence, OWNER_VISUAL_CONFIRMATION_FIELDS, label
+    )
+    expected: dict[str, object] = {
+        "schema": OWNER_VISUAL_CONFIRMATION_SCHEMA,
+        "schema_version": 1,
+        "authoritative": True,
+        "status": "OWNER_VISUAL_GAMEPLAY_VERIFICATION: PASS",
+        "supplement_package_sha256": supplement_package_sha256,
+        "supplement_localisation_sha256": (
+            supplement_localisation_sha256
+        ),
+        "verified_replace_entries": verified_replace_entries,
+        "technical_final_status_sha256": (
+            technical_final_status_sha256
+        ),
+        "private_text_output": 0,
+    }
+    for key, value in expected.items():
+        _require_exact_value(evidence, key, value, label)
+    confirmed = evidence.get("confirmed_at_utc")
+    if (
+        not isinstance(confirmed, str)
+        or UTC_TIMESTAMP_RE.fullmatch(confirmed) is None
+    ):
+        raise SafetyError("owner_visual_confirmation_timestamp_invalid")
 
 
 def _consolidated_report(
@@ -1290,7 +1444,10 @@ def _consolidated_report(
         "authorities": {
             "main_reviewed_candidate": "application_report_v2",
             "replace_supplement": "owner_reviewed_mvp5k_package",
-            "owner_visual_smoke": "authoritative_terminal_evidence_v1",
+            "technical_main_menu_smoke": "technical_final_status_v1",
+            "owner_visual_confirmation": (
+                "owner_visual_confirmation_v1"
+            ),
         },
         "provenance": {
             "main_reviewed_candidate": {
@@ -1305,6 +1462,9 @@ def _consolidated_report(
                 ],
                 "reviewed_localisation_sha256": (
                     inputs.main.localisation_sha256
+                ),
+                "source_localisation_sha256": (
+                    inputs.source_generation.localisation_sha256
                 ),
                 "reviewed_occurrences": main_reviewed,
                 "decisions": {
@@ -1335,11 +1495,29 @@ def _consolidated_report(
                     "supplement_mapping_sha256"
                 ],
                 "content_mapping_sha256": inputs.content_mapping_sha256,
-                "owner_smoke_evidence_sha256": pins[
-                    "owner_smoke_evidence_sha256"
+                "technical_main_menu_smoke_sha256": pins[
+                    "technical_smoke_evidence_sha256"
+                ],
+                "owner_visual_confirmation_sha256": pins[
+                    "owner_visual_confirmation_sha256"
                 ],
                 "reviewed_occurrences": supplement_reviewed,
             },
+        },
+        "source_generation": {
+            "manifest_sha256": (
+                inputs.source_generation.manifest_sha256
+            ),
+            "directory_count": (
+                len(inputs.source_generation.directories) + 1
+            ),
+            "file_count": len(inputs.source_generation.files),
+            "aggregate_bytes": (
+                inputs.source_generation.aggregate_bytes
+            ),
+            "localisation_file_count": (
+                inputs.source_generation.localisation_file_count
+            ),
         },
         "counts": {
             "source_occurrences": source_occurrences,
@@ -1463,6 +1641,261 @@ def _validate_materialized_consolidated_package(
     _validate_report_privacy(report_bytes)
 
 
+def _snapshot_source_generation(
+    root: Path,
+) -> SourceGenerationSnapshot:
+    (
+        root_identity,
+        directories,
+        file_entries,
+    ) = _inventory_source_generation(root)
+    _validate_portable_paths(
+        [
+            *[(Path(relative), "directory") for relative, _ in directories],
+            *[(relative, "file") for relative, _ in file_entries],
+        ],
+        "source_generation",
+    )
+    aggregate_bytes = sum(
+        identity[4] for _, identity in file_entries
+    )
+    if aggregate_bytes > MAX_SOURCE_GENERATION_AGGREGATE_BYTES:
+        raise SafetyError("source_generation_aggregate_too_large")
+
+    localisation_digest = hashlib.sha256()
+    files: list[SourceGenerationFile] = []
+    localisation_file_count = 0
+    for relative, expected_identity in file_entries:
+        is_localisation = (
+            relative.parts
+            and relative.parts[0] == "localisation"
+            and relative.suffix.lower() == ".yml"
+        )
+        if is_localisation:
+            encoded = relative.as_posix().encode("utf-8")
+            localisation_digest.update(
+                len(encoded).to_bytes(8, "big")
+            )
+            localisation_digest.update(encoded)
+            localisation_digest.update(
+                expected_identity[4].to_bytes(8, "big")
+            )
+            localisation_file_count += 1
+        files.append(
+            _hash_source_generation_file(
+                root / relative,
+                relative=relative,
+                expected_identity=expected_identity,
+                localisation_digest=(
+                    localisation_digest if is_localisation else None
+                ),
+            )
+        )
+
+    (
+        final_root_identity,
+        final_directories,
+        final_file_entries,
+    ) = _inventory_source_generation(root)
+    if (
+        final_root_identity != root_identity
+        or final_directories != directories
+        or final_file_entries != file_entries
+    ):
+        raise SafetyError("source_generation_changed_during_snapshot")
+
+    manifest = hashlib.sha256()
+    _update_framed_hash(manifest, SOURCE_GENERATION_MANIFEST_DOMAIN)
+    _update_framed_hash(manifest, b"root")
+    for relative, _ in directories:
+        _update_framed_hash(manifest, b"directory")
+        _update_framed_hash(manifest, relative.encode("utf-8"))
+    for item in files:
+        _update_framed_hash(manifest, b"file")
+        _update_framed_hash(
+            manifest, item.relative.as_posix().encode("utf-8")
+        )
+        _update_framed_hash(
+            manifest, item.size.to_bytes(8, "big")
+        )
+        _update_framed_hash(manifest, bytes.fromhex(item.sha256))
+    return SourceGenerationSnapshot(
+        root=root,
+        root_identity=root_identity,
+        directories=directories,
+        files=tuple(files),
+        manifest_sha256=manifest.hexdigest(),
+        aggregate_bytes=aggregate_bytes,
+        localisation_sha256=localisation_digest.hexdigest(),
+        localisation_file_count=localisation_file_count,
+    )
+
+
+def _inventory_source_generation(
+    root: Path,
+) -> tuple[
+    tuple[int, int, int, int, int, int, int],
+    tuple[tuple[str, tuple[int, int, int, int, int, int, int]], ...],
+    tuple[tuple[Path, tuple[int, int, int, int, int, int, int]], ...],
+]:
+    try:
+        root_identity = _stable_directory_identity(root)
+    except (OSError, RuntimeError) as exc:
+        raise SafetyError("source_generation_inventory_failed") from exc
+    directories: list[
+        tuple[str, tuple[int, int, int, int, int, int, int]]
+    ] = []
+    files: list[
+        tuple[Path, tuple[int, int, int, int, int, int, int]]
+    ] = []
+
+    def walk(current: Path) -> None:
+        child_directories: list[Path] = []
+        try:
+            with os.scandir(current) as iterator:
+                for entry in iterator:
+                    path = current / entry.name
+                    relative = path.relative_to(root)
+                    _validate_relative_path(
+                        relative, "source_generation"
+                    )
+                    try:
+                        value = entry.stat(follow_symlinks=False)
+                    except OSError as exc:
+                        raise SafetyError(
+                            "source_generation_inventory_failed"
+                        ) from exc
+                    identity = _source_stat_identity(value)
+                    if stat.S_ISLNK(value.st_mode):
+                        raise SafetyError("source_generation_symlink")
+                    if stat.S_ISDIR(value.st_mode):
+                        directories.append(
+                            (relative.as_posix(), identity)
+                        )
+                        if (
+                            len(directories)
+                            > MAX_SOURCE_GENERATION_DIRECTORIES
+                        ):
+                            raise SafetyError(
+                                "source_generation_directory_limit"
+                            )
+                        child_directories.append(path)
+                    elif stat.S_ISREG(value.st_mode):
+                        if (
+                            value.st_nlink != 1
+                            or value.st_size
+                            > MAX_SOURCE_GENERATION_FILE_BYTES
+                        ):
+                            raise SafetyError(
+                                "source_generation_unsafe_file"
+                            )
+                        files.append((relative, identity))
+                        if len(files) > MAX_SOURCE_GENERATION_FILES:
+                            raise SafetyError(
+                                "source_generation_file_limit"
+                            )
+                    else:
+                        raise SafetyError(
+                            "source_generation_special_file"
+                        )
+        except OSError as exc:
+            raise SafetyError(
+                "source_generation_inventory_failed"
+            ) from exc
+        for child in child_directories:
+            walk(child)
+
+    walk(root)
+    directories.sort()
+    files.sort(key=lambda item: item[0].as_posix())
+    return root_identity, tuple(directories), tuple(files)
+
+
+def _hash_source_generation_file(
+    path: Path,
+    *,
+    relative: Path,
+    expected_identity: tuple[int, int, int, int, int, int, int],
+    localisation_digest: hashlib._Hash | None,
+) -> SourceGenerationFile:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise SafetyError("source_generation_unsafe_file") from exc
+    digest = hashlib.sha256()
+    byte_count = 0
+    try:
+        before = os.fstat(descriptor)
+        before_identity = _source_stat_identity(before)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before_identity != expected_identity
+        ):
+            raise SafetyError("source_generation_unsafe_file")
+        while chunk := os.read(descriptor, 1024 * 1024):
+            byte_count += len(chunk)
+            if (
+                byte_count > MAX_SOURCE_GENERATION_FILE_BYTES
+                or byte_count > before.st_size
+            ):
+                raise SafetyError("source_generation_file_too_large")
+            digest.update(chunk)
+            if localisation_digest is not None:
+                localisation_digest.update(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    after_identity = _source_stat_identity(after)
+    try:
+        path_identity = _source_stat_identity(path.lstat())
+    except OSError as exc:
+        raise SafetyError(
+            "source_generation_changed_during_snapshot"
+        ) from exc
+    if (
+        before_identity != after_identity
+        or after_identity != path_identity
+        or byte_count != before.st_size
+    ):
+        raise SafetyError("source_generation_changed_during_snapshot")
+    return SourceGenerationFile(
+        relative=relative,
+        stat_identity=after_identity,
+        size=byte_count,
+        sha256=digest.hexdigest(),
+    )
+
+
+def _source_stat_identity(
+    value: os.stat_result,
+) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_nlink,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _update_framed_hash(
+    digest: object, value: bytes
+) -> None:
+    if not hasattr(digest, "update"):
+        raise AssertionError("digest must support update")
+    digest.update(len(value).to_bytes(8, "big"))
+    digest.update(value)
+
+
 def _snapshot_tree(
     root: Path,
     *,
@@ -1544,10 +1977,19 @@ def _verify_tree_snapshot(expected: StableTreeSnapshot) -> None:
         raise SafetyError("consolidation_input_generation_changed")
 
 
+def _verify_source_generation_snapshot(
+    expected: SourceGenerationSnapshot,
+) -> None:
+    current = _snapshot_source_generation(expected.root)
+    if current != expected:
+        raise SafetyError("consolidation_input_generation_changed")
+
+
 def _verify_consolidation_inputs(inputs: ConsolidationInputs) -> None:
     _verify_reviewed_candidate_snapshot(inputs.main)
     _verify_tree_snapshot(inputs.main_package)
     _verify_tree_snapshot(inputs.supplement)
+    _verify_source_generation_snapshot(inputs.source_generation)
     current_source_replace = _validated_descendant_directory(
         inputs.source_root,
         Path("localisation/english/replace"),
@@ -1563,12 +2005,19 @@ def _verify_consolidation_inputs(inputs: ConsolidationInputs) -> None:
     )
     if current_base_report != inputs.base_report:
         raise SafetyError("consolidation_input_generation_changed")
-    current_evidence = _read_stable_regular_file(
-        inputs.owner_evidence.relative,
-        inputs.owner_evidence.relative,
-        max_bytes=MAX_OWNER_EVIDENCE_BYTES,
+    current_technical_smoke = _read_stable_regular_file(
+        inputs.technical_smoke_evidence.relative,
+        inputs.technical_smoke_evidence.relative,
+        max_bytes=MAX_TECHNICAL_SMOKE_EVIDENCE_BYTES,
     )
-    if current_evidence != inputs.owner_evidence:
+    if current_technical_smoke != inputs.technical_smoke_evidence:
+        raise SafetyError("consolidation_input_generation_changed")
+    current_owner_confirmation = _read_stable_regular_file(
+        inputs.owner_visual_confirmation.relative,
+        inputs.owner_visual_confirmation.relative,
+        max_bytes=MAX_OWNER_VISUAL_CONFIRMATION_BYTES,
+    )
+    if current_owner_confirmation != inputs.owner_visual_confirmation:
         raise SafetyError("consolidation_input_generation_changed")
 
 
@@ -1633,30 +2082,64 @@ def _validate_consolidation_path_relationships(
     main_package: Path,
     supplement: Path,
     install_root: Path,
-    evidence: Path,
+    technical_smoke_evidence: Path,
+    owner_visual_confirmation: Path,
 ) -> None:
-    evidence_parent = evidence.parent
-    named = (
+    technical_identity = _source_stat_identity(
+        technical_smoke_evidence.stat()
+    )
+    confirmation_identity = _source_stat_identity(
+        owner_visual_confirmation.stat()
+    )
+    if _paths_overlap(
+        technical_smoke_evidence, owner_visual_confirmation
+    ) or technical_identity[:2] == confirmation_identity[:2]:
+        raise SafetyError("smoke_confirmation_authority_overlap")
+    core = (
         ("output", output, False),
         ("main_candidate", candidate, True),
         ("source", source, True),
         ("main_package", main_package, True),
         ("supplement", supplement, True),
         ("install_root", install_root, False),
-        ("owner_evidence_parent", evidence_parent, True),
     )
     physical = {
         label: _physical_path_identity(
             path, label=label, must_exist=must_exist
         )
-        for label, path, must_exist in named
+        for label, path, must_exist in core
     }
-    for index, (left_label, left, _) in enumerate(named):
-        for right_label, right, _ in named[index + 1 :]:
+    for index, (left_label, left, _) in enumerate(core):
+        for right_label, right, _ in core[index + 1 :]:
             if _paths_overlap(left, right) or _physical_paths_overlap(
                 physical[left_label], physical[right_label]
             ):
                 raise SafetyError(f"{left_label}_{right_label}_overlap")
+    evidence_parents = (
+        (
+            "technical_smoke_evidence_parent",
+            technical_smoke_evidence.parent,
+        ),
+        (
+            "owner_visual_confirmation_parent",
+            owner_visual_confirmation.parent,
+        ),
+    )
+    for evidence_label, evidence_parent in evidence_parents:
+        evidence_identity = _physical_path_identity(
+            evidence_parent,
+            label=evidence_label,
+            must_exist=True,
+        )
+        for core_label, core_path, _ in core:
+            if _paths_overlap(
+                evidence_parent, core_path
+            ) or _physical_paths_overlap(
+                evidence_identity, physical[core_label]
+            ):
+                raise SafetyError(
+                    f"{core_label}_{evidence_label}_overlap"
+                )
 
 
 def _validate_portable_paths(

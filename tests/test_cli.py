@@ -497,10 +497,14 @@ def _consolidation_argv() -> list[str]:
         "7" * 64,
         "--supplement-content-mapping-sha256",
         "a" * 64,
-        "--owner-smoke-evidence",
-        "/evidence.json",
-        "--owner-smoke-evidence-sha256",
+        "--technical-smoke-evidence",
+        "/technical-status.json",
+        "--technical-smoke-evidence-sha256",
         "8" * 64,
+        "--owner-visual-confirmation",
+        "/owner-confirmation.json",
+        "--owner-visual-confirmation-sha256",
+        "b" * 64,
         "--output",
         "/package",
         "--mod-slug",
@@ -522,12 +526,18 @@ def test_consolidate_reviewed_mod_exposes_closed_interface() -> None:
     assert args.main_package == Path("/main-package")
     assert args.supplement_package == Path("/supplement")
     assert args.supplement_source_mod == Path("/source")
-    assert args.owner_smoke_evidence == Path("/evidence.json")
+    assert args.technical_smoke_evidence == Path(
+        "/technical-status.json"
+    )
+    assert args.owner_visual_confirmation == Path(
+        "/owner-confirmation.json"
+    )
     assert args.output == Path("/package")
     assert args.mod_slug == "example_ru_native"
     assert args.dependency_name == "Example"
     assert args.planned_install_root == Path("/active/mod")
-    assert args.owner_smoke_evidence_sha256 == "8" * 64
+    assert args.technical_smoke_evidence_sha256 == "8" * 64
+    assert args.owner_visual_confirmation_sha256 == "b" * 64
 
 
 def test_consolidate_reviewed_mod_dispatches_without_ollama(
@@ -558,8 +568,10 @@ def test_consolidate_reviewed_mod_dispatches_without_ollama(
         "6" * 64,
         "7" * 64,
         "a" * 64,
-        Path("/evidence.json"),
+        Path("/technical-status.json"),
         "8" * 64,
+        Path("/owner-confirmation.json"),
+        "b" * 64,
         Path("/package"),
         "example_ru_native",
         "Example native translation",
@@ -593,8 +605,10 @@ def test_consolidate_reviewed_mod_help_lists_all_authorities(
         "--supplement-source-sha256 SHA256",
         "--supplement-mapping-sha256 SHA256",
         "--supplement-content-mapping-sha256 SHA256",
-        "--owner-smoke-evidence OWNER_SMOKE_EVIDENCE",
-        "--owner-smoke-evidence-sha256 SHA256",
+        "--technical-smoke-evidence TECHNICAL_SMOKE_EVIDENCE",
+        "--technical-smoke-evidence-sha256 SHA256",
+        "--owner-visual-confirmation OWNER_VISUAL_CONFIRMATION",
+        "--owner-visual-confirmation-sha256 SHA256",
         "--planned-install-root PLANNED_INSTALL_ROOT",
     ):
         assert option in output

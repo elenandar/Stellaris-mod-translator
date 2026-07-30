@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import socket
+import stat
 import unicodedata
 
 import pytest
@@ -32,11 +33,13 @@ class ConsolidationFixture:
     source: Path
     supplement: Path
     evidence: Path
+    owner_confirmation: Path
     output_parent: Path
     install_root: Path
     application_report: dict[str, object]
     supplement_report: dict[str, object]
-    owner_evidence: dict[str, object]
+    technical_evidence_data: dict[str, object]
+    owner_confirmation_data: dict[str, object]
     application_report_pin: str
     main_package_pin: str
     supplement_package_pin: str
@@ -47,6 +50,7 @@ class ConsolidationFixture:
     mapping_pin: str
     content_mapping_pin: str
     evidence_pin: str
+    owner_confirmation_pin: str
 
 
 @pytest.fixture(autouse=True)
@@ -306,6 +310,28 @@ def _synthetic_fixture(tmp_path: Path) -> ConsolidationFixture:
         / "localisation/english/replace/synthetic_l_english.yml"
     )
     source_file.write_bytes(source_bytes)
+    source_localisation_pin = _tree_hash(
+        [(source_file.relative_to(source), source_bytes)]
+    )
+    application_hashes = application_report["hashes"]
+    assert isinstance(application_hashes, dict)
+    application_hashes["source_localisation_sha256"] = (
+        source_localisation_pin
+    )
+    base_hashes = base_report["hashes"]
+    assert isinstance(base_hashes, dict)
+    base_hashes["source_localisation_sha256"] = source_localisation_pin
+    base_report_bytes = _json_bytes(base_report)
+    (base_candidate / "translation-report.json").write_bytes(
+        base_report_bytes
+    )
+    application_hashes["pinned_translation_report_sha256"] = _sha256(
+        base_report_bytes
+    )
+    application_report_bytes = _json_bytes(application_report)
+    (candidate / "review-application-report.json").write_bytes(
+        application_report_bytes
+    )
     slug = "synthetic_replace_patch"
     mod_root = supplement / "install" / slug
     target_file = (
@@ -419,7 +445,7 @@ def _synthetic_fixture(tmp_path: Path) -> ConsolidationFixture:
     (supplement / "package-report.json").write_bytes(
         supplement_report_bytes
     )
-    owner_evidence: dict[str, object] = {
+    technical_evidence_data: dict[str, object] = {
         "schema_version": 1,
         "captured_at_utc": "2026-07-30T10:40:00Z",
         "authoritative": True,
@@ -454,19 +480,40 @@ def _synthetic_fixture(tmp_path: Path) -> ConsolidationFixture:
         "next": "owner migration review",
     }
     evidence = evidence_dir / "final-status.json"
-    evidence_bytes = _json_bytes(owner_evidence)
+    evidence_bytes = _json_bytes(technical_evidence_data)
     evidence.write_bytes(evidence_bytes)
+    owner_confirmation_data: dict[str, object] = {
+        "schema": (
+            "stellaris_mod_translator.owner_visual_confirmation"
+        ),
+        "schema_version": 1,
+        "authoritative": True,
+        "status": "OWNER_VISUAL_GAMEPLAY_VERIFICATION: PASS",
+        "supplement_package_sha256": _tree_hash(
+            _tree_files(supplement)
+        ),
+        "supplement_localisation_sha256": _sha256(target_bytes),
+        "verified_replace_entries": 9,
+        "technical_final_status_sha256": _sha256(evidence_bytes),
+        "private_text_output": 0,
+        "confirmed_at_utc": "2026-07-30T10:45:00Z",
+    }
+    owner_confirmation = evidence_dir / "owner-confirmation.json"
+    owner_confirmation_bytes = _json_bytes(owner_confirmation_data)
+    owner_confirmation.write_bytes(owner_confirmation_bytes)
     return ConsolidationFixture(
         candidate=candidate,
         main_package=main_package,
         source=source,
         supplement=supplement,
         evidence=evidence,
+        owner_confirmation=owner_confirmation,
         output_parent=output_parent,
         install_root=install_root,
         application_report=application_report,
         supplement_report=supplement_report,
-        owner_evidence=owner_evidence,
+        technical_evidence_data=technical_evidence_data,
+        owner_confirmation_data=owner_confirmation_data,
         application_report_pin=_sha256(application_report_bytes),
         main_package_pin=_tree_hash(_tree_files(main_package)),
         supplement_package_pin=_tree_hash(_tree_files(supplement)),
@@ -477,6 +524,7 @@ def _synthetic_fixture(tmp_path: Path) -> ConsolidationFixture:
         mapping_pin=mapping_pin,
         content_mapping_pin=content_mapping_pin,
         evidence_pin=_sha256(evidence_bytes),
+        owner_confirmation_pin=_sha256(owner_confirmation_bytes),
     )
 
 
@@ -500,6 +548,7 @@ def _run(
         "mapping": fixture.mapping_pin,
         "content_mapping": fixture.content_mapping_pin,
         "evidence": fixture.evidence_pin,
+        "confirmation": fixture.owner_confirmation_pin,
     }
     if pins:
         values.update(pins)
@@ -519,6 +568,8 @@ def _run(
         values["content_mapping"],
         fixture.evidence,
         values["evidence"],
+        fixture.owner_confirmation,
+        values["confirmation"],
         output or fixture.output_parent / "consolidated",
         "synthetic_native",
         "Synthetic native translation",
@@ -541,6 +592,16 @@ def _refresh_supplement_report(
     fixture.supplement_package_pin = _tree_hash(
         _tree_files(fixture.supplement)
     )
+    fixture.owner_confirmation_data[
+        "supplement_package_sha256"
+    ] = fixture.supplement_package_pin
+    fixture.owner_confirmation_data[
+        "supplement_localisation_sha256"
+    ] = fixture.supplement_localisation_pin
+    fixture.owner_confirmation_data[
+        "technical_final_status_sha256"
+    ] = fixture.evidence_pin
+    _refresh_owner_confirmation(fixture)
 
 
 def _refresh_application_report(
@@ -578,6 +639,29 @@ def _refresh_source(
     source_meta["sha256_before_after"] = fixture.supplement_source_pin
     source_meta["size"] = len(data)
     _refresh_supplement_report(fixture)
+    source_localisation = [
+        (path.relative_to(fixture.source), path.read_bytes())
+        for path in sorted(
+            (fixture.source / "localisation").rglob("*")
+        )
+        if path.is_file() and path.suffix.lower() == ".yml"
+    ]
+    source_hash = _tree_hash(source_localisation)
+    application_hashes = fixture.application_report["hashes"]
+    assert isinstance(application_hashes, dict)
+    application_hashes["source_localisation_sha256"] = source_hash
+    base_candidate = Path(str(fixture.application_report["base_candidate"]))
+    base_report_path = base_candidate / "translation-report.json"
+    base_report = json.loads(base_report_path.read_bytes())
+    base_hashes = base_report["hashes"]
+    assert isinstance(base_hashes, dict)
+    base_hashes["source_localisation_sha256"] = source_hash
+    base_report_bytes = _json_bytes(base_report)
+    base_report_path.write_bytes(base_report_bytes)
+    application_hashes["pinned_translation_report_sha256"] = _sha256(
+        base_report_bytes
+    )
+    _refresh_application_report(fixture)
 
 
 def _refresh_evidence(
@@ -586,10 +670,30 @@ def _refresh_evidence(
     raw: bytes | None = None,
 ) -> None:
     evidence_bytes = (
-        raw if raw is not None else _json_bytes(fixture.owner_evidence)
+        raw
+        if raw is not None
+        else _json_bytes(fixture.technical_evidence_data)
     )
     fixture.evidence.write_bytes(evidence_bytes)
     fixture.evidence_pin = _sha256(evidence_bytes)
+    fixture.owner_confirmation_data[
+        "technical_final_status_sha256"
+    ] = fixture.evidence_pin
+    _refresh_owner_confirmation(fixture)
+
+
+def _refresh_owner_confirmation(
+    fixture: ConsolidationFixture,
+    *,
+    raw: bytes | None = None,
+) -> None:
+    confirmation_bytes = (
+        raw
+        if raw is not None
+        else _json_bytes(fixture.owner_confirmation_data)
+    )
+    fixture.owner_confirmation.write_bytes(confirmation_bytes)
+    fixture.owner_confirmation_pin = _sha256(confirmation_bytes)
 
 
 def _refresh_target(
@@ -628,9 +732,9 @@ def test_consolidation_builds_exact_package_with_two_provenance_branches(
     assert report["status"] == (
         "consolidated_reviewed_mod_package_created"
     )
-    assert report["schema_version"] == 2
+    assert report["schema_version"] == 3
     assert report["construction_mode"] == (
-        "reviewed_plus_owner_replace_supplement_v1"
+        "reviewed_plus_owner_replace_supplement_v2"
     )
     assert report["counts"] == {
         "source_occurrences": 1698,
@@ -659,6 +763,32 @@ def test_consolidation_builds_exact_package_with_two_provenance_branches(
         supplement_provenance["content_mapping_sha256"]
         == fixture.content_mapping_pin
     )
+    assert report["authorities"] == {
+        "main_reviewed_candidate": "application_report_v2",
+        "replace_supplement": "owner_reviewed_mvp5k_package",
+        "technical_main_menu_smoke": "technical_final_status_v1",
+        "owner_visual_confirmation": "owner_visual_confirmation_v1",
+    }
+    assert (
+        supplement_provenance[
+            "technical_main_menu_smoke_sha256"
+        ]
+        == fixture.evidence_pin
+    )
+    assert (
+        supplement_provenance["owner_visual_confirmation_sha256"]
+        == fixture.owner_confirmation_pin
+    )
+    source_generation = report["source_generation"]
+    assert isinstance(source_generation, dict)
+    assert set(source_generation) == {
+        "manifest_sha256",
+        "directory_count",
+        "file_count",
+        "aggregate_bytes",
+        "localisation_file_count",
+    }
+    assert source_generation["localisation_file_count"] == 1
     inventory = report["inventory"]
     assert isinstance(inventory, dict)
     assert inventory["localisation_file_count"] == 17
@@ -714,6 +844,7 @@ def test_consolidation_builds_exact_package_with_two_provenance_branches(
         "mapping",
         "content_mapping",
         "evidence",
+        "confirmation",
     ],
 )
 def test_every_wrong_pin_is_rejected_before_output(
@@ -790,23 +921,23 @@ def test_supplement_report_requires_valid_json_and_exact_fields(
         ("new_relevant_log_errors", False),
     ],
 )
-def test_owner_evidence_rejects_bool_float_and_wrong_types(
+def test_technical_smoke_evidence_rejects_bool_float_and_wrong_types(
     tmp_path: Path, field: str, value: object
 ) -> None:
     fixture = _synthetic_fixture(tmp_path)
-    fixture.owner_evidence[field] = value
+    fixture.technical_evidence_data[field] = value
     _refresh_evidence(fixture)
     with pytest.raises(SafetyError):
         _run(fixture)
 
 
 @pytest.mark.parametrize("change", ["duplicate", "missing", "unknown"])
-def test_owner_evidence_rejects_duplicate_or_inexact_fields(
+def test_technical_smoke_evidence_rejects_duplicate_or_inexact_fields(
     tmp_path: Path, change: str
 ) -> None:
     fixture = _synthetic_fixture(tmp_path)
     if change == "duplicate":
-        raw = _json_bytes(fixture.owner_evidence).replace(
+        raw = _json_bytes(fixture.technical_evidence_data).replace(
             b'{\n  "authoritative"',
             b'{\n  "schema_version": 1,\n  "authoritative"',
             1,
@@ -814,9 +945,9 @@ def test_owner_evidence_rejects_duplicate_or_inexact_fields(
         _refresh_evidence(fixture, raw=raw)
     else:
         if change == "missing":
-            del fixture.owner_evidence["main_menu"]
+            del fixture.technical_evidence_data["main_menu"]
         else:
-            fixture.owner_evidence["extra"] = 0
+            fixture.technical_evidence_data["extra"] = 0
         _refresh_evidence(fixture)
     with pytest.raises(SafetyError):
         _run(fixture)
@@ -830,12 +961,82 @@ def test_owner_evidence_rejects_duplicate_or_inexact_fields(
         ("known_upstream_nsc3_warning", "NO"),
     ],
 )
-def test_owner_evidence_requires_closed_smoke_semantics(
+def test_technical_smoke_evidence_requires_closed_semantics(
     tmp_path: Path, field: str, value: str
 ) -> None:
     fixture = _synthetic_fixture(tmp_path)
-    fixture.owner_evidence[field] = value
+    fixture.technical_evidence_data[field] = value
     _refresh_evidence(fixture)
+    with pytest.raises(SafetyError, match="mismatch"):
+        _run(fixture)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_version", True),
+        ("schema_version", 1.0),
+        ("authoritative", 1),
+        ("verified_replace_entries", False),
+        ("private_text_output", False),
+    ],
+)
+def test_owner_visual_confirmation_rejects_bool_float_and_wrong_types(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    fixture.owner_confirmation_data[field] = value
+    _refresh_owner_confirmation(fixture)
+    with pytest.raises(SafetyError):
+        _run(fixture)
+
+
+@pytest.mark.parametrize("change", ["duplicate", "missing", "unknown"])
+def test_owner_visual_confirmation_requires_strict_exact_fields(
+    tmp_path: Path, change: str
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    if change == "duplicate":
+        raw = _json_bytes(fixture.owner_confirmation_data).replace(
+            b'{\n  "authoritative"',
+            b'{\n  "schema_version": 1,\n  "authoritative"',
+            1,
+        )
+        _refresh_owner_confirmation(fixture, raw=raw)
+    else:
+        if change == "missing":
+            del fixture.owner_confirmation_data["status"]
+        else:
+            fixture.owner_confirmation_data["extra"] = 0
+        _refresh_owner_confirmation(fixture)
+    with pytest.raises(SafetyError):
+        _run(fixture)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "supplement_package_sha256",
+        "supplement_localisation_sha256",
+        "technical_final_status_sha256",
+    ],
+)
+def test_owner_visual_confirmation_rejects_wrong_authority_pins(
+    tmp_path: Path, field: str
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    fixture.owner_confirmation_data[field] = "f" * 64
+    _refresh_owner_confirmation(fixture)
+    with pytest.raises(SafetyError, match="mismatch"):
+        _run(fixture)
+
+
+def test_owner_visual_confirmation_requires_exact_pass_status(
+    tmp_path: Path,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    fixture.owner_confirmation_data["status"] = "PASS"
+    _refresh_owner_confirmation(fixture)
     with pytest.raises(SafetyError, match="mismatch"):
         _run(fixture)
 
@@ -878,6 +1079,174 @@ def test_closed_source_replace_inventory_rejects_extra_or_missing_file(
         source_file.unlink()
     with pytest.raises(SafetyError):
         _run(fixture)
+
+
+def test_full_localisation_identity_rejects_new_yml_outside_replace_before_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    unrelated = (
+        fixture.source
+        / "localisation/english/unrelated_l_english.yml"
+    )
+    unrelated.parent.mkdir(parents=True, exist_ok=True)
+    unrelated.write_bytes(b'l_english:\n unrelated:0 "Unrelated"\n')
+
+    def forbidden(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("temp creation must not be reached")
+
+    monkeypatch.setattr(consolidation.tempfile, "mkdtemp", forbidden)
+    with pytest.raises(
+        SafetyError, match="historical_source_localisation_hash_mismatch"
+    ):
+        _run(fixture)
+    output = fixture.output_parent / "consolidated"
+    assert not output.exists()
+    assert not any(
+        path.name.startswith(".consolidated.tmp-")
+        for path in fixture.output_parent.iterdir()
+    )
+
+
+@pytest.mark.parametrize("kind", ["symlink", "hardlink", "fifo"])
+def test_full_source_generation_rejects_links_and_special_files_before_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    unsafe = fixture.source / "unrelated-unsafe"
+    if kind == "symlink":
+        unsafe.symlink_to(fixture.evidence)
+    elif kind == "hardlink":
+        os.link(fixture.evidence, unsafe)
+    else:
+        os.mkfifo(unsafe)
+
+    def forbidden(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("temp creation must not be reached")
+
+    monkeypatch.setattr(consolidation.tempfile, "mkdtemp", forbidden)
+    with pytest.raises(SafetyError, match="source_generation"):
+        _run(fixture)
+    output = fixture.output_parent / "consolidated"
+    assert not output.exists()
+    assert not any(
+        path.name.startswith(".consolidated.tmp-")
+        for path in fixture.output_parent.iterdir()
+    )
+
+
+@pytest.mark.parametrize("limit", ["file", "aggregate"])
+def test_full_source_generation_size_bounds_fail_before_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    limit: str,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    if limit == "file":
+        monkeypatch.setattr(
+            consolidation, "MAX_SOURCE_GENERATION_FILE_BYTES", 1
+        )
+    else:
+        monkeypatch.setattr(
+            consolidation,
+            "MAX_SOURCE_GENERATION_AGGREGATE_BYTES",
+            1,
+        )
+
+    def forbidden(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("temp creation must not be reached")
+
+    monkeypatch.setattr(consolidation.tempfile, "mkdtemp", forbidden)
+    with pytest.raises(SafetyError, match="source_generation"):
+        _run(fixture)
+    assert not (fixture.output_parent / "consolidated").exists()
+    assert not any(
+        path.name.startswith(".consolidated.tmp-")
+        for path in fixture.output_parent.iterdir()
+    )
+
+
+@pytest.mark.parametrize("limit", ["files", "directories"])
+def test_full_source_generation_inventory_bounds_fail_before_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    limit: str,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    if limit == "files":
+        monkeypatch.setattr(
+            consolidation, "MAX_SOURCE_GENERATION_FILES", 0
+        )
+        expected = "source_generation_file_limit"
+    else:
+        monkeypatch.setattr(
+            consolidation, "MAX_SOURCE_GENERATION_DIRECTORIES", 0
+        )
+        expected = "source_generation_directory_limit"
+
+    def forbidden(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("temp creation must not be reached")
+
+    monkeypatch.setattr(consolidation.tempfile, "mkdtemp", forbidden)
+    with pytest.raises(SafetyError, match=expected):
+        _run(fixture)
+    assert not (fixture.output_parent / "consolidated").exists()
+    assert not any(
+        path.name.startswith(".consolidated.tmp-")
+        for path in fixture.output_parent.iterdir()
+    )
+
+
+@pytest.mark.parametrize(
+    ("directories", "files"),
+    [
+        (
+            (("Alias", (1, 1, stat.S_IFDIR, 1, 0, 1, 1)),),
+            ((Path("alias"), (1, 2, stat.S_IFREG, 1, 0, 1, 1)),),
+        ),
+        (
+            (
+                (
+                    unicodedata.normalize("NFC", "café"),
+                    (1, 1, stat.S_IFDIR, 1, 0, 1, 1),
+                ),
+            ),
+            (
+                (
+                    Path(unicodedata.normalize("NFD", "café")),
+                    (1, 2, stat.S_IFREG, 1, 0, 1, 1),
+                ),
+            ),
+        ),
+        (
+            (("Node", (1, 1, stat.S_IFDIR, 1, 0, 1, 1)),),
+            ((Path("node"), (1, 2, stat.S_IFREG, 1, 0, 1, 1)),),
+        ),
+    ],
+)
+def test_full_source_generation_applies_portable_alias_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    directories: tuple[
+        tuple[str, tuple[int, int, int, int, int, int, int]], ...
+    ],
+    files: tuple[
+        tuple[Path, tuple[int, int, int, int, int, int, int]], ...
+    ],
+) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    root_identity = (1, 9, stat.S_IFDIR, 1, 0, 1, 1)
+    monkeypatch.setattr(
+        consolidation,
+        "_inventory_source_generation",
+        lambda _root: (root_identity, directories, files),
+    )
+    with pytest.raises(SafetyError, match="source_generation"):
+        consolidation._snapshot_source_generation(root)
 
 
 @pytest.mark.parametrize(
@@ -952,7 +1321,7 @@ def test_intermediate_source_symlink_is_rejected(
     shutil.move(str(english), moved)
     english.symlink_to(moved, target_is_directory=True)
     with pytest.raises(
-        SafetyError, match="supplement_source_replace_unsafe_ancestor"
+        SafetyError, match="source_generation_symlink"
     ):
         _run(fixture)
 
@@ -1144,6 +1513,8 @@ def test_source_supplement_and_main_overlap_classes_fail_closed(
     for role, path in roots.items():
         if role != "output":
             path.mkdir()
+    (roots["evidence"] / "status.json").write_bytes(b"{}")
+    (roots["evidence"] / "confirmation.json").write_bytes(b"{}")
     source = roots[source_role]
     supplement = roots[supplement_role]
     with pytest.raises(SafetyError, match="overlap"):
@@ -1154,7 +1525,12 @@ def test_source_supplement_and_main_overlap_classes_fail_closed(
             main_package=roots["supplement"],
             supplement=supplement,
             install_root=roots["install"],
-            evidence=roots["evidence"] / "status.json",
+            technical_smoke_evidence=(
+                roots["evidence"] / "status.json"
+            ),
+            owner_visual_confirmation=(
+                roots["evidence"] / "confirmation.json"
+            ),
         )
 
 
@@ -1197,6 +1573,80 @@ def test_input_drift_after_materialization_prevents_publication(
     ):
         _run(fixture, output=output)
     assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        Path("localisation/english/unrelated_l_english.yml"),
+        Path("gfx/unrelated.bin"),
+    ],
+)
+def test_full_source_drift_after_materialization_prevents_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative: Path,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    output = fixture.output_parent / "consolidated"
+    real_verify = consolidation._verify_consolidation_inputs
+    changed = False
+
+    def drift(inputs: consolidation.ConsolidationInputs) -> None:
+        nonlocal changed
+        if not changed:
+            changed = True
+            target = fixture.source / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"unrelated source generation drift")
+        real_verify(inputs)
+
+    monkeypatch.setattr(
+        consolidation, "_verify_consolidation_inputs", drift
+    )
+    with pytest.raises(
+        SafetyError, match="consolidation_input_generation_changed"
+    ):
+        _run(fixture, output=output)
+    assert not output.exists()
+    assert not any(
+        path.name.startswith(".consolidated.tmp-")
+        for path in fixture.output_parent.iterdir()
+    )
+
+
+def test_post_publication_source_drift_is_detected_with_output_preserved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    output = fixture.output_parent / "consolidated"
+
+    def publish_then_drift(
+        source: Path, destination: Path
+    ) -> None:
+        source.rename(destination)
+        drift = fixture.source / "gfx/post-publication-drift.bin"
+        drift.parent.mkdir(parents=True)
+        drift.write_bytes(b"post-publication source drift")
+
+    monkeypatch.setattr(
+        consolidation,
+        "atomic_publish_directory_no_replace",
+        publish_then_drift,
+    )
+    with pytest.raises(
+        SafetyError, match="consolidation_input_generation_changed"
+    ):
+        _run(fixture, output=output)
+    assert output.is_dir()
+    assert len(
+        [path for path in output.rglob("*") if path.is_file()]
+    ) == 20
+    assert not any(
+        path.name.startswith(".consolidated.tmp-")
+        for path in fixture.output_parent.iterdir()
+    )
 
 
 def test_occupied_output_is_preserved(

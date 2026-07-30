@@ -37,9 +37,10 @@ replace-patch автоматически не удаляется, не мигр�
 `MVP-5M` добавляет отдельный `consolidate-reviewed-mod`. Команда принимает
 основной reviewed candidate и qualified replace supplement как две независимые
 pinned provenance-ветви, заново проверяет canonical source→target mapping и
-authoritative owner-smoke evidence, после чего создаёт только новый private
-no-clobber пакет. Старые packages, active mod, launcher и playset не меняются;
-установка consolidated package остаётся отдельным следующим gate.
+раздельные technical main-menu evidence и authoritative owner visual
+confirmation, после чего создаёт только новый private no-clobber пакет. Старые
+packages, active mod, launcher и playset не меняются; установка consolidated
+package остаётся отдельным следующим gate.
 
 Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
@@ -413,31 +414,39 @@ owner review/merge.
 ослабление legacy packaging. Все arguments обязательны: exact tree прежнего
 main package; exact supplement tree, report, payload, reviewed-localisation,
 source-replace, owner-mapping и independently вычисляемый content-mapping pin;
-read-only source mod; authoritative owner-smoke evidence и его exact pin. Main
-application report по-прежнему independently bind-ит `1678` human decisions и
-`11 unsupported / 1 skipped`; pinned base translation report обязан называть
-ровно этот supplement source как единственный skipped replace-файл. Supplement
-bind-ит ещё `9` owner-reviewed occurrences, а его main-tree fingerprint заново
-проверяется по прежнему main package. Consolidated report сохраняет обе ветви и
-проверяет алгебру `1678 + 9 + 11 = 1698`, выставляет
+read-only source mod; technical main-menu status и отдельная authoritative
+owner visual confirmation с exact pins обоих artifacts. Main application
+report по-прежнему independently bind-ит `1678` human decisions и
+`11 unsupported / 1 skipped`; его historical full-localisation hash обязан
+совпасть с текущим canonical inventory всего `localisation/**/*.yml`.
+Pinned base translation report обязан называть ровно supplement source как
+единственный skipped replace-файл. Supplement bind-ит ещё `9` owner-reviewed
+occurrences, а его main-tree fingerprint заново проверяется по прежнему main
+package. Consolidated report сохраняет обе authorities и проверяет алгебру
+`1678 + 9 + 11 = 1698`, выставляет
 `reviewed_occurrences=1687`, `skipped_files=0` и оставляет
 `editorially_approved=false`.
 
 Supplement имеет закрытый четырёхфайловый package inventory и ровно один
 `localisation/russian/replace/**/_l_russian.yml`; source содержит ровно один
-соответствующий `localisation/english/replace/**/_l_english.yml`. До temp/output
-проверяются strict JSON types и duplicate keys, все pins, regular-file и
-single-link invariants, case/NFC-NFD/file-directory collisions, lexical и
-physical containment, BOM/newline/header, key order/version suffixes,
-protected atoms/escapes и lossless structure. Все inputs повторно сверяются
-после materialization и до atomic no-clobber publication.
+соответствующий `localisation/english/replace/**/_l_english.yml`. Кроме этого,
+вся source-mod generation проходит bounded descriptor-bound chunked snapshot:
+все directories и regular files, single-link/special-file rejection,
+case/NFC-NFD/file-directory collision gate и framed manifest hash. До
+temp/output проверяются strict JSON types и duplicate keys, все pins, lexical
+и physical containment, BOM/newline/header, key order/version suffixes,
+protected atoms/escapes и lossless structure. Полный source snapshot и
+остальные inputs повторно сверяются непосредственно перед atomic no-clobber
+publication и после неё.
 
 Новый descriptor строится заново и содержит только указанную source dependency:
 descriptor supplement не копируется, `replace_path` не добавляется. Report
-schema v2 содержит metadata, relative inventory, hashes, counts, authorities и
-нулевые mutation counters без localisation text, keys, translations, prompts
-или absolute private paths. Даже созданный consolidated package остаётся
-неустановленным и не меняет текущий порядок
+schema v3 содержит metadata, relative package inventory, hashes, counts,
+разделённые smoke authorities и нулевые mutation counters без localisation
+text, keys, translations, prompts или absolute private paths. Для source
+generation сохраняются только manifest hash и агрегированные counts, без
+source filenames. Даже созданный consolidated package остаётся неустановленным
+и не меняет текущий порядок
 `NSC3 -> LOCALISATION -> REPLACE_PATCH`.
 
 MVP-5C application и MVP-5D ускоренный editorial workflow не принимают решения
