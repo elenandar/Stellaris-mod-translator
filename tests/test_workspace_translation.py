@@ -534,6 +534,160 @@ def test_workspace_with_old_skipped_qualified_replace_inventory_is_rejected(
     assert not output.exists()
 
 
+def test_malformed_qualified_replace_legacy_workspace_is_rejected_before_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    replace_file = (
+        source
+        / "localisation/english/replace/replace_l_english.yml"
+    )
+    replace_file.parent.mkdir(parents=True)
+    replace_file.write_bytes(b"\xff")
+    output, workspace = workspace_paths(tmp_path)
+    files = engine._snapshot(source.resolve())
+    _, _, source_tree_hash, _ = engine._workspace_inputs(files)
+    source_file = files[0]
+    old_inventory = (
+        InventoryRow(
+            sequence=0,
+            relative_path=source_file.relative.as_posix(),
+            sha256=source_file.sha256,
+            byte_count=len(source_file.data),
+            parse_status="skipped",
+            occurrence_count=0,
+            unsupported_count=0,
+        ),
+    )
+    old_inventory_payload = [
+        {
+            "sequence": 0,
+            "relative_path": source_file.relative.as_posix(),
+            "sha256": source_file.sha256,
+            "byte_count": len(source_file.data),
+            "parse_status": "skipped",
+            "occurrence_count": 0,
+            "unsupported_count": 0,
+        }
+    ]
+    old_inventory_hash = hashlib.sha256(
+        json.dumps(
+            old_inventory_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    create_workspace(
+        workspace,
+        source_path=str(source.resolve()),
+        output_path=str(output),
+        source_tree_sha256=source_tree_hash,
+        inventory_sha256=old_inventory_hash,
+        parser_order_version=engine.PARSER_ORDER_VERSION,
+        model_tag="synthetic:1",
+        model_digest="a" * 64,
+        prompt_profile_hash=ollama.translation_prompt_profile_hash(),
+        inventory=old_inventory,
+        occurrences=(),
+    )
+    source_before = replace_file.read_bytes()
+    workspace_before = hashlib.sha256(workspace.read_bytes()).hexdigest()
+    constructed = False
+
+    def forbidden_factory() -> SyntheticClient:
+        nonlocal constructed
+        constructed = True
+        return SyntheticClient()
+
+    def forbidden_writer(*args: object, **kwargs: object) -> object:
+        raise AssertionError("workspace writer must not be constructed")
+
+    monkeypatch.setattr(engine, "WorkspaceWriter", forbidden_writer)
+    with pytest.raises(
+        SafetyError,
+        match="workspace_inventory_sha256_drift",
+    ):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            resume=True,
+            client_factory=forbidden_factory,
+        )
+
+    assert constructed is False
+    assert replace_file.read_bytes() == source_before
+    assert hashlib.sha256(workspace.read_bytes()).hexdigest() == workspace_before
+    assert not output.exists()
+    assert not list(tmp_path.glob(".candidate.tmp-*"))
+
+
+def test_legacy_workspace_without_qualified_replace_keeps_inventory_identity(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source_file = source / "localisation/english/bad_l_english.yml"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(b"\xff")
+    output, workspace = workspace_paths(tmp_path)
+    files = engine._snapshot(source.resolve())
+    inventory, plan, source_hash, inventory_hash = engine._workspace_inputs(
+        files
+    )
+    assert plan == ()
+    legacy_payload = [
+        {
+            "sequence": row.sequence,
+            "relative_path": row.relative_path,
+            "sha256": row.sha256,
+            "byte_count": row.byte_count,
+            "parse_status": row.parse_status,
+            "occurrence_count": row.occurrence_count,
+            "unsupported_count": row.unsupported_count,
+        }
+        for row in inventory
+    ]
+    legacy_inventory_hash = hashlib.sha256(
+        json.dumps(
+            legacy_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    assert inventory_hash == legacy_inventory_hash
+    create_workspace(
+        workspace,
+        source_path=str(source.resolve()),
+        output_path=str(output),
+        source_tree_sha256=source_hash,
+        inventory_sha256=legacy_inventory_hash,
+        parser_order_version=engine.PARSER_ORDER_VERSION,
+        model_tag="synthetic:1",
+        model_digest="a" * 64,
+        prompt_profile_hash=ollama.translation_prompt_profile_hash(),
+        inventory=inventory,
+        occurrences=(),
+    )
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        workspace=workspace,
+        resume=True,
+        client_factory=lambda: pytest.fail(
+            "provider must not be constructed"
+        ),
+    )
+
+    assert report["schema_version"] == 3
+    assert report["counts"]["planned_translation_occurrences"] == 0
+    assert load_workspace(workspace).job.state == "completed"
+    assert (output / "translation-report.json").is_file()
+
+
 def test_skipped_only_noncanonical_replace_workspace_avoids_provider_and_db(
     tmp_path: Path,
 ) -> None:
@@ -571,6 +725,42 @@ def test_skipped_only_noncanonical_replace_workspace_avoids_provider_and_db(
     assert (output / "translation-report.json").is_file()
     assert not workspace.exists()
     assert not Path(str(workspace) + ".lock").exists()
+    assert source_file.read_bytes() == source_bytes
+
+
+def test_zero_occurrence_first_run_uses_schema_v2_single_pass_without_db(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source_file = (
+        source
+        / "localisation/english/header_only_l_english.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_bytes = b"l_english:\n# synthetic header-only file\n"
+    source_file.write_bytes(source_bytes)
+    output, workspace = workspace_paths(tmp_path)
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        workspace=workspace,
+        client_factory=lambda: pytest.fail(
+            "provider must not be constructed"
+        ),
+    )
+
+    assert report["schema_version"] == 2
+    assert report["counts"]["planned_translation_occurrences"] == 0
+    assert report["status"] == "no_translatable_content"
+    assert not workspace.exists()
+    assert not Path(str(workspace) + ".lock").exists()
+    assert (output / "translation-report.json").is_file()
+    assert (
+        output
+        / "localisation/russian/header_only_l_russian.yml"
+    ).read_bytes() == source_bytes.replace(b"l_english:", b"l_russian:", 1)
     assert source_file.read_bytes() == source_bytes
 
 

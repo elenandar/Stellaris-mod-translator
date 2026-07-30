@@ -65,6 +65,22 @@ def make_source(tmp_path: Path, data: bytes = SOURCE_BYTES) -> Path:
     return source
 
 
+def synthetic_source_file(
+    relative: str,
+    *,
+    inode: int,
+) -> engine.SourceFile:
+    data = b'l_english:\n key:0 "Synthetic"\n'
+    return engine.SourceFile(
+        relative=Path(relative),
+        data=data,
+        sha256=hashlib.sha256(data).hexdigest(),
+        stat_identity=(1, inode, len(data), 1),
+        parsed=engine.parse_localisation(data),
+        error=None,
+    )
+
+
 def assert_inspect_schema_v1(report: dict[str, object]) -> None:
     assert report["schema_version"] == 1
     assert set(report) == {
@@ -864,6 +880,7 @@ def test_qualified_replace_layer_is_discovered_rendered_and_lossless(
     "relative",
     [
         "localisation/replace/demo_l_english.yml",
+        "localisation/other/replace/demo_l_english.yml",
         "localisation/English/replace/demo_l_english.yml",
         "localisation/english/Replace/demo_l_english.yml",
         "localisation/ｅｎｇｌｉｓｈ/ｒｅｐｌａｃｅ/demo_l_english.yml",
@@ -876,6 +893,8 @@ def test_qualified_replace_layer_is_discovered_rendered_and_lossless(
         "localisation/english/repla\ufe0fce/demo_l_english.yml",
         "localisation/english/repla\u200dce/demo_l_english.yml",
         "localisation/eng\u034flish/replace/demo_l_english.yml",
+        "localisation/english/repl\u3164ace/demo_l_english.yml",
+        "localisation/english/nested/replace/demo_l_english.yml",
     ],
 )
 def test_unqualified_or_noncanonical_replace_layer_is_skipped_fail_closed(
@@ -888,8 +907,11 @@ def test_unqualified_or_noncanonical_replace_layer_is_skipped_fail_closed(
     source_bytes = b'l_english:\n key:0 "Hello"\n'
     source_file.write_bytes(source_bytes)
     output = tmp_path / "candidate"
+    constructed = False
 
     def forbidden():
+        nonlocal constructed
+        constructed = True
         raise AssertionError("provider must not be constructed")
 
     report = translate_mod(
@@ -899,8 +921,10 @@ def test_unqualified_or_noncanonical_replace_layer_is_skipped_fail_closed(
         client_factory=forbidden,
     )
 
+    assert constructed is False
     assert report["counts"]["skipped_files"] == 1
     assert report["counts"]["english_files"] == 0
+    assert report["counts"]["planned_translation_occurrences"] == 0
     assert report["status"] == "technical_safe_partial"
     assert report["diagnostics"] == [
         {
@@ -909,7 +933,63 @@ def test_unqualified_or_noncanonical_replace_layer_is_skipped_fail_closed(
         }
     ]
     assert not (output / "localisation").exists()
+    assert not list(tmp_path.glob(".candidate.tmp-*"))
     assert source_file.read_bytes() == source_bytes
+
+
+def test_canonical_nested_localisation_without_replace_is_translated(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source_file = (
+        source
+        / "localisation/english/nested/demo_l_english.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(b'l_english:\n key:0 "Nested"\n')
+    output = tmp_path / "candidate"
+    EchoClient.calls = 0
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        client_factory=EchoClient,
+    )
+
+    assert EchoClient.calls == 1
+    assert report["counts"]["skipped_files"] == 0
+    assert (
+        output / "localisation/russian/nested/demo_l_russian.yml"
+    ).is_file()
+
+
+def test_non_english_replace_tree_remains_ignored_without_new_residue(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source_file = (
+        source
+        / "localisation/german/replace/demo_l_german.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(b'l_german:\n key:0 "Synthetic"\n')
+    output = tmp_path / "candidate"
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        client_factory=lambda: pytest.fail(
+            "provider must not be constructed"
+        ),
+    )
+
+    assert report["counts"]["english_files"] == 0
+    assert report["counts"]["skipped_files"] == 0
+    assert report["status"] == "no_translatable_content"
+    assert report["diagnostics"] == []
+    assert not (output / "localisation").exists()
 
 
 def test_malformed_qualified_replace_never_constructs_provider(
@@ -993,6 +1073,78 @@ def test_candidate_mapping_collision_is_rejected_before_provider_or_temp(
     assert not output.exists()
     assert first.read_bytes() == b'l_english:\n first:0 "First"\n'
     assert second.read_bytes() == b'l_english:\n second:0 "Second"\n'
+
+
+def test_candidate_file_directory_collision_remains_rejected() -> None:
+    files = [
+        synthetic_source_file(
+            "localisation/english/node.yml",
+            inode=1,
+        ),
+        synthetic_source_file(
+            "localisation/english/node.yml/child_l_english.yml",
+            inode=2,
+        ),
+    ]
+
+    with pytest.raises(SafetyError, match="candidate_path_collision"):
+        engine._validate_candidate_path_mappings(files)
+
+
+@pytest.mark.parametrize(
+    ("first_directory", "second_directory"),
+    [
+        ("CaseDir", "casedir"),
+        ("Caf\u00e9", "Cafe\u0301"),
+    ],
+)
+def test_candidate_directory_prefix_alias_is_rejected_before_side_effects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    first_directory: str,
+    second_directory: str,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    output = tmp_path / "candidate"
+    workspace = tmp_path / "job.smt-workspace.sqlite3"
+    files = [
+        synthetic_source_file(
+            (
+                f"localisation/english/{first_directory}/"
+                "one_l_english.yml"
+            ),
+            inode=1,
+        ),
+        synthetic_source_file(
+            (
+                f"localisation/english/{second_directory}/"
+                "two_l_english.yml"
+            ),
+            inode=2,
+        ),
+    ]
+    monkeypatch.setattr(engine, "_snapshot", lambda path: files)
+
+    def forbidden_factory():
+        raise AssertionError("provider must not be constructed")
+
+    def forbidden_temp(*args: object, **kwargs: object):
+        raise AssertionError("temporary output must not be created")
+
+    monkeypatch.setattr(engine.tempfile, "mkdtemp", forbidden_temp)
+    with pytest.raises(SafetyError, match="candidate_path_collision"):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            client_factory=forbidden_factory,
+        )
+
+    assert not output.exists()
+    assert not workspace.exists()
+    assert not Path(str(workspace) + ".lock").exists()
 
 
 def test_filename_without_language_suffix_is_not_reconstructed(

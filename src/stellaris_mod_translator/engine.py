@@ -729,8 +729,9 @@ def _workspace_inputs(
     source_tree_hash = _tree_hash(
         [(item.relative, item.data) for item in files]
     )
-    inventory_payload = [
-        {
+    inventory_payload: list[dict[str, object]] = []
+    for row, source_file in zip(inventory, files):
+        payload: dict[str, object] = {
             "sequence": row.sequence,
             "relative_path": row.relative_path,
             "sha256": row.sha256,
@@ -739,8 +740,11 @@ def _workspace_inputs(
             "occurrence_count": row.occurrence_count,
             "unsupported_count": row.unsupported_count,
         }
-        for row in inventory
-    ]
+        if _is_qualified_replace_path(source_file.relative):
+            payload["qualified_replace_semantics"] = (
+                "native_qualified_replace_v1"
+            )
+        inventory_payload.append(payload)
     inventory_hash = hashlib.sha256(
         json.dumps(
             inventory_payload,
@@ -1533,16 +1537,19 @@ def _snapshot(source: Path) -> list[SourceFile]:
             if identity_before != identity_after:
                 raise SafetyError("source_changed_during_read")
             digest = hashlib.sha256(data).hexdigest()
-            if _unsupported_replace_layer(relative):
+            try:
+                parsed = parse_localisation(data)
+                error = None
+            except ParseError as exc:
+                parsed = None
+                error = str(exc)
+            if (
+                parsed is not None
+                and parsed.is_english
+                and _unsupported_replace_layer(relative)
+            ):
                 parsed = None
                 error = "replace_layer_unsupported"
-            else:
-                try:
-                    parsed = parse_localisation(data)
-                    error = None
-                except ParseError as exc:
-                    parsed = None
-                    error = str(exc)
             results.append(
                 SourceFile(
                     relative=relative,
@@ -1674,25 +1681,50 @@ def _component_shape(value: str) -> str:
 
 def _looks_like_component(value: str, canonical: str) -> bool:
     shaped = _component_shape(value)
-    return len(shaped) == len(canonical) and all(
-        actual == expected or not actual.isascii()
-        for actual, expected in zip(shaped, canonical)
-    )
+    positions = {0}
+    for actual in shaped:
+        next_positions: set[int] = set()
+        for position in positions:
+            if actual.isascii():
+                if (
+                    position < len(canonical)
+                    and actual == canonical[position]
+                ):
+                    next_positions.add(position + 1)
+            else:
+                next_positions.add(position)
+                if position < len(canonical):
+                    next_positions.add(position + 1)
+        positions = next_positions
+        if not positions:
+            return False
+    return len(canonical) in positions
 
 
 def _unsupported_replace_layer(relative: Path) -> bool:
     parts = relative.parts
     if len(parts) < 3 or parts[0] != "localisation":
         return False
-    if _looks_like_component(parts[1], "replace"):
-        return True
     if (
         len(parts) >= 4
-        and _looks_like_component(parts[1], "english")
-        and _looks_like_component(parts[2], "replace")
+        and parts[1] in {"english", "russian"}
+        and parts[2] == "replace"
     ):
-        return (parts[1], parts[2]) != ("english", "replace")
-    return False
+        return False
+    return any(
+        _looks_like_component(component, "replace")
+        for component in parts[1:-1]
+    )
+
+
+def _is_qualified_replace_path(relative: Path) -> bool:
+    parts = relative.parts
+    return (
+        len(parts) >= 4
+        and parts[0] == "localisation"
+        and parts[1] == "english"
+        and parts[2] == "replace"
+    )
 
 
 def _candidate_collision_key(relative: Path) -> tuple[str, ...]:
@@ -1703,25 +1735,30 @@ def _candidate_collision_key(relative: Path) -> tuple[str, ...]:
 
 
 def _validate_candidate_path_mappings(files: list[SourceFile]) -> None:
-    mapped: dict[tuple[str, ...], Path] = {}
+    mapped_files: dict[tuple[str, ...], tuple[str, ...]] = {}
+    mapped_directories: dict[tuple[str, ...], tuple[str, ...]] = {}
     for source_file in files:
         parsed = source_file.parsed
         if parsed is None or not parsed.is_english:
             continue
         candidate = _candidate_relative(source_file.relative)
         key = _candidate_collision_key(candidate)
-        if key in mapped:
+        exact = candidate.parts
+        if key in mapped_files or key in mapped_directories:
             raise SafetyError("candidate_path_collision")
         for length in range(1, len(key)):
-            if key[:length] in mapped:
+            prefix_key = key[:length]
+            exact_prefix = exact[:length]
+            if prefix_key in mapped_files:
                 raise SafetyError("candidate_path_collision")
-        if any(
-            existing[: len(key)] == key
-            for existing in mapped
-            if len(existing) > len(key)
-        ):
-            raise SafetyError("candidate_path_collision")
-        mapped[key] = candidate
+            previous_spelling = mapped_directories.get(prefix_key)
+            if (
+                previous_spelling is not None
+                and previous_spelling != exact_prefix
+            ):
+                raise SafetyError("candidate_path_collision")
+            mapped_directories[prefix_key] = exact_prefix
+        mapped_files[key] = exact
 
 
 def _tree_hash(items: list[tuple[Path, bytes]]) -> str:

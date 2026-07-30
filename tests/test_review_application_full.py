@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from stellaris_mod_translator import review_application
+from stellaris_mod_translator import review, review_application
 from stellaris_mod_translator.engine import (
     SafetyError,
     _snapshot,
@@ -223,6 +223,69 @@ def write_decisions(path: Path, payload: dict[str, object]) -> None:
         json.dumps(payload, ensure_ascii=True, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def test_application_rejects_ambiguous_mapping_before_decision_or_output_spans(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    candidate = tmp_path / "candidate"
+    source.mkdir()
+    candidate.mkdir()
+    data = b'l_english:\n key:0 "Synthetic"\n'
+    parsed = parse_localisation(data)
+    source_files = [
+        review.SourceFile(
+            relative=Path(
+                "localisation/english/CaseDir/one_l_english.yml"
+            ),
+            data=data,
+            sha256=hashlib.sha256(data).hexdigest(),
+            stat_identity=(1, 1, len(data), 1),
+            parsed=parsed,
+            error=None,
+        ),
+        review.SourceFile(
+            relative=Path(
+                "localisation/english/casedir/two_l_english.yml"
+            ),
+            data=data,
+            sha256=hashlib.sha256(data).hexdigest(),
+            stat_identity=(1, 2, len(data), 1),
+            parsed=parsed,
+            error=None,
+        ),
+    ]
+
+    def snapshot(path: Path) -> list[review.SourceFile]:
+        return source_files if path == source.resolve() else []
+
+    monkeypatch.setattr(review, "_snapshot", snapshot)
+    decisions = tmp_path / "decisions.json"
+    write_decisions(
+        decisions,
+        {
+            "schema_version": 1,
+            "pack_fingerprint": "0" * 64,
+            "decisions": [
+                {"decision": "accept"},
+                {"decision": "reject"},
+            ],
+        },
+    )
+    output = tmp_path / "reviewed"
+    with pytest.raises(SafetyError, match="candidate_path_collision"):
+        apply_review_decisions(
+            source,
+            candidate,
+            decisions,
+            output,
+            candidate_report_sha256="0" * 64,
+        )
+
+    assert not output.exists()
+    assert not list(tmp_path.glob(".reviewed.tmp-*"))
 
 
 def entry_value(path: Path, line: int) -> str:

@@ -18,6 +18,7 @@ from stellaris_mod_translator.engine import (
     translate_mod,
 )
 from stellaris_mod_translator.ollama import OllamaResultError
+from stellaris_mod_translator.parser import parse_localisation
 from stellaris_mod_translator.review import build_review_pack
 
 
@@ -120,6 +121,60 @@ def extract_pack(output: Path) -> dict[str, object]:
     )
     assert encoded is not None
     return json.loads(base64.b64decode(encoded.group(1)))
+
+
+def colliding_review_source_files() -> list[review.SourceFile]:
+    data = b'l_english:\n key:0 "Synthetic"\n'
+    parsed = parse_localisation(data)
+    return [
+        review.SourceFile(
+            relative=Path(
+                "localisation/english/CaseDir/one_l_english.yml"
+            ),
+            data=data,
+            sha256=hashlib.sha256(data).hexdigest(),
+            stat_identity=(1, 1, len(data), 1),
+            parsed=parsed,
+            error=None,
+        ),
+        review.SourceFile(
+            relative=Path(
+                "localisation/english/casedir/two_l_english.yml"
+            ),
+            data=data,
+            sha256=hashlib.sha256(data).hexdigest(),
+            stat_identity=(1, 2, len(data), 1),
+            parsed=parsed,
+            error=None,
+        ),
+    ]
+
+
+def test_review_pack_rejects_ambiguous_source_candidate_mapping_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    candidate = tmp_path / "candidate"
+    source.mkdir()
+    candidate.mkdir()
+    source_files = colliding_review_source_files()
+
+    def snapshot(path: Path) -> list[review.SourceFile]:
+        return source_files if path == source.resolve() else []
+
+    monkeypatch.setattr(review, "_snapshot", snapshot)
+    output = tmp_path / "review"
+    with pytest.raises(SafetyError, match="candidate_path_collision"):
+        build_review_pack(
+            source,
+            candidate,
+            output,
+            candidate_report_sha256="0" * 64,
+        )
+
+    assert not output.exists()
+    assert not list(tmp_path.glob(".review.tmp-*"))
 
 
 def extract_runtime(output: Path) -> str:
