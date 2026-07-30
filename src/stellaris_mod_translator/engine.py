@@ -1707,7 +1707,7 @@ def _unsupported_replace_layer(relative: Path) -> bool:
         return False
     if (
         len(parts) >= 4
-        and parts[1] in {"english", "russian"}
+        and parts[1] == "english"
         and parts[2] == "replace"
     ):
         return False

@@ -883,6 +883,7 @@ def test_qualified_replace_layer_is_discovered_rendered_and_lossless(
         "localisation/other/replace/demo_l_english.yml",
         "localisation/English/replace/demo_l_english.yml",
         "localisation/english/Replace/demo_l_english.yml",
+        "localisation/russian/replace/demo_l_english.yml",
         "localisation/ｅｎｇｌｉｓｈ/ｒｅｐｌａｃｅ/demo_l_english.yml",
         "localisation/еnglish/replace/demo_l_english.yml",
         "localisation/english/replаce/demo_l_english.yml",
@@ -907,6 +908,7 @@ def test_unqualified_or_noncanonical_replace_layer_is_skipped_fail_closed(
     source_bytes = b'l_english:\n key:0 "Hello"\n'
     source_file.write_bytes(source_bytes)
     output = tmp_path / "candidate"
+    workspace = tmp_path / "workspace.sqlite3"
     constructed = False
 
     def forbidden():
@@ -918,6 +920,7 @@ def test_unqualified_or_noncanonical_replace_layer_is_skipped_fail_closed(
         source,
         output,
         "synthetic:1",
+        workspace=workspace,
         client_factory=forbidden,
     )
 
@@ -934,6 +937,8 @@ def test_unqualified_or_noncanonical_replace_layer_is_skipped_fail_closed(
     ]
     assert not (output / "localisation").exists()
     assert not list(tmp_path.glob(".candidate.tmp-*"))
+    assert not workspace.exists()
+    assert not Path(str(workspace) + ".lock").exists()
     assert source_file.read_bytes() == source_bytes
 
 
