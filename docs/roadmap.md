@@ -83,8 +83,20 @@ Application report остаётся pinned metadata authority, а игровой
 не разрешает launcher/playset mutation или запуск игры. Следующий gate:
 bounded установка exact пакета, расположение после NSC3 и внутриигровой smoke.
 
+После merge MVP-5H владелец отдельно разрешил `MVP-5L`: native support только
+для qualified replace layout `localisation/english/replace/**` с точным
+candidate mapping в `localisation/russian/replace/**`. Файлы проходят
+существующие lossless translation, resumable workspace, full review,
+decision-application и reviewed-package gates без новой schema и без
+`replace_path` в descriptor. Неоднозначный `localisation/replace/**` и
+неканонические case/Unicode-варианты остаются явным technical residue без
+provider calls или candidate bytes. Этап не удаляет и не мигрирует
+существующий active replace-patch, не меняет launcher/playsets и не создаёт
+новый private NSC3 candidate/package.
+
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
+| MVP-5L — Native qualified replace layer | exact `localisation/english/replace/**` discovery, collision-free mapping в `localisation/russian/replace/**` и сквозное сохранение через review/application/package | merged MVP-5H and verified canonical NSC3 source layout | synthetic lossless/collision/workspace/review/application/package suite, read-only aggregated NSC3 inspect and bounded Sol Ultra diff-review | **implemented for draft review; active patch migration, launcher and game smoke are separate gates** |
 | MVP-5H — Safe local-mod package | exact application-report pin, strict reviewed inventory, typed descriptor renderer, metadata-only package report и atomic no-clobber package publication | merged MVP-5C/MVP-5D, exact private reviewed candidate and explicit owner authorization | full synthetic suite, private package smoke and immutability checks; затем отдельный live-install/load-order/in-game gate | **implemented for review; private NSC3 package smoke PASS, active installation and launcher remain untouched** |
 | MVP-5D — Accelerated editorial workflow | paginated batch accept/reject, exact-set confirmation, atomic sparse state and bounded undo without automatic decisions | merged MVP-5C mechanism and owner-controlled private review | synthetic JS/browser regressions and complete human final export | **merged in PR №19 as `80cae5a`; no launcher or active installation** |
 | MVP-5C — Full-candidate decision application | exact schema-v3 report pin, shared review validation, complete decisions set, lossless accept/edit/reject и full application report schema v2 | merged MVP-5B in PR №17 and schema-v3/full-pack contracts | full synthetic suite, adversarial semantic review; затем exact owner-authorized private application | **merged in PR №18 as `43e0b5b`; live decisions applied to a private reviewed candidate, active installation and launcher remain untouched** |

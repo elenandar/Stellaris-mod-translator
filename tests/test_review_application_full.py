@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from stellaris_mod_translator import review_application
+from stellaris_mod_translator import review, review_application
 from stellaris_mod_translator.engine import (
     SafetyError,
     _snapshot,
@@ -42,6 +42,7 @@ def make_full_application_inputs(
     tmp_path: Path,
     *,
     entry_count: int | None = None,
+    include_replace: bool = False,
 ) -> tuple[Path, Path, str]:
     source = tmp_path / "source"
     first = source / "localisation/english/first_l_english.yml"
@@ -111,6 +112,21 @@ def make_full_application_inputs(
             )
             + "\n",
             encoding="utf-8",
+        )
+    if include_replace:
+        replace_file = (
+            source
+            / "localisation/english/replace/decisions_l_english.yml"
+        )
+        replace_file.parent.mkdir(parents=True, exist_ok=True)
+        replace_file.write_bytes(
+            b"\xef\xbb\xbfl_english: # replace-header\r\n"
+            b"# replace-comment\r\n"
+            b"\r\n"
+            b' replace.accept:1 "REPLACE_ACCEPT $NAME$"\r\n'
+            b' replace.edit:2 "REPLACE_EDIT [Root.GetName] '
+            b'\xc2\xa7Ggreen\xc2\xa7!"\r\n'
+            b' replace.reject:0 "REPLACE_REJECT \xc2\xa3energy\xc2\xa3"\r\n'
         )
     candidate = tmp_path / "candidate"
     translate_mod(
@@ -207,6 +223,69 @@ def write_decisions(path: Path, payload: dict[str, object]) -> None:
         json.dumps(payload, ensure_ascii=True, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def test_application_rejects_ambiguous_mapping_before_decision_or_output_spans(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    candidate = tmp_path / "candidate"
+    source.mkdir()
+    candidate.mkdir()
+    data = b'l_english:\n key:0 "Synthetic"\n'
+    parsed = parse_localisation(data)
+    source_files = [
+        review.SourceFile(
+            relative=Path(
+                "localisation/english/CaseDir/one_l_english.yml"
+            ),
+            data=data,
+            sha256=hashlib.sha256(data).hexdigest(),
+            stat_identity=(1, 1, len(data), 1),
+            parsed=parsed,
+            error=None,
+        ),
+        review.SourceFile(
+            relative=Path(
+                "localisation/english/casedir/two_l_english.yml"
+            ),
+            data=data,
+            sha256=hashlib.sha256(data).hexdigest(),
+            stat_identity=(1, 2, len(data), 1),
+            parsed=parsed,
+            error=None,
+        ),
+    ]
+
+    def snapshot(path: Path) -> list[review.SourceFile]:
+        return source_files if path == source.resolve() else []
+
+    monkeypatch.setattr(review, "_snapshot", snapshot)
+    decisions = tmp_path / "decisions.json"
+    write_decisions(
+        decisions,
+        {
+            "schema_version": 1,
+            "pack_fingerprint": "0" * 64,
+            "decisions": [
+                {"decision": "accept"},
+                {"decision": "reject"},
+            ],
+        },
+    )
+    output = tmp_path / "reviewed"
+    with pytest.raises(SafetyError, match="candidate_path_collision"):
+        apply_review_decisions(
+            source,
+            candidate,
+            decisions,
+            output,
+            candidate_report_sha256="0" * 64,
+        )
+
+    assert not output.exists()
+    assert not list(tmp_path.glob(".reviewed.tmp-*"))
 
 
 def entry_value(path: Path, line: int) -> str:
@@ -349,6 +428,71 @@ def test_full_application_is_lossless_complete_and_order_independent(
     assert not (
         output / "localisation/replace/skipped_l_english.yml"
     ).exists()
+
+
+def test_full_application_preserves_qualified_replace_path_and_lossless_bytes(
+    tmp_path: Path,
+) -> None:
+    source, candidate, pin = make_full_application_inputs(
+        tmp_path,
+        include_replace=True,
+    )
+    source_path = (
+        "localisation/english/replace/decisions_l_english.yml"
+    )
+    candidate_path = (
+        candidate
+        / "localisation/russian/replace/decisions_l_russian.yml"
+    )
+    payload = make_full_decisions(
+        source,
+        candidate,
+        pin,
+        decisions={
+            (source_path, 5): "edit",
+            (source_path, 6): "reject",
+        },
+    )
+    decisions = tmp_path / "replace-decisions.json"
+    write_decisions(decisions, payload)
+    output = tmp_path / "reviewed"
+    source_before = localisation_hash(source)
+    candidate_before = localisation_hash(candidate)
+
+    report = apply_review_decisions(
+        source,
+        candidate,
+        decisions,
+        output,
+        candidate_report_sha256=pin,
+    )
+
+    reviewed_path = (
+        output
+        / "localisation/russian/replace/decisions_l_russian.yml"
+    )
+    reviewed = reviewed_path.read_bytes()
+    assert reviewed.startswith(
+        b"\xef\xbb\xbfl_russian: # replace-header\r\n"
+    )
+    assert b"# replace-comment\r\n\r\n" in reviewed
+    assert reviewed.replace(b"\r\n", b"").find(b"\n") == -1
+    assert entry_value(reviewed_path, 4) == entry_value(candidate_path, 4)
+    assert entry_value(reviewed_path, 5).startswith("Русская редактура")
+    assert "[Root.GetName]" in entry_value(reviewed_path, 5)
+    assert "§G" in entry_value(reviewed_path, 5)
+    assert "§!" in entry_value(reviewed_path, 5)
+    assert entry_value(reviewed_path, 6) == entry_value(
+        source / source_path,
+        6,
+    )
+    assert entry_value(reviewed_path, 6) != entry_value(candidate_path, 6)
+    assert report["counts"]["accept"] >= 1
+    assert report["counts"]["edit"] >= 1
+    assert report["counts"]["reject"] >= 1
+    assert report["technical_residue"]["skipped_files"] == 1
+    assert localisation_hash(source) == source_before
+    assert localisation_hash(candidate) == candidate_before
 
 
 def test_full_reject_of_existing_english_is_not_reported_as_restored(

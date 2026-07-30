@@ -22,6 +22,7 @@ from .engine import (
     _candidate_relative,
     _snapshot,
     _tree_hash,
+    _validate_candidate_path_mappings,
     _verify_snapshot,
     _write_new,
 )
@@ -278,6 +279,7 @@ def _validated_review_inputs(
 ) -> ValidatedReviewInputs:
     """Recompute authoritative alignment without trusting generated HTML."""
     source_files = _snapshot(source)
+    _validate_candidate_path_mappings(source_files)
     candidate_files = _snapshot(candidate)
     report_file = _read_stable_file(
         candidate / "translation-report.json", "candidate_report"

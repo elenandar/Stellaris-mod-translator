@@ -18,6 +18,7 @@ from stellaris_mod_translator.engine import (
     translate_mod,
 )
 from stellaris_mod_translator.ollama import OllamaResultError
+from stellaris_mod_translator.parser import parse_localisation
 from stellaris_mod_translator.review import build_review_pack
 
 
@@ -58,6 +59,7 @@ def make_full_review_inputs(
     *,
     entry_count: int | None = None,
     hostile_text: bool = False,
+    include_replace: bool = False,
 ) -> tuple[Path, Path, str]:
     source = tmp_path / "source"
     source_file = source / "localisation/english/full_l_english.yml"
@@ -84,6 +86,20 @@ def make_full_review_inputs(
             for index in range(entry_count)
         ]
     source_file.write_text("\n".join(lines) + "\n")
+    if include_replace:
+        replace_file = (
+            source
+            / "localisation/english/replace/full_replace_l_english.yml"
+        )
+        replace_file.parent.mkdir(parents=True)
+        replace_file.write_bytes(
+            b"\xef\xbb\xbfl_english: # replace-header\r\n"
+            b"# replace-comment\r\n"
+            b"\r\n"
+            b' replace.accept:1 "REPLACE_ACCEPT $NAME$"\r\n'
+            b' replace.edit:2 "REPLACE_EDIT [Root.GetName] '
+            b'\xc2\xa3energy\xc2\xa3 \xc2\xa7Ggreen\xc2\xa7!"\r\n'
+        )
     candidate = tmp_path / "candidate"
     workspace = tmp_path / "translation.smt-workspace.sqlite3"
     translate_mod(
@@ -105,6 +121,60 @@ def extract_pack(output: Path) -> dict[str, object]:
     )
     assert encoded is not None
     return json.loads(base64.b64decode(encoded.group(1)))
+
+
+def colliding_review_source_files() -> list[review.SourceFile]:
+    data = b'l_english:\n key:0 "Synthetic"\n'
+    parsed = parse_localisation(data)
+    return [
+        review.SourceFile(
+            relative=Path(
+                "localisation/english/CaseDir/one_l_english.yml"
+            ),
+            data=data,
+            sha256=hashlib.sha256(data).hexdigest(),
+            stat_identity=(1, 1, len(data), 1),
+            parsed=parsed,
+            error=None,
+        ),
+        review.SourceFile(
+            relative=Path(
+                "localisation/english/casedir/two_l_english.yml"
+            ),
+            data=data,
+            sha256=hashlib.sha256(data).hexdigest(),
+            stat_identity=(1, 2, len(data), 1),
+            parsed=parsed,
+            error=None,
+        ),
+    ]
+
+
+def test_review_pack_rejects_ambiguous_source_candidate_mapping_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    candidate = tmp_path / "candidate"
+    source.mkdir()
+    candidate.mkdir()
+    source_files = colliding_review_source_files()
+
+    def snapshot(path: Path) -> list[review.SourceFile]:
+        return source_files if path == source.resolve() else []
+
+    monkeypatch.setattr(review, "_snapshot", snapshot)
+    output = tmp_path / "review"
+    with pytest.raises(SafetyError, match="candidate_path_collision"):
+        build_review_pack(
+            source,
+            candidate,
+            output,
+            candidate_report_sha256="0" * 64,
+        )
+
+    assert not output.exists()
+    assert not list(tmp_path.glob(".review.tmp-*"))
 
 
 def extract_runtime(output: Path) -> str:
@@ -241,6 +311,50 @@ def test_schema_v3_full_candidate_builds_pack_schema_v2_with_warnings(
             "summary": pack["summary"],
         }
     )
+
+
+def test_full_review_pack_propagates_qualified_replace_entries(
+    tmp_path: Path,
+) -> None:
+    source, candidate, pin = make_full_review_inputs(
+        tmp_path,
+        include_replace=True,
+    )
+    output = tmp_path / "review"
+
+    result = build_review_pack(
+        source,
+        candidate,
+        output,
+        candidate_report_sha256=pin,
+    )
+    pack = extract_pack(output)
+    replace_path = (
+        "localisation/english/replace/full_replace_l_english.yml"
+    )
+    replace_entries = [
+        entry for entry in pack["entries"] if entry["path"] == replace_path
+    ]
+
+    assert len(replace_entries) == 2
+    assert [entry["occurrence_ordinal"] for entry in replace_entries] == [0, 1]
+    assert replace_entries[0]["protected_atoms"] == ["$NAME$"]
+    assert replace_entries[1]["protected_atoms"] == [
+        "[Root.GetName]",
+        "£energy£",
+        "§G",
+        "§!",
+    ]
+    assert result["counts"]["review_entries"] == 8
+    assert result["counts"]["skipped_files"] == 0
+    candidate_file = (
+        candidate
+        / "localisation/russian/replace/full_replace_l_russian.yml"
+    )
+    assert candidate_file.read_bytes().startswith(
+        b"\xef\xbb\xbfl_russian: # replace-header\r\n"
+    )
+    assert b"# replace-comment\r\n\r\n" in candidate_file.read_bytes()
 
 
 def test_boundary_whitespace_flags_only_outer_human_span_boundaries() -> None:
