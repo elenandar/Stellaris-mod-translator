@@ -466,3 +466,158 @@ def test_package_reviewed_mod_help_lists_safety_arguments(
         "--allow-technical-residue",
     ):
         assert option in output
+
+
+def _consolidation_argv() -> list[str]:
+    return [
+        "consolidate-reviewed-mod",
+        "--reviewed-candidate",
+        "/reviewed",
+        "--application-report-sha256",
+        "1" * 64,
+        "--main-package",
+        "/main-package",
+        "--main-package-sha256",
+        "9" * 64,
+        "--supplement-package",
+        "/supplement",
+        "--supplement-package-sha256",
+        "2" * 64,
+        "--supplement-report-sha256",
+        "3" * 64,
+        "--supplement-payload-sha256",
+        "4" * 64,
+        "--supplement-localisation-sha256",
+        "5" * 64,
+        "--supplement-source-mod",
+        "/source",
+        "--supplement-source-sha256",
+        "6" * 64,
+        "--supplement-mapping-sha256",
+        "7" * 64,
+        "--supplement-content-mapping-sha256",
+        "a" * 64,
+        "--technical-smoke-evidence",
+        "/technical-status.json",
+        "--technical-smoke-evidence-sha256",
+        "8" * 64,
+        "--owner-visual-confirmation",
+        "/owner-confirmation.json",
+        "--owner-visual-confirmation-sha256",
+        "b" * 64,
+        "--output",
+        "/package",
+        "--mod-slug",
+        "example_ru_native",
+        "--display-name",
+        "Example native translation",
+        "--dependency-name",
+        "Example",
+        "--supported-version",
+        "4.4.*",
+        "--planned-install-root",
+        "/active/mod",
+    ]
+
+
+def test_consolidate_reviewed_mod_exposes_closed_interface() -> None:
+    args = parser().parse_args(_consolidation_argv())
+    assert args.reviewed_candidate == Path("/reviewed")
+    assert args.main_package == Path("/main-package")
+    assert args.supplement_package == Path("/supplement")
+    assert args.supplement_source_mod == Path("/source")
+    assert args.technical_smoke_evidence == Path(
+        "/technical-status.json"
+    )
+    assert args.owner_visual_confirmation == Path(
+        "/owner-confirmation.json"
+    )
+    assert args.output == Path("/package")
+    assert args.mod_slug == "example_ru_native"
+    assert args.dependency_name == "Example"
+    assert args.planned_install_root == Path("/active/mod")
+    assert args.technical_smoke_evidence_sha256 == "8" * 64
+    assert args.owner_visual_confirmation_sha256 == "b" * 64
+
+
+def test_consolidate_reviewed_mod_dispatches_without_ollama(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    received: tuple[object, ...] | None = None
+
+    def consolidate(*args: object) -> dict[str, object]:
+        nonlocal received
+        received = args
+        return {"status": "consolidated_reviewed_mod_package_created"}
+
+    monkeypatch.setattr(cli, "consolidate_reviewed_mod", consolidate)
+    result = main(_consolidation_argv())
+    assert result == 0
+    assert received == (
+        Path("/reviewed"),
+        "1" * 64,
+        Path("/main-package"),
+        "9" * 64,
+        Path("/supplement"),
+        "2" * 64,
+        "3" * 64,
+        "4" * 64,
+        "5" * 64,
+        Path("/source"),
+        "6" * 64,
+        "7" * 64,
+        "a" * 64,
+        Path("/technical-status.json"),
+        "8" * 64,
+        Path("/owner-confirmation.json"),
+        "b" * 64,
+        Path("/package"),
+        "example_ru_native",
+        "Example native translation",
+        "Example",
+        "4.4.*",
+        Path("/active/mod"),
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "consolidated_reviewed_mod_package_created"
+    }
+
+
+def test_consolidate_reviewed_mod_help_lists_all_authorities(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(["consolidate-reviewed-mod", "--help"])
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    for option in (
+        "--reviewed-candidate REVIEWED_CANDIDATE",
+        "--application-report-sha256 SHA256",
+        "--main-package MAIN_PACKAGE",
+        "--main-package-sha256 SHA256",
+        "--supplement-package SUPPLEMENT_PACKAGE",
+        "--supplement-package-sha256 SHA256",
+        "--supplement-report-sha256 SHA256",
+        "--supplement-payload-sha256 SHA256",
+        "--supplement-localisation-sha256 SHA256",
+        "--supplement-source-mod SUPPLEMENT_SOURCE_MOD",
+        "--supplement-source-sha256 SHA256",
+        "--supplement-mapping-sha256 SHA256",
+        "--supplement-content-mapping-sha256 SHA256",
+        "--technical-smoke-evidence TECHNICAL_SMOKE_EVIDENCE",
+        "--technical-smoke-evidence-sha256 SHA256",
+        "--owner-visual-confirmation OWNER_VISUAL_CONFIRMATION",
+        "--owner-visual-confirmation-sha256 SHA256",
+        "--planned-install-root PLANNED_INSTALL_ROOT",
+    ):
+        assert option in output
+
+
+def test_consolidate_reviewed_mod_rejects_malformed_pin() -> None:
+    argv = _consolidation_argv()
+    index = argv.index("--supplement-package-sha256") + 1
+    argv[index] = "A" * 64
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(argv)
+    assert exc.value.code == 2
