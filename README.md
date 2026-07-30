@@ -38,9 +38,11 @@ replace-patch автоматически не удаляется, не мигр�
 основной reviewed candidate и qualified replace supplement как две независимые
 pinned provenance-ветви, заново проверяет canonical source→target mapping и
 раздельные technical main-menu evidence и authoritative owner visual
-confirmation, после чего создаёт только новый private no-clobber пакет. Старые
-packages, active mod, launcher и playset не меняются; установка consolidated
-package остаётся отдельным следующим gate.
+confirmation schema v2 для фиксированного content-free visual scope, после чего
+создаёт только новый private no-clobber пакет. Контракт различает `9` технически
+и редакционно проверенных replace mappings и ровно `3` подтверждённые владельцем
+visual targets. Старые packages, active mod, launcher и playset не меняются;
+установка consolidated package остаётся отдельным следующим gate.
 
 Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
@@ -427,6 +429,14 @@ package. Consolidated report сохраняет обе authorities и прове
 `reviewed_occurrences=1687`, `skipped_files=0` и оставляет
 `editorially_approved=false`.
 
+Owner confirmation schema v2 имеет закрытый duplicate-free набор полей и
+разделяет `package_replace_entry_count=9` от
+`verified_visual_target_count=3`. Подтверждение относится только к
+content-free scope `nsc3_corvette_core_module_labels_v1`; оно не утверждает,
+что владелец визуально проверил все девять replace entries. Supplement
+provenance по-прежнему сохраняет `reviewed_occurrences=9` как количество
+технически и редакционно проверенных mappings.
+
 Supplement имеет закрытый четырёхфайловый package inventory и ровно один
 `localisation/russian/replace/**/_l_russian.yml`; source содержит ровно один
 соответствующий `localisation/english/replace/**/_l_english.yml`. Кроме этого,
@@ -441,12 +451,13 @@ publication и после неё.
 
 Новый descriptor строится заново и содержит только указанную source dependency:
 descriptor supplement не копируется, `replace_path` не добавляется. Report
-schema v3 содержит metadata, relative package inventory, hashes, counts,
-разделённые smoke authorities и нулевые mutation counters без localisation
-text, keys, translations, prompts или absolute private paths. Для source
-generation сохраняются только manifest hash и агрегированные counts, без
-source filenames. Даже созданный consolidated package остаётся неустановленным
-и не меняет текущий порядок
+schema v4 / construction mode v3 добавляет точную область visual authority, не
+переопределяя семантику сохранённого schema-v3 package. Он содержит metadata,
+relative package inventory, hashes, counts, разделённые smoke authorities и
+нулевые mutation counters без localisation text, keys, translations, prompts
+или absolute private paths. Для source generation сохраняются только manifest
+hash и агрегированные counts, без source filenames. Даже созданный
+consolidated package остаётся неустановленным и не меняет текущий порядок
 `NSC3 -> LOCALISATION -> REPLACE_PATCH`.
 
 MVP-5C application и MVP-5D ускоренный editorial workflow не принимают решения

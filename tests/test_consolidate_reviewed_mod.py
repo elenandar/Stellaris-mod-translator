@@ -486,14 +486,16 @@ def _synthetic_fixture(tmp_path: Path) -> ConsolidationFixture:
         "schema": (
             "stellaris_mod_translator.owner_visual_confirmation"
         ),
-        "schema_version": 1,
+        "schema_version": 2,
         "authoritative": True,
         "status": "OWNER_VISUAL_GAMEPLAY_VERIFICATION: PASS",
         "supplement_package_sha256": _tree_hash(
             _tree_files(supplement)
         ),
         "supplement_localisation_sha256": _sha256(target_bytes),
-        "verified_replace_entries": 9,
+        "package_replace_entry_count": 9,
+        "verified_visual_target_count": 3,
+        "visual_scope_id": "nsc3_corvette_core_module_labels_v1",
         "technical_final_status_sha256": _sha256(evidence_bytes),
         "private_text_output": 0,
         "confirmed_at_utc": "2026-07-30T10:45:00Z",
@@ -732,9 +734,9 @@ def test_consolidation_builds_exact_package_with_two_provenance_branches(
     assert report["status"] == (
         "consolidated_reviewed_mod_package_created"
     )
-    assert report["schema_version"] == 3
+    assert report["schema_version"] == 4
     assert report["construction_mode"] == (
-        "reviewed_plus_owner_replace_supplement_v2"
+        "reviewed_plus_owner_replace_supplement_v3"
     )
     assert report["counts"] == {
         "source_occurrences": 1698,
@@ -767,7 +769,7 @@ def test_consolidation_builds_exact_package_with_two_provenance_branches(
         "main_reviewed_candidate": "application_report_v2",
         "replace_supplement": "owner_reviewed_mvp5k_package",
         "technical_main_menu_smoke": "technical_final_status_v1",
-        "owner_visual_confirmation": "owner_visual_confirmation_v1",
+        "owner_visual_confirmation": "owner_visual_confirmation_v2",
     }
     assert (
         supplement_provenance[
@@ -778,6 +780,16 @@ def test_consolidation_builds_exact_package_with_two_provenance_branches(
     assert (
         supplement_provenance["owner_visual_confirmation_sha256"]
         == fixture.owner_confirmation_pin
+    )
+    assert supplement_provenance["reviewed_occurrences"] == 9
+    assert supplement_provenance["package_replace_entry_count"] == 9
+    assert supplement_provenance["verified_visual_target_count"] == 3
+    assert (
+        supplement_provenance["visual_scope_id"]
+        == "nsc3_corvette_core_module_labels_v1"
+    )
+    assert "verified_replace_entries" not in json.dumps(
+        report, sort_keys=True
     )
     source_generation = report["source_generation"]
     assert isinstance(source_generation, dict)
@@ -974,10 +986,12 @@ def test_technical_smoke_evidence_requires_closed_semantics(
 @pytest.mark.parametrize(
     ("field", "value"),
     [
+        ("schema_version", 1),
         ("schema_version", True),
-        ("schema_version", 1.0),
+        ("schema_version", 2.0),
         ("authoritative", 1),
-        ("verified_replace_entries", False),
+        ("package_replace_entry_count", False),
+        ("verified_visual_target_count", False),
         ("private_text_output", False),
     ],
 )
@@ -999,7 +1013,7 @@ def test_owner_visual_confirmation_requires_strict_exact_fields(
     if change == "duplicate":
         raw = _json_bytes(fixture.owner_confirmation_data).replace(
             b'{\n  "authoritative"',
-            b'{\n  "schema_version": 1,\n  "authoritative"',
+            b'{\n  "schema_version": 2,\n  "authoritative"',
             1,
         )
         _refresh_owner_confirmation(fixture, raw=raw)
@@ -1009,6 +1023,35 @@ def test_owner_visual_confirmation_requires_strict_exact_fields(
         else:
             fixture.owner_confirmation_data["extra"] = 0
         _refresh_owner_confirmation(fixture)
+    with pytest.raises(SafetyError):
+        _run(fixture)
+
+
+@pytest.mark.parametrize(
+    ("package_count", "visual_count"),
+    [
+        (3, 9),
+        (9, 9),
+        (3, 3),
+        (-1, 3),
+        (9, -1),
+        (9.0, 3),
+        (9, 3.0),
+    ],
+)
+def test_owner_visual_confirmation_rejects_wrong_count_semantics(
+    tmp_path: Path,
+    package_count: object,
+    visual_count: object,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    fixture.owner_confirmation_data[
+        "package_replace_entry_count"
+    ] = package_count
+    fixture.owner_confirmation_data[
+        "verified_visual_target_count"
+    ] = visual_count
+    _refresh_owner_confirmation(fixture)
     with pytest.raises(SafetyError):
         _run(fixture)
 
@@ -1026,6 +1069,16 @@ def test_owner_visual_confirmation_rejects_wrong_authority_pins(
 ) -> None:
     fixture = _synthetic_fixture(tmp_path)
     fixture.owner_confirmation_data[field] = "f" * 64
+    _refresh_owner_confirmation(fixture)
+    with pytest.raises(SafetyError, match="mismatch"):
+        _run(fixture)
+
+
+def test_owner_visual_confirmation_requires_exact_visual_scope(
+    tmp_path: Path,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    fixture.owner_confirmation_data["visual_scope_id"] = "wrong_scope"
     _refresh_owner_confirmation(fixture)
     with pytest.raises(SafetyError, match="mismatch"):
         _run(fixture)

@@ -56,8 +56,8 @@ from .publication import (
 )
 
 
-CONSOLIDATED_PACKAGE_REPORT_SCHEMA_VERSION = 3
-CONSOLIDATION_MODE = "reviewed_plus_owner_replace_supplement_v2"
+CONSOLIDATED_PACKAGE_REPORT_SCHEMA_VERSION = 4
+CONSOLIDATION_MODE = "reviewed_plus_owner_replace_supplement_v3"
 PACKAGE_REPORT_NAME = "package-report.json"
 MAX_SUPPLEMENT_REPORT_BYTES = 1024 * 1024
 MAX_TECHNICAL_SMOKE_EVIDENCE_BYTES = 1024 * 1024
@@ -72,6 +72,9 @@ SOURCE_GENERATION_MANIFEST_DOMAIN = (
 OWNER_VISUAL_CONFIRMATION_SCHEMA = (
     "stellaris_mod_translator.owner_visual_confirmation"
 )
+OWNER_VISUAL_CONFIRMATION_SCHEMA_VERSION = 2
+VERIFIED_VISUAL_TARGET_COUNT = 3
+VISUAL_SCOPE_ID = "nsc3_corvette_core_module_labels_v1"
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 UTC_TIMESTAMP_RE = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T"
@@ -179,7 +182,9 @@ OWNER_VISUAL_CONFIRMATION_FIELDS = frozenset(
         "status",
         "supplement_package_sha256",
         "supplement_localisation_sha256",
-        "verified_replace_entries",
+        "package_replace_entry_count",
+        "verified_visual_target_count",
+        "visual_scope_id",
         "technical_final_status_sha256",
         "private_text_output",
         "confirmed_at_utc",
@@ -677,7 +682,7 @@ def _snapshot_and_validate_inputs(
         supplement_localisation_sha256=(
             supplement_localisation_sha256
         ),
-        verified_replace_entries=supplement_entries,
+        package_replace_entry_count=supplement_entries,
         technical_final_status_sha256=(
             technical_smoke_evidence_sha256
         ),
@@ -1343,7 +1348,7 @@ def _validate_owner_visual_confirmation(
     *,
     supplement_package_sha256: str,
     supplement_localisation_sha256: str,
-    verified_replace_entries: int,
+    package_replace_entry_count: int,
     technical_final_status_sha256: str,
 ) -> None:
     label = "owner_visual_confirmation"
@@ -1352,14 +1357,16 @@ def _validate_owner_visual_confirmation(
     )
     expected: dict[str, object] = {
         "schema": OWNER_VISUAL_CONFIRMATION_SCHEMA,
-        "schema_version": 1,
+        "schema_version": OWNER_VISUAL_CONFIRMATION_SCHEMA_VERSION,
         "authoritative": True,
         "status": "OWNER_VISUAL_GAMEPLAY_VERIFICATION: PASS",
         "supplement_package_sha256": supplement_package_sha256,
         "supplement_localisation_sha256": (
             supplement_localisation_sha256
         ),
-        "verified_replace_entries": verified_replace_entries,
+        "package_replace_entry_count": package_replace_entry_count,
+        "verified_visual_target_count": VERIFIED_VISUAL_TARGET_COUNT,
+        "visual_scope_id": VISUAL_SCOPE_ID,
         "technical_final_status_sha256": (
             technical_final_status_sha256
         ),
@@ -1446,7 +1453,7 @@ def _consolidated_report(
             "replace_supplement": "owner_reviewed_mvp5k_package",
             "technical_main_menu_smoke": "technical_final_status_v1",
             "owner_visual_confirmation": (
-                "owner_visual_confirmation_v1"
+                "owner_visual_confirmation_v2"
             ),
         },
         "provenance": {
@@ -1502,6 +1509,11 @@ def _consolidated_report(
                     "owner_visual_confirmation_sha256"
                 ],
                 "reviewed_occurrences": supplement_reviewed,
+                "package_replace_entry_count": supplement_reviewed,
+                "verified_visual_target_count": (
+                    VERIFIED_VISUAL_TARGET_COUNT
+                ),
+                "visual_scope_id": VISUAL_SCOPE_ID,
             },
         },
         "source_generation": {
