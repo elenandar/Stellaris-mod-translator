@@ -279,6 +279,51 @@ def test_package_reviewed_mod_builds_exact_private_package(
     )
 
 
+def test_package_preserves_nested_replace_file_and_descriptor_semantics(
+    tmp_path: Path,
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    original = (
+        inputs.candidate
+        / "localisation/russian/nested/two_l_russian.yml"
+    )
+    replace_file = (
+        inputs.candidate
+        / "localisation/russian/replace/two_l_russian.yml"
+    )
+    replace_file.parent.mkdir()
+    replace_bytes = original.read_bytes()
+    original.rename(replace_file)
+    original.parent.rmdir()
+    _refresh_localisation_pin(inputs)
+    output = inputs.output_parent / "replace-package"
+
+    report = _run(inputs, output=output)
+
+    packaged = (
+        output
+        / "install/example_ru_local/localisation/russian/replace/"
+        "two_l_russian.yml"
+    )
+    assert packaged.read_bytes() == replace_bytes
+    assert (
+        "install/example_ru_local/localisation/russian/replace/"
+        "two_l_russian.yml"
+    ) in report["inventory"]["package_files"]
+    assert report["inventory"]["localisation_file_count"] == 2
+    assert report["reviewed_localisation_sha256"] == report[
+        "package_localisation_sha256"
+    ]
+    internal = (
+        output / "install/example_ru_local/descriptor.mod"
+    ).read_bytes()
+    external = (
+        output / "install/example_ru_local.mod"
+    ).read_bytes()
+    assert b"replace_path" not in internal
+    assert b"replace_path" not in external
+
+
 def test_descriptors_have_exact_required_semantics(tmp_path: Path) -> None:
     inputs = _synthetic_inputs(tmp_path)
     output = inputs.output_parent / "package"

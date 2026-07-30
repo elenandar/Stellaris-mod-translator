@@ -25,6 +25,15 @@ localisation и нулевыми input/active/launcher mutations. Следующ
 gate — bounded live install, порядок после source dependency и внутриигровой
 smoke.
 
+`MVP-5L` добавляет native support только для канонического qualified replace
+layer: source `localisation/english/replace/**` проходит тот же lossless parser,
+typed renderer, resumable workspace, review/application и packaging pipeline,
+а candidate сохраняется как `localisation/russian/replace/**`. Неоднозначный
+`localisation/replace/**`, case-варианты и Unicode-confusable написания
+`english/replace` остаются fail-closed technical residue. Существующий active
+replace-patch автоматически не удаляется, не мигрируется и не
+консолидируется.
+
 Owner decision от 26 июля 2026 года
 supersede-ит AUTH-first процесс как зависимость практического MVP; PR №11 не
 продолжается этой работой. Старые M1A/M1B записи ниже сохраняются только как
@@ -109,12 +118,16 @@ python3 -m stellaris_mod_translator package-reviewed-mod \
 новый output path и создаёт `localisation/russian/**` вместе с локальным
 `translation-report.json`. Fallback остаётся на английском и явно учитывается
 в отчёте; candidate не получает `editorially_approved` автоматически.
-Immediate layer `localisation/replace/**` в MVP-0 не поддерживается: такие
-файлы пропускаются без вызова Ollama и без создания
-`localisation/russian/replace/**`. Любой fallback, deferred occurrence или
-пропущенный файл даёт явно частичный status (`dry_run_partial` либо
-`technical_safe_partial`). Пустой источник получает отдельный status
-`*_no_translatable_content`, а не изображает завершённый перевод.
+Qualified replace layer `localisation/english/replace/**` поддерживается и
+публикуется в `localisation/russian/replace/**`; суффикс
+`_l_english.yml` меняется на `_l_russian.yml`. Неоднозначный immediate layout
+`localisation/replace/**` не поддерживается: такие файлы пропускаются без
+вызова Ollama и без candidate bytes. Неканонические case/Unicode-варианты
+`english/replace` не нормализуются молча и также остаются skipped technical
+residue. Любой fallback, deferred occurrence или пропущенный файл даёт явно
+частичный status (`dry_run_partial` либо `technical_safe_partial`). Пустой
+источник получает отдельный status `*_no_translatable_content`, а не
+изображает завершённый перевод.
 
 Необязательный `--max-occurrences-per-file N` принимает значения от `1` до
 `100` и выбирает первые `N` поддержанных occurrences отдельно в каждом
@@ -361,11 +374,18 @@ review/workspace/prompt artifacts. До атомарной публикации 
 planned absolute `path`. Quote, backslash, control/format Unicode, небезопасный
 slug, malformed/duplicate fields, `remote_file_id` и `replace_path`
 отклоняются. Публикация atomic no-clobber: занятый output не изменяется.
+Файл qualified replace сохраняет nested путь
+`install/<slug>/localisation/russian/replace/**` byte-identical reviewed
+candidate. Каталог задаёт replace-семантику самостоятельно: descriptor не
+получает `replace_path`.
 
 `package-report.json` содержит только hashes, inventory, mod/install metadata,
 technical residue и нулевые mutation counters. Он не содержит localisation,
 decisions или prompts. Даже валидный пакет остаётся неустановленным: CLI не
 пишет в planned install root, launcher или active mod path.
+MVP-5L также не удаляет и не мигрирует ранее установленный отдельный
+replace-patch; возможная консолидация требует отдельной no-clobber задачи после
+owner review/merge.
 
 MVP-5C application и MVP-5D ускоренный editorial workflow не принимают решения
 автоматически. Synthetic regressions интерфейса исполняют настоящий JavaScript,

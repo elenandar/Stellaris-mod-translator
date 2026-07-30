@@ -12,6 +12,7 @@ import sqlite3
 import stat
 import tempfile
 from typing import Callable
+import unicodedata
 
 from . import ollama
 from .ollama import (
@@ -151,6 +152,28 @@ def _translate_mod_single_pass(
     source = _validated_source(source_mod)
     output_abs = _validated_output(source, output)
     files = _snapshot(source)
+    return _translate_mod_single_pass_snapshot(
+        source,
+        output_abs,
+        model,
+        files=files,
+        dry_run=dry_run,
+        max_occurrences_per_file=max_occurrences_per_file,
+        client_factory=client_factory,
+    )
+
+
+def _translate_mod_single_pass_snapshot(
+    source: Path,
+    output_abs: Path,
+    model: str,
+    *,
+    files: list[SourceFile],
+    dry_run: bool,
+    max_occurrences_per_file: int | None,
+    client_factory: Callable[[], OllamaClient],
+) -> dict[str, object]:
+    _validate_candidate_path_mappings(files)
     report = _translation_report(source, files)
     report["output"] = str(output_abs)
     report["dry_run"] = dry_run
@@ -264,6 +287,23 @@ def _translate_mod_resumable(
     output_abs = _normalized_output(source, output)
     workspace_abs = _normalized_workspace(workspace, resume=resume)
     _validate_workspace_path_relationships(source, output_abs, workspace_abs)
+    initial_files: list[SourceFile] | None = None
+    if not resume:
+        initial_files = _snapshot(source)
+        _validate_candidate_path_mappings(initial_files)
+        planned, _ = _translation_plan_counts(initial_files, None)
+        if planned == 0:
+            _require_output_absent(output_abs)
+            return _translate_mod_single_pass_snapshot(
+                source,
+                output_abs,
+                model,
+                files=initial_files,
+                dry_run=False,
+                max_occurrences_per_file=None,
+                client_factory=client_factory,
+            )
+        _verify_snapshot(source, initial_files)
     try:
         with WorkspaceRunLock(workspace_abs):
             return _translate_mod_resumable_locked(
@@ -273,6 +313,7 @@ def _translate_mod_resumable(
                 workspace=workspace_abs,
                 resume=resume,
                 client_factory=client_factory,
+                initial_files=initial_files,
             )
     except WorkspaceError as exc:
         raise SafetyError(str(exc)) from exc
@@ -286,6 +327,7 @@ def _translate_mod_resumable_locked(
     workspace: Path,
     resume: bool,
     client_factory: Callable[[], OllamaClient],
+    initial_files: list[SourceFile] | None,
 ) -> dict[str, object]:
     workspace_abs = workspace
     reused = 0
@@ -307,7 +349,8 @@ def _translate_mod_resumable_locked(
     ):
         raise SafetyError("output_exists_without_finalization_intent")
 
-    files = _snapshot(source)
+    files = initial_files if initial_files is not None else _snapshot(source)
+    _validate_candidate_path_mappings(files)
     inventory, plan, source_tree_hash, inventory_hash = _workspace_inputs(files)
     prompt_profile_hash = ollama.translation_prompt_profile_hash()
 
@@ -325,6 +368,8 @@ def _translate_mod_resumable_locked(
             prompt_profile_hash=prompt_profile_hash,
         )
         reused = initial_workspace.job.completed_count
+
+    _verify_snapshot(source, files)
 
     if output_exists:
         assert initial_workspace is not None
@@ -386,7 +431,10 @@ def _translate_mod_resumable_locked(
     client: OllamaClient | None = None
     if (
         initial_workspace is not None
-        and initial_workspace.job.finalization_state == "intent"
+        and (
+            initial_workspace.job.finalization_state == "intent"
+            or not plan
+        )
     ):
         identity = _validated_model_identity(
             {
@@ -568,12 +616,15 @@ def _translate_mod_resumable_locked(
     )
     _verify_snapshot(source, final_files)
     if completed_workspace.job.finalization_state == "none":
-        assert client is not None
-        final_identity = _validated_model_identity(
-            client.exact_model(model), model
-        )
-        if final_identity != identity:
-            raise SafetyError("model_identity_changed")
+        if client is None:
+            if final_plan:
+                raise SafetyError("model_client_unavailable")
+        else:
+            final_identity = _validated_model_identity(
+                client.exact_model(model), model
+            )
+            if final_identity != identity:
+                raise SafetyError("model_identity_changed")
         _verify_snapshot(source, final_files)
 
         try:
@@ -1482,7 +1533,7 @@ def _snapshot(source: Path) -> list[SourceFile]:
             if identity_before != identity_after:
                 raise SafetyError("source_changed_during_read")
             digest = hashlib.sha256(data).hexdigest()
-            if _is_replace_layer(relative):
+            if _unsupported_replace_layer(relative):
                 parsed = None
                 error = "replace_layer_unsupported"
             else:
@@ -1598,7 +1649,9 @@ def _candidate_relative(relative: Path) -> Path:
     tail = parts[1:]
     if tail and tail[0].lower() == "english":
         tail = tail[1:]
-    if tail and tail[0].lower() == "replace":
+    if not tail:
+        raise SafetyError("unexpected_source_path")
+    if tail[0] == "replace" and parts[1] != "english":
         raise SafetyError("replace_layer_unsupported")
     filename = tail[-1]
     if filename.endswith("_l_english.yml"):
@@ -1610,18 +1663,65 @@ def _candidate_relative(relative: Path) -> Path:
     return candidate
 
 
-def _is_replace_layer(relative: Path) -> bool:
-    parts = relative.parts
-    return (
-        len(parts) >= 3
-        and parts[0] == "localisation"
-        and parts[1].lower() == "replace"
-    ) or (
-        len(parts) >= 4
-        and parts[0] == "localisation"
-        and parts[1].lower() == "english"
-        and parts[2].lower() == "replace"
+def _component_shape(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value).casefold()
+    return "".join(
+        char
+        for char in normalized
+        if unicodedata.category(char) not in {"Mn", "Mc", "Me", "Cf"}
     )
+
+
+def _looks_like_component(value: str, canonical: str) -> bool:
+    shaped = _component_shape(value)
+    return len(shaped) == len(canonical) and all(
+        actual == expected or not actual.isascii()
+        for actual, expected in zip(shaped, canonical)
+    )
+
+
+def _unsupported_replace_layer(relative: Path) -> bool:
+    parts = relative.parts
+    if len(parts) < 3 or parts[0] != "localisation":
+        return False
+    if _looks_like_component(parts[1], "replace"):
+        return True
+    if (
+        len(parts) >= 4
+        and _looks_like_component(parts[1], "english")
+        and _looks_like_component(parts[2], "replace")
+    ):
+        return (parts[1], parts[2]) != ("english", "replace")
+    return False
+
+
+def _candidate_collision_key(relative: Path) -> tuple[str, ...]:
+    return tuple(
+        unicodedata.normalize("NFD", part).casefold()
+        for part in relative.parts
+    )
+
+
+def _validate_candidate_path_mappings(files: list[SourceFile]) -> None:
+    mapped: dict[tuple[str, ...], Path] = {}
+    for source_file in files:
+        parsed = source_file.parsed
+        if parsed is None or not parsed.is_english:
+            continue
+        candidate = _candidate_relative(source_file.relative)
+        key = _candidate_collision_key(candidate)
+        if key in mapped:
+            raise SafetyError("candidate_path_collision")
+        for length in range(1, len(key)):
+            if key[:length] in mapped:
+                raise SafetyError("candidate_path_collision")
+        if any(
+            existing[: len(key)] == key
+            for existing in mapped
+            if len(existing) > len(key)
+        ):
+            raise SafetyError("candidate_path_collision")
+        mapped[key] = candidate
 
 
 def _tree_hash(items: list[tuple[Path, bytes]]) -> str:

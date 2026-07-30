@@ -14,7 +14,11 @@ from stellaris_mod_translator.ollama import (
     OllamaResultError,
     OllamaSystemError,
 )
-from stellaris_mod_translator.workspace import load_workspace
+from stellaris_mod_translator.workspace import (
+    InventoryRow,
+    create_workspace,
+    load_workspace,
+)
 
 
 SOURCE_BYTES = (
@@ -374,6 +378,358 @@ def test_workspace_and_single_pass_localisation_are_deterministically_equal(
         single_report["hashes"]["output_localisation_sha256"]
         == workspace_report["hashes"]["output_localisation_sha256"]
     )
+
+
+def test_qualified_replace_workspace_resume_matches_single_pass_losslessly(
+    tmp_path: Path,
+) -> None:
+    source = make_source(
+        tmp_path,
+        b'l_english:\n normal:0 "Normal"\n',
+    )
+    replace_file = (
+        source
+        / "localisation/english/replace/replace_l_english.yml"
+    )
+    replace_file.parent.mkdir(parents=True)
+    replace_bytes = (
+        b"\xef\xbb\xbfl_english: # header\r\n"
+        b"# comment\r\n"
+        b"\r\n"
+        b' replace.one:1 "One $NAME$ \\\\n"\r\n'
+        b' replace.two:2 "Two [Root.GetName] \xc2\xa3energy\xc2\xa3"\r\n'
+    )
+    replace_file.write_bytes(replace_bytes)
+    source_before = candidate_yml(source)
+    output = tmp_path / "workspace-candidate"
+    workspace = tmp_path / "replace.smt-workspace.sqlite3"
+    interrupted = SyntheticClient(interrupt_on=2)
+
+    with pytest.raises(KeyboardInterrupt):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            client_factory=lambda: interrupted,
+        )
+
+    assert not output.exists()
+    resumed = SyntheticClient()
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        workspace=workspace,
+        resume=True,
+        client_factory=lambda: resumed,
+    )
+    single_output = tmp_path / "single-candidate"
+    single = SyntheticClient()
+    single_report = translate_mod(
+        source,
+        single_output,
+        "synthetic:1",
+        client_factory=lambda: single,
+    )
+
+    replace_relative = (
+        "localisation/russian/replace/replace_l_russian.yml"
+    )
+    assert candidate_yml(output) == candidate_yml(single_output)
+    assert candidate_yml(output)[replace_relative].startswith(
+        b"\xef\xbb\xbfl_russian: # header\r\n"
+    )
+    assert b"# comment\r\n\r\n" in candidate_yml(output)[replace_relative]
+    assert report["hashes"]["output_localisation_sha256"] == single_report[
+        "hashes"
+    ]["output_localisation_sha256"]
+    assert report["counts"]["english_files"] == 2
+    assert report["counts"]["translated_occurrences"] == 3
+    assert report["counts"]["reused_from_workspace_occurrences"] == 1
+    assert len(interrupted.calls) == 2
+    assert len(resumed.calls) == 2
+    assert len(single.calls) == 3
+    assert candidate_yml(source) == source_before
+
+
+def test_workspace_with_old_skipped_qualified_replace_inventory_is_rejected(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    replace_file = (
+        source
+        / "localisation/english/replace/replace_l_english.yml"
+    )
+    replace_file.parent.mkdir(parents=True)
+    replace_file.write_bytes(b'l_english:\n replace:0 "Replace"\n')
+    output, workspace = workspace_paths(tmp_path)
+    files = engine._snapshot(source.resolve())
+    _, _, source_tree_hash, _ = engine._workspace_inputs(files)
+    source_file = files[0]
+    old_inventory = (
+        InventoryRow(
+            sequence=0,
+            relative_path=source_file.relative.as_posix(),
+            sha256=source_file.sha256,
+            byte_count=len(source_file.data),
+            parse_status="skipped",
+            occurrence_count=0,
+            unsupported_count=0,
+        ),
+    )
+    inventory_payload = [
+        {
+            "sequence": 0,
+            "relative_path": source_file.relative.as_posix(),
+            "sha256": source_file.sha256,
+            "byte_count": len(source_file.data),
+            "parse_status": "skipped",
+            "occurrence_count": 0,
+            "unsupported_count": 0,
+        }
+    ]
+    old_inventory_hash = hashlib.sha256(
+        json.dumps(
+            inventory_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    create_workspace(
+        workspace,
+        source_path=str(source.resolve()),
+        output_path=str(output),
+        source_tree_sha256=source_tree_hash,
+        inventory_sha256=old_inventory_hash,
+        parser_order_version=engine.PARSER_ORDER_VERSION,
+        model_tag="synthetic:1",
+        model_digest="sha256:synthetic",
+        prompt_profile_hash=ollama.translation_prompt_profile_hash(),
+        inventory=old_inventory,
+        occurrences=(),
+    )
+    constructed = False
+
+    def forbidden_factory() -> SyntheticClient:
+        nonlocal constructed
+        constructed = True
+        return SyntheticClient()
+
+    with pytest.raises(
+        SafetyError,
+        match="workspace_inventory_sha256_drift",
+    ):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            resume=True,
+            client_factory=forbidden_factory,
+        )
+
+    assert engine.PARSER_ORDER_VERSION == "mvp4-lossless-parser-order-v1"
+    assert constructed is False
+    assert not output.exists()
+
+
+def test_skipped_only_noncanonical_replace_workspace_avoids_provider_and_db(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source_file = (
+        source
+        / "localisation/engl\u0131sh/repl\u0251ce/"
+        "replace_l_english.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_bytes = b'l_english:\n replace:0 "Replace"\n'
+    source_file.write_bytes(source_bytes)
+    output, workspace = workspace_paths(tmp_path)
+    constructed = False
+
+    def forbidden_factory() -> SyntheticClient:
+        nonlocal constructed
+        constructed = True
+        return SyntheticClient()
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        workspace=workspace,
+        client_factory=forbidden_factory,
+    )
+
+    assert constructed is False
+    assert report["schema_version"] == 2
+    assert report["counts"]["skipped_files"] == 1
+    assert report["counts"]["planned_translation_occurrences"] == 0
+    assert report["status"] == "technical_safe_partial"
+    assert not (output / "localisation").exists()
+    assert (output / "translation-report.json").is_file()
+    assert not workspace.exists()
+    assert not Path(str(workspace) + ".lock").exists()
+    assert source_file.read_bytes() == source_bytes
+
+
+def test_zero_plan_workspace_delegation_is_bound_to_first_source_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source_file = (
+        source
+        / "localisation/english/replace/replace_l_english.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(b"\xff")
+    output, workspace = workspace_paths(tmp_path)
+    original_snapshot = engine._snapshot
+    snapshot_calls = 0
+    constructed = False
+
+    def drifting_snapshot(path: Path) -> list[engine.SourceFile]:
+        nonlocal snapshot_calls
+        snapshot_calls += 1
+        if snapshot_calls == 2:
+            source_file.write_bytes(
+                b'l_english:\n replace:0 "Now supported"\n'
+            )
+        return original_snapshot(path)
+
+    def forbidden_factory() -> SyntheticClient:
+        nonlocal constructed
+        constructed = True
+        return SyntheticClient()
+
+    monkeypatch.setattr(engine, "_snapshot", drifting_snapshot)
+    with pytest.raises(SafetyError, match="source_generation_changed"):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            client_factory=forbidden_factory,
+        )
+
+    assert snapshot_calls == 2
+    assert constructed is False
+    assert not output.exists()
+    assert not workspace.exists()
+    assert not Path(str(workspace) + ".lock").exists()
+    assert not list(tmp_path.glob(".candidate.tmp-*"))
+
+
+def test_nonzero_plan_workspace_dispatch_is_bound_to_first_source_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source_file = (
+        source
+        / "localisation/english/replace/replace_l_english.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(
+        b'l_english:\n replace:0 "Initially supported"\n'
+    )
+    output, workspace = workspace_paths(tmp_path)
+    original_snapshot = engine._snapshot
+    snapshot_calls = 0
+    constructed = False
+
+    def drifting_snapshot(path: Path) -> list[engine.SourceFile]:
+        nonlocal snapshot_calls
+        snapshot_calls += 1
+        if snapshot_calls == 2:
+            source_file.write_bytes(b"\xff")
+        return original_snapshot(path)
+
+    def forbidden_factory() -> SyntheticClient:
+        nonlocal constructed
+        constructed = True
+        return SyntheticClient()
+
+    monkeypatch.setattr(engine, "_snapshot", drifting_snapshot)
+    with pytest.raises(SafetyError, match="source_generation_changed"):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            client_factory=forbidden_factory,
+        )
+
+    assert snapshot_calls == 2
+    assert constructed is False
+    assert not output.exists()
+    assert not workspace.exists()
+    assert not Path(str(workspace) + ".lock").exists()
+    assert not list(tmp_path.glob(".candidate.tmp-*"))
+
+
+def test_legacy_zero_occurrence_resume_uses_saved_identity_without_provider(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source_file = (
+        source
+        / "localisation/English/replace/replace_l_english.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_bytes = b'l_english:\n replace:0 "Skipped"\n'
+    source_file.write_bytes(source_bytes)
+    output, workspace = workspace_paths(tmp_path)
+    files = engine._snapshot(source.resolve())
+    inventory, plan, source_hash, inventory_hash = engine._workspace_inputs(
+        files
+    )
+    assert plan == ()
+    create_workspace(
+        workspace,
+        source_path=str(source.resolve()),
+        output_path=str(output),
+        source_tree_sha256=source_hash,
+        inventory_sha256=inventory_hash,
+        parser_order_version=engine.PARSER_ORDER_VERSION,
+        model_tag="synthetic:1",
+        model_digest="a" * 64,
+        prompt_profile_hash=ollama.translation_prompt_profile_hash(),
+        inventory=inventory,
+        occurrences=(),
+    )
+    constructed = False
+
+    def forbidden_factory() -> SyntheticClient:
+        nonlocal constructed
+        constructed = True
+        return SyntheticClient()
+
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        workspace=workspace,
+        resume=True,
+        client_factory=forbidden_factory,
+    )
+
+    assert constructed is False
+    assert report["schema_version"] == 3
+    assert report["model"] == {
+        "tag": "synthetic:1",
+        "digest": "a" * 64,
+    }
+    assert report["counts"]["planned_translation_occurrences"] == 0
+    assert report["counts"]["calls_in_final_run"] == 0
+    assert report["counts"]["skipped_files"] == 1
+    assert report["status"] == "technical_safe_partial"
+    assert not (output / "localisation").exists()
+    assert (output / "translation-report.json").is_file()
+    assert load_workspace(workspace).job.state == "completed"
+    assert source_file.read_bytes() == source_bytes
 
 
 @pytest.mark.parametrize("drift", ["bytes", "inventory", "order"])
