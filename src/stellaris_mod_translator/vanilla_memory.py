@@ -737,6 +737,9 @@ def _build_snapshot_generation(
             if after_publication != before_publication:
                 raise SafetyError("post_publication_database_mismatch")
             _validate_private_output_directory(output, report)
+            terminal_budget = _BuildResourceBudget()
+            _verify_source_snapshot(english, terminal_budget)
+            _verify_source_snapshot(russian, terminal_budget)
         except BaseException as exc:
             if not _rollback_owned_publication(
                 output, publication_identity

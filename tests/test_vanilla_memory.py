@@ -865,7 +865,188 @@ def test_publication_time_drift_on_both_attempts_fails_closed(
     assert list(tmp_path.glob(".memory.tmp-*")) == []
 
 
-def test_drift_rollback_never_deletes_replacement_output(
+@pytest.mark.parametrize("language", ["english", "russian"])
+def test_terminal_drift_during_database_validation_rolls_back_and_retries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    language: str,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    english, russian = _roots(tmp_path)
+    for relative, data in english_files.items():
+        _write(english, relative, data)
+    for relative, data in russian_files.items():
+        _write(russian, relative, data)
+    target_root = english if language == "english" else russian
+    target = next(path for path in target_root.rglob("*.yml"))
+    output = tmp_path / "memory"
+    actual_validate = vanilla_memory._validate_database_read_only
+    validation_calls = 0
+
+    def drift_during_first_published_validation(
+        path: Path,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        nonlocal validation_calls
+        validation_calls += 1
+        validated = actual_validate(path, **kwargs)
+        if validation_calls == 2:
+            current = target.read_bytes()
+            if language == "english":
+                changed = current.replace(
+                    b"Synthetic $ACTOR$ [Root.GetName]",
+                    b"Terminal retried $ACTOR$ [Root.GetName]",
+                    1,
+                )
+            else:
+                changed = current.replace(
+                    "MVP6A_SYNTHETIC_CONTEXT_VALUE_20260731".encode("utf-8"),
+                    "MVP6A_TERMINAL_RETRIED_VALUE_20260731".encode("utf-8"),
+                    1,
+                )
+            assert changed != current
+            target.write_bytes(changed)
+        return validated
+
+    monkeypatch.setattr(
+        vanilla_memory,
+        "_validate_database_read_only",
+        drift_during_first_published_validation,
+    )
+    report = build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    fresh = vanilla_memory._snapshot_source_tree(target_root, language)
+    rows = _read_rows(
+        output / DATABASE_NAME,
+        """
+        SELECT human_value FROM occurrences
+        WHERE language = ?
+        """,
+        (language,),
+    )
+    assert validation_calls == 4
+    assert report["source_generations"] == "PASS"
+    assert report["hashes"][f"{language}_manifest_sha256"] == (
+        fresh.manifest_sha256
+    )
+    assert report["hashes"][f"{language}_dataset_sha256"] == (
+        fresh.dataset_sha256
+    )
+    assert len(rows) == 1
+    assert "Terminal" in rows[0]["human_value"] or "TERMINAL" in rows[0][
+        "human_value"
+    ]
+    assert inspect_vanilla_memory(output / DATABASE_NAME)["hashes"] == (
+        report["hashes"]
+    )
+    assert list(tmp_path.glob(".memory.tmp-*")) == []
+    assert list(tmp_path.glob(".memory.rollback-*")) == []
+
+
+def test_terminal_drift_during_both_database_validations_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    english, russian = _roots(tmp_path)
+    for relative, data in english_files.items():
+        _write(english, relative, data)
+    for relative, data in russian_files.items():
+        _write(russian, relative, data)
+    target = next(path for path in english.rglob("*.yml"))
+    output = tmp_path / "memory"
+    actual_validate = vanilla_memory._validate_database_read_only
+    validation_calls = 0
+
+    def drift_during_each_published_validation(
+        path: Path,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        nonlocal validation_calls
+        validation_calls += 1
+        validated = actual_validate(path, **kwargs)
+        if validation_calls == 2:
+            current = target.read_bytes()
+            changed = current.replace(
+                b"Synthetic $ACTOR$ [Root.GetName]",
+                b"First terminal $ACTOR$ [Root.GetName]",
+                1,
+            )
+            assert changed != current
+            target.write_bytes(changed)
+        elif validation_calls == 4:
+            current = target.read_bytes()
+            changed = current.replace(
+                b"First terminal $ACTOR$ [Root.GetName]",
+                b"Second terminal $ACTOR$ [Root.GetName]",
+                1,
+            )
+            assert changed != current
+            target.write_bytes(changed)
+        return validated
+
+    monkeypatch.setattr(
+        vanilla_memory,
+        "_validate_database_read_only",
+        drift_during_each_published_validation,
+    )
+    with pytest.raises(
+        SafetyError, match="source_generation_changed_after_retry"
+    ):
+        build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    assert validation_calls == 4
+    assert not output.exists()
+    assert list(tmp_path.glob(".memory.tmp-*")) == []
+    assert list(tmp_path.glob(".memory.rollback-*")) == []
+
+
+def test_terminal_verification_uses_independent_budgets_and_publishes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    english, russian = _roots(tmp_path)
+    for relative, data in english_files.items():
+        _write(english, relative, data)
+    for relative, data in russian_files.items():
+        _write(russian, relative, data)
+    output = tmp_path / "memory"
+    actual_verify = vanilla_memory._verify_source_snapshot
+    calls: list[tuple[str, object]] = []
+
+    def record_budget(
+        snapshot: object,
+        budget: object | None = None,
+    ) -> None:
+        assert budget is not None
+        calls.append((snapshot.language, budget))
+        actual_verify(snapshot, budget)
+
+    monkeypatch.setattr(
+        vanilla_memory, "_verify_source_snapshot", record_budget
+    )
+    report = build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    assert [language for language, _ in calls] == [
+        "english",
+        "russian",
+        "english",
+        "russian",
+        "english",
+        "russian",
+    ]
+    assert calls[0][1] is calls[1][1]
+    assert calls[2][1] is calls[3][1]
+    assert calls[4][1] is calls[5][1]
+    assert len({id(calls[index][1]) for index in (0, 2, 4)}) == 3
+    assert report["source_generations"] == "PASS"
+    assert output.is_dir()
+    assert list(tmp_path.glob(".memory.tmp-*")) == []
+    assert list(tmp_path.glob(".memory.rollback-*")) == []
+
+
+def test_terminal_drift_rollback_never_deletes_replacement_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -886,7 +1067,7 @@ def test_drift_rollback_never_deletes_replacement_output(
     ) -> None:
         nonlocal calls
         calls += 1
-        if calls == 3:
+        if calls == 5:
             output.rename(displaced)
             output.mkdir()
             (output / "competitor").write_bytes(b"preserve")
@@ -1771,7 +1952,7 @@ def test_one_full_source_generation_retry_can_succeed_without_residue(
     report = build_vanilla_memory(english, russian, GAME_VERSION, output)
 
     assert report["source_generations"] == "PASS"
-    assert calls == 5
+    assert calls == 7
     assert output.is_dir()
     assert list(tmp_path.glob(".memory.tmp-*")) == []
 
