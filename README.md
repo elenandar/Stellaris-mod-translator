@@ -11,14 +11,24 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-6B` добавляет строго read-only
+`MVP-6C` добавляет default-off подключение строго read-only
+`exact_context_v1` к resumable `translate-mod --workspace`. Полный набор из
+policy, database path, database SHA-256, logical digest и game version
+обязателен целиком; single-pass и частичная конфигурация отклоняются до
+workspace/provider writes. Только `exact_key_context` и
+`exact_text_consensus` получают contextual prompt с одним `REFERENCE_ONLY`;
+остальные terminal statuses сохраняют exact legacy prompt. Context binding
+включён в существующий workspace schema-v2 `prompt_profile_hash`, а
+contextual report использует schema v4 без raw reference. Обычный запуск без
+memory сохраняет прежние request bytes, profile hash и report schema v3.
+
+`MVP-6B` добавил строго read-only
 `inspect-vanilla-context-coverage` и typed policy `exact_context_v1` поверх
 private schema-v3 memory из MVP-6A. Exact key имеет приоритет; text fallback
 разрешён только при полном отсутствии key и exact Russian-byte consensus.
 Quarantine, aliases, conflicts и ambiguity остаются terminal exclusions.
-Команда выводит только pins, digest и агрегированные counts. Память всё ещё не
-подключена к `translate-mod` или Ollama, reference автоматически не
-применяется и не получает editorial approval.
+Команда выводит только pins, digest и агрегированные counts. Reference не
+применяется автоматически и не получает editorial approval.
 
 `MVP-5C` смержен в PR №18, а разрешённое владельцем live-применение полного
 decisions set завершилось отдельным private reviewed candidate: application
@@ -114,6 +124,17 @@ python3 -m stellaris_mod_translator translate-mod \
   --model exact-ollama-tag \
   --workspace /path/to/job.smt-workspace.sqlite3 \
   --resume
+
+python3 -m stellaris_mod_translator translate-mod \
+  --source-mod /path/to/read-only-mod \
+  --output /path/to/new-contextual-candidate \
+  --model exact-ollama-tag \
+  --workspace /path/to/contextual-job.smt-workspace.sqlite3 \
+  --context-policy exact_context_v1 \
+  --vanilla-memory-database /path/to/private-memory/vanilla-memory.sqlite3 \
+  --vanilla-memory-database-sha256 64-lowercase-hex-database-pin \
+  --vanilla-memory-logical-digest 64-lowercase-hex-logical-pin \
+  --vanilla-memory-game-version "exact-version-label"
 
 python3 -m stellaris_mod_translator build-review-pack \
   --source-mod /path/to/read-only-source-mod \
@@ -531,9 +552,9 @@ eligible set. Whole-file quarantine сохраняет отдельный кон
 key-occupancy inventory: он не восстанавливает строки, но не позволяет
 скрытому duplicate ошибочно стать strict reference. Даже strict pairs имеют
 только `REFERENCE_ONLY` и никогда не получают `editorially_approved`
-автоматически. Builder не вызывает Ollama, память пока не подключена к
-`translate-mod`, а ambiguous или quarantined rows никогда не выбираются
-автоматически.
+автоматически. Builder не вызывает Ollama; opt-in translation использует
+memory только через полный pinned набор MVP-6C, а ambiguous или quarantined
+rows никогда не выбираются автоматически.
 
 `exact_context_v1` принимает exact relative localisation path, case-sensitive
 key, version suffix (`None`, `"0"` и `"007"` различаются), English Unicode
@@ -568,6 +589,36 @@ identities; source manifest проходит terminal revalidation, а один 
 создаёт candidate, context pack, workspace или report artifact и не выводит
 keys, paths, filenames, IDs либо human text. `PRIVATE_CONTENT_IN_GIT` остаётся
 только внешним leakage-scan verdict, не runtime claim.
+
+## Optional contextual translation and blind A/B
+
+Contextual prompt передаёт source и reference как два canonical JSON data
+fields. Оба объявлены недоверенными данными, source meaning имеет приоритет,
+а protected placeholders должны сохраниться byte-exact и в исходном порядке.
+Localisation key, path, occurrence/pair IDs, SQLite metadata и conflict details
+в model request не попадают. Ошибка contextual result даёт тот же безопасный
+English fallback одним вызовом, без скрытого retry legacy prompt.
+
+До client creation и workspace creation выполняется один retrieval batch по
+уже проверенному translation plan. Canonical binding содержит memory pins,
+retrieval limits, source/inventory hashes и для каждой occurrence только
+sequence, source-span hash, terminal status и hash process-local reference
+bytes либо typed absence. Resume заново получает тот же batch и обязан
+воспроизвести binding до нового provider call. Source и memory identities
+повторно проверяются перед finalization и publication.
+
+`context_ab.run_context_ab_pilot` предназначен только для owner-authorized
+bounded private validation. Он вызывает contextual model только для eligible
+occurrences, переиспользует exact совместимый baseline либо при digest drift
+перестраивает обе стороны на одном текущем digest. Совместимость baseline
+включает exact legacy prompt-profile hash. Обязательный `evaluation_root`
+фиксирует разрешённую область записи: pack должен быть её прямым дочерним
+каталогом и лексически и физически не пересекаться с source, memory, baseline
+или reviewed candidate. Offline pack имеет каталог `0700`, файлы `0600`,
+автономный CSP, stable hidden mapping, local draft, JSON export/import и
+отдельный reviewed-candidate reference, доступный только после выбора. Pack не
+выставляет quality verdict:
+`AB_QUALITY_STATUS: HUMAN_REVIEW_REQUIRED`.
 
 ## Исторический контекст до MVP-0
 

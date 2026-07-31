@@ -106,6 +106,19 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="continue an existing --workspace job",
     )
+    translate.add_argument("--context-policy")
+    translate.add_argument("--vanilla-memory-database", type=Path)
+    translate.add_argument(
+        "--vanilla-memory-database-sha256",
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    translate.add_argument(
+        "--vanilla-memory-logical-digest",
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    translate.add_argument("--vanilla-memory-game-version")
 
     review = commands.add_parser(
         "build-review-pack",
@@ -298,6 +311,17 @@ def main(argv: list[str] | None = None) -> int:
                 max_occurrences_per_file=args.max_occurrences_per_file,
                 workspace=args.workspace,
                 resume=args.resume,
+                context_policy=args.context_policy,
+                vanilla_memory_database=args.vanilla_memory_database,
+                vanilla_memory_database_sha256=(
+                    args.vanilla_memory_database_sha256
+                ),
+                vanilla_memory_logical_digest=(
+                    args.vanilla_memory_logical_digest
+                ),
+                vanilla_memory_game_version=(
+                    args.vanilla_memory_game_version
+                ),
             )
         elif args.command == "build-review-pack":
             report = build_review_pack(
