@@ -7,6 +7,202 @@ import pytest
 
 from stellaris_mod_translator import cli
 from stellaris_mod_translator.cli import main, parser
+from stellaris_mod_translator.engine import SafetyError
+
+
+def _build_vanilla_memory_argv() -> list[str]:
+    return [
+        "build-vanilla-memory",
+        "--english-root",
+        "/private/english",
+        "--russian-root",
+        "/private/russian",
+        "--game-version",
+        "Pegasus v4.4.6 (fdde)",
+        "--output",
+        "/private/memory",
+    ]
+
+
+def test_build_vanilla_memory_exposes_closed_interface() -> None:
+    args = parser().parse_args(_build_vanilla_memory_argv())
+
+    assert args.command == "build-vanilla-memory"
+    assert args.english_root == Path("/private/english")
+    assert args.russian_root == Path("/private/russian")
+    assert args.game_version == "Pegasus v4.4.6 (fdde)"
+    assert args.output == Path("/private/memory")
+
+
+def test_build_vanilla_memory_dispatches_content_free_report(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    received: tuple[Path, Path, str, Path] | None = None
+
+    def build(
+        english_root: Path,
+        russian_root: Path,
+        game_version: str,
+        output: Path,
+    ) -> dict[str, object]:
+        nonlocal received
+        received = (english_root, russian_root, game_version, output)
+        return {
+            "schema_version": 1,
+            "game_version": game_version,
+            "logical_digest": "a" * 64,
+            "counts": {"strict_eligible_pairs": 1},
+        }
+
+    monkeypatch.setattr(cli, "build_vanilla_memory", build)
+
+    result = main(_build_vanilla_memory_argv())
+
+    assert result == 0
+    assert received == (
+        Path("/private/english"),
+        Path("/private/russian"),
+        "Pegasus v4.4.6 (fdde)",
+        Path("/private/memory"),
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "game_version": "Pegasus v4.4.6 (fdde)",
+        "logical_digest": "a" * 64,
+        "counts": {"strict_eligible_pairs": 1},
+    }
+
+
+def test_build_vanilla_memory_help_lists_required_arguments(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(["build-vanilla-memory", "--help"])
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    for option in (
+        "--english-root ENGLISH_ROOT",
+        "--russian-root RUSSIAN_ROOT",
+        "--game-version GAME_VERSION",
+        "--output OUTPUT",
+    ):
+        assert option in output
+
+
+def test_inspect_vanilla_memory_exposes_closed_interface() -> None:
+    args = parser().parse_args(
+        [
+            "inspect-vanilla-memory",
+            "--database",
+            "/private/memory/vanilla-memory.sqlite3",
+        ]
+    )
+
+    assert args.command == "inspect-vanilla-memory"
+    assert args.database == Path(
+        "/private/memory/vanilla-memory.sqlite3"
+    )
+
+
+def test_inspect_vanilla_memory_dispatches_content_free_report(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    received: Path | None = None
+
+    def inspect(database: Path) -> dict[str, object]:
+        nonlocal received
+        received = database
+        return {
+            "schema_version": 1,
+            "game_version": "Pegasus v4.4.6 (fdde)",
+            "database_sha256": "b" * 64,
+            "logical_digest": "c" * 64,
+            "counts": {"strict_eligible_pairs": 1},
+        }
+
+    monkeypatch.setattr(cli, "inspect_vanilla_memory", inspect)
+
+    result = main(
+        [
+            "inspect-vanilla-memory",
+            "--database",
+            "/private/memory/vanilla-memory.sqlite3",
+        ]
+    )
+
+    assert result == 0
+    assert received == Path("/private/memory/vanilla-memory.sqlite3")
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "game_version": "Pegasus v4.4.6 (fdde)",
+        "database_sha256": "b" * 64,
+        "logical_digest": "c" * 64,
+        "counts": {"strict_eligible_pairs": 1},
+    }
+
+
+def test_inspect_vanilla_memory_help_lists_database_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(["inspect-vanilla-memory", "--help"])
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    assert "--database DATABASE" in output
+    assert "--english-root" not in output
+    assert "--russian-root" not in output
+    assert "--output" not in output
+
+
+def test_root_help_lists_vanilla_memory_commands(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args(["--help"])
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    assert "build-vanilla-memory" in output
+    assert "inspect-vanilla-memory" in output
+
+
+@pytest.mark.parametrize(
+    ("function_name", "argv"),
+    [
+        ("build_vanilla_memory", _build_vanilla_memory_argv()),
+        (
+            "inspect_vanilla_memory",
+            [
+                "inspect-vanilla-memory",
+                "--database",
+                "/private/memory/vanilla-memory.sqlite3",
+            ],
+        ),
+    ],
+)
+def test_vanilla_memory_safety_errors_remain_content_free(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    function_name: str,
+    argv: list[str],
+) -> None:
+    def fail(*args: object) -> dict[str, object]:
+        raise SafetyError("vanilla_memory_validation_failed")
+
+    monkeypatch.setattr(cli, function_name, fail)
+
+    result = main(argv)
+
+    assert result == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err) == {
+        "status": "error",
+        "code": "SafetyError",
+        "message": "vanilla_memory_validation_failed",
+    }
+    assert "/private/" not in captured.err
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "1.5", "text", "101"])

@@ -12,6 +12,7 @@ from .ollama import OllamaError
 from .package_reviewed_mod import package_reviewed_mod
 from .review import build_review_pack
 from .review_application import apply_review_decisions
+from .vanilla_memory import build_vanilla_memory, inspect_vanilla_memory
 
 
 def _occurrence_limit(value: str) -> int:
@@ -37,11 +38,26 @@ def _sha256_pin(value: str) -> str:
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(
         prog="stellaris_mod_translator",
-        description="Build a separate, local-only Russian localisation candidate.",
+        description="Run local-only Stellaris localisation workflows.",
     )
     commands = root.add_subparsers(dest="command", required=True)
     inspect = commands.add_parser("inspect", help="inspect supported localisation")
     inspect.add_argument("--source-mod", required=True, type=Path)
+
+    build_memory = commands.add_parser(
+        "build-vanilla-memory",
+        help="build a private contextual vanilla translation memory",
+    )
+    build_memory.add_argument("--english-root", required=True, type=Path)
+    build_memory.add_argument("--russian-root", required=True, type=Path)
+    build_memory.add_argument("--game-version", required=True)
+    build_memory.add_argument("--output", required=True, type=Path)
+
+    inspect_memory = commands.add_parser(
+        "inspect-vanilla-memory",
+        help="inspect a private vanilla translation memory read-only",
+    )
+    inspect_memory.add_argument("--database", required=True, type=Path)
 
     translate = commands.add_parser(
         "translate-mod", help="translate supported localisation through local Ollama"
@@ -235,6 +251,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "inspect":
             report = inspect_mod(args.source_mod)
+        elif args.command == "build-vanilla-memory":
+            report = build_vanilla_memory(
+                args.english_root,
+                args.russian_root,
+                args.game_version,
+                args.output,
+            )
+        elif args.command == "inspect-vanilla-memory":
+            report = inspect_vanilla_memory(args.database)
         elif args.command == "translate-mod":
             report = translate_mod(
                 args.source_mod,
@@ -272,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.planned_install_root,
                 allow_technical_residue=args.allow_technical_residue,
             )
-        else:
+        elif args.command == "consolidate-reviewed-mod":
             report = consolidate_reviewed_mod(
                 args.reviewed_candidate,
                 args.application_report_sha256,
@@ -298,6 +323,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.supported_version,
                 args.planned_install_root,
             )
+        else:
+            raise SafetyError("unsupported_command")
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     except (SafetyError, OllamaError, OSError) as exc:

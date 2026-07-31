@@ -112,8 +112,17 @@ load order.
 Installation migration и повторный game smoke остаются отдельным следующим
 gate.
 
+После merge MVP-5M и принятого owner gameplay smoke владелец отдельно разрешил
+`MVP-6A`: offline builder приватной version-pinned contextual vanilla memory.
+Он читает только заданные English/Russian localisation roots, хранит exact
+occurrences в private SQLite и публикует агрегированный report без content.
+Память не является глобальным словарём, не подключена к `translate-mod` и не
+разрешает automatic acceptance. Следующий `MVP-6B` — отдельный read-only
+retrieval/ranking gate только после review и merge MVP-6A.
+
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
+| MVP-6A — Private contextual vanilla memory | duplicate-aware exact-key alignment с conservative whole-file key occupancy, version suffix и ordered protected-atom gates, private SQLite, canonical logical digest и aggregate-only inspect | merged MVP-5M, owner gameplay smoke и exact Pegasus 4.4.6 EN/RU roots | full synthetic suite, immutable real-corpus manifests, private no-clobber build, leakage scan и bounded Sol Ultra diff-review | **implemented for draft review; memory is not connected to translation, MVP-6B requires separate owner gate** |
 | MVP-5M — Trusted reviewed-package consolidation | две pinned provenance-ветви, full-localisation/source-generation binding, раздельные technical smoke, 9 reviewed mappings / 3 owner-confirmed visual targets и fresh atomic no-clobber native package | merged MVP-5L, exact reviewed candidate, owner-reviewed replace supplement, technical smoke evidence и owner visual confirmation schema v2 | adversarial/full suite, exact private pre/post identities and materialized-package recheck | **R2 authority-scope remediation implemented for draft review; active installation migration, launcher and game smoke are separate gates** |
 | MVP-5L — Native qualified replace layer | exact `localisation/english/replace/**` discovery, collision-free mapping в `localisation/russian/replace/**` и сквозное сохранение через review/application/package | merged MVP-5H and verified canonical NSC3 source layout | synthetic lossless/collision/workspace/review/application/package suite, read-only aggregated NSC3 inspect and bounded Sol Ultra diff-review | **implemented for draft review; active patch migration, launcher and game smoke are separate gates** |
 | MVP-5H — Safe local-mod package | exact application-report pin, strict reviewed inventory, typed descriptor renderer, metadata-only package report и atomic no-clobber package publication | merged MVP-5C/MVP-5D, exact private reviewed candidate and explicit owner authorization | full synthetic suite, private package smoke and immutability checks; затем отдельный live-install/load-order/in-game gate | **implemented for review; private NSC3 package smoke PASS, active installation and launcher remain untouched** |

@@ -1,13 +1,22 @@
 # Stellaris Mod Translator
 
-Персональный local-only CLI для создания отдельного русского candidate-каталога
-из localisation одного мода Stellaris через уже установленный Ollama.
+Персональный local-only CLI для безопасной работы с переводом модов Stellaris:
+создания отдельного русского candidate через уже установленный Ollama и
+построения приватной contextual reference memory из read-only vanilla
+localisation.
 
 MVP-0 реализован как небольшой Python-пакет без обязательных внешних
 runtime-зависимостей. Source mod читается без изменений; CLI не регистрирует
 результат в launcher и не пишет в Workshop, Stellaris или active mod paths.
 
 ## Статус
+
+`MVP-6A` добавляет offline `build-vanilla-memory` и строго read-only
+`inspect-vanilla-memory`. Builder сопоставляет exact English/Russian
+occurrences с учётом key, suffix, ordered protected atoms и контекстного
+path family, сохраняет version-pinned private SQLite и публикует её только в
+fresh no-clobber каталог. Эта память не подключена к `translate-mod`, ничего
+не выбирает автоматически и не меняет vanilla localisation.
 
 `MVP-5C` смержен в PR №18, а разрешённое владельцем live-применение полного
 decisions set завершилось отдельным private reviewed candidate: application
@@ -62,6 +71,15 @@ python3 -m pip install -e .
 
 python3 -m stellaris_mod_translator inspect \
   --source-mod /path/to/mod
+
+python3 -m stellaris_mod_translator build-vanilla-memory \
+  --english-root /path/to/vanilla/localisation/english \
+  --russian-root /path/to/vanilla/localisation/russian \
+  --game-version "exact-version-label" \
+  --output /path/to/new-private-memory
+
+python3 -m stellaris_mod_translator inspect-vanilla-memory \
+  --database /path/to/new-private-memory/vanilla-memory.sqlite3
 
 python3 -m stellaris_mod_translator translate-mod \
   --source-mod /path/to/mod \
@@ -475,6 +493,25 @@ Descriptor-bound filesystem framework остаётся вне этого milesto
 Для поставляемого с macOS старого `pip`, если editable install запрашивает
 `wheel`, доступен полностью локальный совместимый запуск:
 `python3 setup.py develop`.
+
+## Private contextual vanilla memory
+
+MVP-6A хранит официальные EN→RU соответствия только локально и с exact
+game-version label. Это contextual reference memory, а не глобальный словарь:
+одинаковый English text может иметь разные Russian варианты в зависимости от
+key, occurrence и file family. Exact relative paths, keys и human values
+остаются только в приватной SQLite; CLI и build report выводят лишь hashes и
+агрегированные counts.
+
+Duplicate, missing, suffix/atom-mismatched и malformed rows не входят в strict
+eligible set. Whole-file quarantine сохраняет отдельный консервативный
+key-occupancy inventory: он не восстанавливает строки, но не позволяет
+скрытому duplicate ошибочно стать strict reference. Даже strict pairs имеют
+только `REFERENCE_ONLY` и никогда не получают `editorially_approved`
+автоматически. Builder не вызывает Ollama, память пока не подключена к
+`translate-mod`, а ambiguous или quarantined rows никогда не выбираются
+автоматически. Будущий `MVP-6B` будет отдельным read-only retrieval/ranking
+gate после owner review и merge MVP-6A.
 
 ## Исторический контекст до MVP-0
 
