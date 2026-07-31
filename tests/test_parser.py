@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from stellaris_mod_translator.parser import ParseError, parse_localisation
+from stellaris_mod_translator.parser import (
+    ParseError,
+    ParseResourceLimit,
+    parse_localisation,
+)
 
 
 @pytest.mark.parametrize("bom", [b"", b"\xef\xbb\xbf"])
@@ -19,6 +23,55 @@ def test_lossless_round_trip_bom_and_newlines(bom: bytes, newline: bytes) -> Non
     parsed = parse_localisation(data)
     assert parsed.render() == data
     assert parsed.newline == newline
+
+
+def test_line_budget_blocks_before_line_tuple_materialization() -> None:
+    data = b'l_english:\n first:0 "One"\n second:0 "Two"\n'
+
+    with pytest.raises(ParseResourceLimit, match="source_line_limit_exceeded"):
+        parse_localisation(data, max_lines=2)
+
+
+def test_entry_budget_blocks_before_next_protected_token_materialization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from stellaris_mod_translator import parser
+
+    data = b'l_english:\n first:0 "One"\n second:0 "Two $TOKEN$"\n'
+    actual = parser._protected_tokens
+    calls = 0
+
+    def bounded(value: str, *, max_tokens: int | None = None):
+        nonlocal calls
+        calls += 1
+        return actual(value, max_tokens=max_tokens)
+
+    monkeypatch.setattr(parser, "_protected_tokens", bounded)
+
+    with pytest.raises(
+        ParseResourceLimit, match="source_occurrence_limit_exceeded"
+    ):
+        parse_localisation(data, max_entries=1)
+
+    assert calls == 1
+
+
+def test_diagnostic_and_token_budgets_fail_before_overflow() -> None:
+    with pytest.raises(
+        ParseResourceLimit, match="record_quarantine_limit_exceeded"
+    ):
+        parse_localisation(
+            b'l_english:\n malformed:0 unquoted\n',
+            max_diagnostics=0,
+        )
+
+    with pytest.raises(
+        ParseResourceLimit, match="protected_token_limit_exceeded"
+    ):
+        parse_localisation(
+            b'l_english:\n key:0 "$ONE$ $TWO$"\n',
+            max_protected_tokens=1,
+        )
 
 
 def test_preserves_comments_whitespace_versions_duplicates_and_escapes() -> None:

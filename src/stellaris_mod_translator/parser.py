@@ -11,6 +11,10 @@ class ParseError(ValueError):
     """The whole file is unsafe to process."""
 
 
+class ParseResourceLimit(ParseError):
+    """A caller-supplied parser materialization budget was exhausted."""
+
+
 _HEADER = re.compile(rb"^l_english:(?P<tail>[ \t]*(?:#.*)?)$")
 _LANGUAGE_HEADER = re.compile(
     rb"^l_(?P<language>[A-Za-z][A-Za-z0-9_]*):"
@@ -165,7 +169,14 @@ class ParsedFile:
         return prefix + b"".join(lines)
 
 
-def parse_localisation(data: bytes) -> ParsedFile:
+def parse_localisation(
+    data: bytes,
+    *,
+    max_lines: int | None = None,
+    max_entries: int | None = None,
+    max_diagnostics: int | None = None,
+    max_protected_tokens: int | None = None,
+) -> ParsedFile:
     bom = data.startswith(b"\xef\xbb\xbf")
     payload = data[3:] if bom else data
     try:
@@ -195,6 +206,11 @@ def parse_localisation(data: bytes) -> ParsedFile:
     if has_crlf and has_lf:
         raise ParseError("mixed_newlines")
     newline = b"\r\n" if has_crlf else b"\n"
+    line_count = payload.count(b"\n")
+    if payload and not payload.endswith(b"\n"):
+        line_count += 1
+    if max_lines is not None and line_count > max_lines:
+        raise ParseResourceLimit("source_line_limit_exceeded")
     lines = tuple(payload.splitlines(keepends=True))
     if not lines and payload == b"":
         lines = ()
@@ -224,6 +240,7 @@ def parse_localisation(data: bytes) -> ParsedFile:
     language = language_header.group("language").decode("ascii")
     entries: list[Entry] = []
     diagnostics: list[dict[str, object]] = []
+    protected_token_count = 0
 
     for index, raw in enumerate(lines):
         body, _ = _split_ending(raw)
@@ -231,11 +248,31 @@ def parse_localisation(data: bytes) -> ParsedFile:
             continue
         match = _ENTRY.fullmatch(body)
         if match:
+            if max_entries is not None and len(entries) >= max_entries:
+                raise ParseResourceLimit(
+                    "source_occurrence_limit_exceeded"
+                )
             value_bytes = match.group("value")
             value = value_bytes.decode("utf-8")
             try:
-                protected = _protected_tokens(value)
+                protected = _protected_tokens(
+                    value,
+                    max_tokens=(
+                        None
+                        if max_protected_tokens is None
+                        else max_protected_tokens - protected_token_count
+                    ),
+                )
+            except ParseResourceLimit:
+                raise
             except ParseError as exc:
+                if (
+                    max_diagnostics is not None
+                    and len(diagnostics) >= max_diagnostics
+                ):
+                    raise ParseResourceLimit(
+                        "record_quarantine_limit_exceeded"
+                    )
                 diagnostics.append(
                     {
                         "code": "unsupported_entry",
@@ -244,6 +281,7 @@ def parse_localisation(data: bytes) -> ParsedFile:
                     }
                 )
                 continue
+            protected_token_count += len(protected)
             whitespace = re.fullmatch(r"([ \t]*)(.*?)([ \t]*)", value)
             assert whitespace is not None
             entries.append(
@@ -259,6 +297,13 @@ def parse_localisation(data: bytes) -> ParsedFile:
                 )
             )
         elif _ENTRY_LIKE.match(body):
+            if (
+                max_diagnostics is not None
+                and len(diagnostics) >= max_diagnostics
+            ):
+                raise ParseResourceLimit(
+                    "record_quarantine_limit_exceeded"
+                )
             diagnostics.append(
                 {"code": "unsupported_entry", "line": index + 1}
             )
@@ -278,9 +323,15 @@ def parse_localisation(data: bytes) -> ParsedFile:
     return parsed
 
 
-def _protected_tokens(value: str) -> tuple[ProtectedToken, ...]:
+def _protected_tokens(
+    value: str,
+    *,
+    max_tokens: int | None = None,
+) -> tuple[ProtectedToken, ...]:
     tokens: list[ProtectedToken] = []
     for index, match in enumerate(_PROTECTED.finditer(value)):
+        if max_tokens is not None and len(tokens) >= max_tokens:
+            raise ParseResourceLimit("protected_token_limit_exceeded")
         original = match.group(0)
         tokens.append(
             ProtectedToken(
