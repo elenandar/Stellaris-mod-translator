@@ -25,6 +25,7 @@ from .package_reviewed_mod import (
 from .parser import (
     Entry,
     ParseError,
+    ParseResourceLimit,
     ParsedFile,
     _protected_tokens,
     parse_localisation,
@@ -36,11 +37,24 @@ from .publication import (
 )
 
 
-SCHEMA_VERSION = 2
-APPLICATION_ID = 0x534D5436
+SCHEMA_VERSION = 3
+APPLICATION_ID = 0x534D5437
 DATABASE_NAME = "vanilla-memory.sqlite3"
 REPORT_NAME = "build-report.json"
 MAX_SOURCE_FILE_BYTES = 128 * 1024 * 1024
+MAX_MANIFEST_ENTRIES_PER_ROOT = 4_096
+MAX_SOURCE_DIRECTORIES_PER_ROOT = 2_048
+MAX_REGULAR_FILES_PER_ROOT = 2_048
+MAX_SOURCE_BYTES_PER_ROOT = 128 * 1024 * 1024
+MAX_YML_SOURCE_FILES_PER_ROOT = 1_024
+MAX_YML_SOURCE_FILES_TOTAL = 2_048
+MAX_PARSED_LINES_PER_LANGUAGE = 1_500_000
+MAX_PARSED_LINES_TOTAL = 3_000_000
+MAX_OCCURRENCES_PER_LANGUAGE = 1_000_000
+MAX_OCCURRENCES_TOTAL = 2_000_000
+MAX_PROTECTED_TOKENS_TOTAL = 1_500_000
+MAX_RECORD_QUARANTINES_TOTAL = 500_000
+MAX_FILE_QUARANTINES_TOTAL = 16_384
 MAX_GAME_VERSION_BYTES = 256
 MAX_QUARANTINED_KEY_CANDIDATES = 2_000_000
 _HEX = frozenset("0123456789abcdef")
@@ -96,7 +110,7 @@ _RECORD_QUARANTINE_REASONS = frozenset(
         "malformed_syntax",
     }
 )
-_LOGICAL_DIGEST_DOMAIN = b"SMT_CONTEXTUAL_VANILLA_MEMORY_LOGICAL_V2"
+_LOGICAL_DIGEST_DOMAIN = b"SMT_CONTEXTUAL_VANILLA_MEMORY_LOGICAL_V3"
 _MANIFEST_DIGEST_DOMAIN = b"SMT_VANILLA_SOURCE_MANIFEST_V1"
 _DATASET_DIGEST_DOMAIN = b"SMT_VANILLA_DATASET_V1"
 _OCCURRENCE_ID_DOMAIN = b"SMT_VANILLA_OCCURRENCE_ID_V1"
@@ -111,8 +125,8 @@ _SQLITE_CACHE_KIB = 64 * 1024
 _SCHEMA = """
 CREATE TABLE metadata (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version = 2),
-    application_id INTEGER NOT NULL CHECK (application_id = 1397576758),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 3),
+    application_id INTEGER NOT NULL CHECK (application_id = 1397576759),
     game_version TEXT NOT NULL CHECK (
         length(game_version) BETWEEN 1 AND 256
     ),
@@ -170,9 +184,6 @@ CREATE TABLE metadata (
     key_alias_groups INTEGER NOT NULL CHECK (key_alias_groups >= 0),
     source_mutations INTEGER NOT NULL CHECK (source_mutations = 0),
     ollama_calls INTEGER NOT NULL CHECK (ollama_calls = 0),
-    private_content_in_git INTEGER NOT NULL CHECK (
-        private_content_in_git = 0
-    ),
     CHECK (
         english_occurrences + russian_occurrences
         = 2 * (
@@ -502,6 +513,17 @@ class _SourceSnapshot:
     root_identity: _StatIdentity
 
 
+@dataclass
+class _BuildResourceBudget:
+    yml_source_files: int = 0
+    parsed_lines: int = 0
+    occurrences: int = 0
+    protected_tokens: int = 0
+    record_quarantines: int = 0
+    file_quarantines: int = 0
+    quarantined_key_candidates: int = 0
+
+
 @dataclass(frozen=True)
 class _Token:
     ordinal: int
@@ -642,11 +664,12 @@ def _build_vanilla_memory(
         try:
             if attempt:
                 _require_output_absent(output_abs)
+            budget = _BuildResourceBudget()
             english_snapshot = _snapshot_source_tree(
-                english, "english"
+                english, "english", budget
             )
             russian_snapshot = _snapshot_source_tree(
-                russian, "russian"
+                russian, "russian", budget
             )
             return _build_snapshot_generation(
                 english_snapshot,
@@ -690,8 +713,9 @@ def _build_snapshot_generation(
             _canonical_report_bytes(report),
         )
         _validate_private_output_directory(temp, report)
-        _verify_source_snapshot(english)
-        _verify_source_snapshot(russian)
+        prepublication_budget = _BuildResourceBudget()
+        _verify_source_snapshot(english, prepublication_budget)
+        _verify_source_snapshot(russian, prepublication_budget)
         publication_identity = _published_tree_identity(temp)
         try:
             atomic_publish_directory_no_replace(temp, output)
@@ -704,6 +728,9 @@ def _build_snapshot_generation(
         published = True
 
         try:
+            postpublication_budget = _BuildResourceBudget()
+            _verify_source_snapshot(english, postpublication_budget)
+            _verify_source_snapshot(russian, postpublication_budget)
             after_publication = _validate_database_read_only(
                 output / DATABASE_NAME
             )
@@ -813,12 +840,24 @@ def _require_output_absent(path: Path) -> None:
     raise SafetyError("output_must_not_exist")
 
 
-def _snapshot_source_tree(root: Path, language: str) -> _SourceSnapshot:
+def _snapshot_source_tree(
+    root: Path,
+    language: str,
+    budget: _BuildResourceBudget | None = None,
+) -> _SourceSnapshot:
     if language not in _LANGUAGES:
         raise AssertionError("unsupported source language")
+    if budget is None:
+        budget = _BuildResourceBudget()
     root_before = _stable_directory_identity(root, "source_root")
     manifest: list[_ManifestEntry] = []
     source_files: list[_SourceFile] = []
+    directory_count = 0
+    regular_file_count = 0
+    source_bytes = 0
+    yml_source_files = 0
+    language_parsed_lines = 0
+    language_occurrences = 0
     seen_physical: set[tuple[int, int]] = {
         (root_before.device, root_before.inode)
     }
@@ -826,114 +865,217 @@ def _snapshot_source_tree(root: Path, language: str) -> _SourceSnapshot:
         tuple[str, ...], tuple[tuple[str, ...], str]
     ] = {}
 
-    def fail_walk(error: OSError) -> None:
-        if isinstance(error, FileNotFoundError):
-            raise _SourceGenerationChanged() from error
-        raise SafetyError("source_inventory_failed") from error
-
-    for current, directory_names, file_names in os.walk(
-        root,
-        topdown=True,
-        followlinks=False,
-        onerror=fail_walk,
-    ):
-        directory_names.sort()
-        file_names.sort()
-        current_path = Path(current)
+    pending_directories = [root]
+    while pending_directories:
+        current_path = pending_directories.pop()
         _stable_directory_identity(current_path, "source_directory")
-
-        for directory_name in directory_names:
-            path = current_path / directory_name
-            relative = path.relative_to(root)
-            identity = _stable_directory_identity(
-                path, "source_directory"
-            )
-            physical_key = (identity.device, identity.inode)
-            if physical_key in seen_physical:
-                raise SafetyError("source_physical_alias")
-            seen_physical.add(physical_key)
-            _admit_portable_path(
-                portable_paths,
-                relative,
-                "directory",
-            )
-            manifest.append(
-                _ManifestEntry(
-                    relative_path=relative.as_posix(),
-                    kind="directory",
-                    byte_count=None,
-                    content_sha256=None,
-                    identity=identity,
-                )
-            )
-
-        for file_name in file_names:
-            path = current_path / file_name
-            relative = path.relative_to(root)
-            data, identity = _read_stable_regular_file(path)
-            physical_key = (identity.device, identity.inode)
-            if physical_key in seen_physical:
-                raise SafetyError("source_hardlink_alias")
-            seen_physical.add(physical_key)
-            _admit_portable_path(portable_paths, relative, "file")
-            digest = _sha256(data)
-            manifest.append(
-                _ManifestEntry(
-                    relative_path=relative.as_posix(),
-                    kind="file",
-                    byte_count=len(data),
-                    content_sha256=digest,
-                    identity=identity,
-                )
-            )
-            if path.suffix.lower() != ".yml":
-                continue
-            parsed: ParsedFile | None
-            reason: str | None
-            try:
-                candidate = parse_localisation(data)
-            except ParseError as exc:
-                parsed = None
-                reason = _safe_reason(str(exc), "parse_error")
-            else:
-                if candidate.language != language:
-                    parsed = None
-                    reason = "unexpected_language_header"
-                elif any(
-                    _diagnostic_key_hint(
-                        candidate.lines[
-                            _diagnostic_line(
-                                diagnostic,
-                                len(candidate.lines),
-                            )
-                            - 1
-                        ]
+        try:
+            entries = os.scandir(current_path)
+        except FileNotFoundError as exc:
+            raise _SourceGenerationChanged() from exc
+        except OSError as exc:
+            raise SafetyError("source_inventory_failed") from exc
+        try:
+            for entry in entries:
+                path = current_path / entry.name
+                relative = path.relative_to(root)
+                try:
+                    is_directory = entry.is_dir(follow_symlinks=False)
+                except FileNotFoundError as exc:
+                    raise _SourceGenerationChanged() from exc
+                except OSError as exc:
+                    raise SafetyError("source_inventory_failed") from exc
+                if is_directory:
+                    if directory_count >= MAX_SOURCE_DIRECTORIES_PER_ROOT:
+                        raise SafetyError("source_directory_limit_exceeded")
+                    if len(manifest) >= MAX_MANIFEST_ENTRIES_PER_ROOT:
+                        raise SafetyError("manifest_entry_limit_exceeded")
+                    identity = _stable_directory_identity(
+                        path, "source_directory"
                     )
-                    is None
-                    for diagnostic in candidate.diagnostics
-                ):
-                    parsed = None
-                    reason = "unattributed_malformed_record"
-                else:
-                    parsed = candidate
-                    reason = None
-            quarantined_key_occupancy = (
-                _quarantined_file_key_inventory(data)
-                if parsed is None
-                else ()
-            )
-            source_files.append(
-                _SourceFile(
-                    language=language,
-                    relative_path=relative.as_posix(),
-                    data=data,
-                    sha256=digest,
-                    identity=identity,
-                    quarantined_key_occupancy=quarantined_key_occupancy,
-                    parsed=parsed,
-                    parse_reason=reason,
+                    physical_key = (identity.device, identity.inode)
+                    if physical_key in seen_physical:
+                        raise SafetyError("source_physical_alias")
+                    seen_physical.add(physical_key)
+                    _admit_portable_path(
+                        portable_paths,
+                        relative,
+                        "directory",
+                    )
+                    manifest.append(
+                        _ManifestEntry(
+                            relative_path=relative.as_posix(),
+                            kind="directory",
+                            byte_count=None,
+                            content_sha256=None,
+                            identity=identity,
+                        )
+                    )
+                    directory_count += 1
+                    pending_directories.append(path)
+                    continue
+
+                is_yml = path.suffix.lower() == ".yml"
+                if regular_file_count >= MAX_REGULAR_FILES_PER_ROOT:
+                    raise SafetyError("source_file_limit_exceeded")
+                if len(manifest) >= MAX_MANIFEST_ENTRIES_PER_ROOT:
+                    raise SafetyError("manifest_entry_limit_exceeded")
+                if is_yml:
+                    if yml_source_files >= MAX_YML_SOURCE_FILES_PER_ROOT:
+                        raise SafetyError("source_yml_file_limit_exceeded")
+                    if budget.yml_source_files >= MAX_YML_SOURCE_FILES_TOTAL:
+                        raise SafetyError(
+                            "source_yml_file_total_limit_exceeded"
+                        )
+                data, identity = _read_stable_regular_file(
+                    path,
+                    aggregate_bytes_remaining=(
+                        MAX_SOURCE_BYTES_PER_ROOT - source_bytes
+                    ),
                 )
-            )
+                source_bytes += len(data)
+                regular_file_count += 1
+                if is_yml:
+                    yml_source_files += 1
+                    budget.yml_source_files += 1
+                physical_key = (identity.device, identity.inode)
+                if physical_key in seen_physical:
+                    raise SafetyError("source_hardlink_alias")
+                seen_physical.add(physical_key)
+                _admit_portable_path(portable_paths, relative, "file")
+                digest = _sha256(data)
+                manifest.append(
+                    _ManifestEntry(
+                        relative_path=relative.as_posix(),
+                        kind="file",
+                        byte_count=len(data),
+                        content_sha256=digest,
+                        identity=identity,
+                    )
+                )
+                if not is_yml:
+                    continue
+                parsed: ParsedFile | None
+                reason: str | None
+                language_occurrence_remaining = (
+                    MAX_OCCURRENCES_PER_LANGUAGE - language_occurrences
+                )
+                total_occurrence_remaining = (
+                    MAX_OCCURRENCES_TOTAL - budget.occurrences
+                )
+                occurrence_limit_code = (
+                    "source_occurrence_language_limit_exceeded"
+                    if language_occurrence_remaining
+                    <= total_occurrence_remaining
+                    else "source_occurrence_total_limit_exceeded"
+                )
+                try:
+                    candidate = parse_localisation(
+                        data,
+                        max_lines=min(
+                            MAX_PARSED_LINES_PER_LANGUAGE
+                            - language_parsed_lines,
+                            MAX_PARSED_LINES_TOTAL - budget.parsed_lines,
+                        ),
+                        max_entries=min(
+                            language_occurrence_remaining,
+                            total_occurrence_remaining,
+                        ),
+                        max_diagnostics=(
+                            MAX_RECORD_QUARANTINES_TOTAL
+                            - budget.record_quarantines
+                        ),
+                        max_protected_tokens=(
+                            MAX_PROTECTED_TOKENS_TOTAL
+                            - budget.protected_tokens
+                        ),
+                    )
+                except ParseResourceLimit as exc:
+                    code = str(exc)
+                    if code == "source_occurrence_limit_exceeded":
+                        code = occurrence_limit_code
+                    raise SafetyError(code) from exc
+                except ParseError as exc:
+                    parsed = None
+                    reason = _safe_reason(str(exc), "parse_error")
+                else:
+                    if candidate.language != language:
+                        parsed = None
+                        reason = "unexpected_language_header"
+                    elif any(
+                        _diagnostic_key_hint(
+                            candidate.lines[
+                                _diagnostic_line(
+                                    diagnostic,
+                                    len(candidate.lines),
+                                )
+                                - 1
+                            ]
+                        )
+                        is None
+                        for diagnostic in candidate.diagnostics
+                    ):
+                        parsed = None
+                        reason = "unattributed_malformed_record"
+                    else:
+                        parsed = candidate
+                        reason = None
+                if parsed is None:
+                    if budget.file_quarantines >= MAX_FILE_QUARANTINES_TOTAL:
+                        raise SafetyError("file_quarantine_limit_exceeded")
+                    budget.file_quarantines += 1
+                else:
+                    next_language_lines = (
+                        language_parsed_lines + len(parsed.lines)
+                    )
+                    next_lines = budget.parsed_lines + len(parsed.lines)
+                    if (
+                        next_language_lines
+                        > MAX_PARSED_LINES_PER_LANGUAGE
+                        or next_lines > MAX_PARSED_LINES_TOTAL
+                    ):
+                        raise SafetyError("source_line_limit_exceeded")
+                    language_parsed_lines = next_language_lines
+                    budget.parsed_lines = next_lines
+                    language_occurrences += len(parsed.entries)
+                    budget.occurrences += len(parsed.entries)
+                    budget.protected_tokens += sum(
+                        len(item.protected) for item in parsed.entries
+                    )
+                    budget.record_quarantines += len(parsed.diagnostics)
+                quarantined_key_occupancy = (
+                    _quarantined_file_key_inventory(
+                        data,
+                        max_candidates=(
+                            MAX_QUARANTINED_KEY_CANDIDATES
+                            - budget.quarantined_key_candidates
+                        ),
+                    )
+                    if parsed is None
+                    else ()
+                )
+                candidate_count = sum(
+                    count for _, count in quarantined_key_occupancy
+                )
+                budget.quarantined_key_candidates += candidate_count
+                source_files.append(
+                    _SourceFile(
+                        language=language,
+                        relative_path=relative.as_posix(),
+                        data=data,
+                        sha256=digest,
+                        identity=identity,
+                        quarantined_key_occupancy=quarantined_key_occupancy,
+                        parsed=parsed,
+                        parse_reason=reason,
+                    )
+                )
+        except FileNotFoundError as exc:
+            raise _SourceGenerationChanged() from exc
+        except OSError as exc:
+            raise SafetyError("source_inventory_failed") from exc
+        finally:
+            entries.close()
 
     manifest.sort(key=lambda item: item.relative_path)
     source_files.sort(key=lambda item: item.relative_path)
@@ -953,8 +1095,15 @@ def _snapshot_source_tree(root: Path, language: str) -> _SourceSnapshot:
     )
 
 
-def _verify_source_snapshot(expected: _SourceSnapshot) -> None:
-    current = _snapshot_source_tree(expected.root, expected.language)
+def _verify_source_snapshot(
+    expected: _SourceSnapshot,
+    budget: _BuildResourceBudget | None = None,
+) -> None:
+    current = _snapshot_source_tree(
+        expected.root,
+        expected.language,
+        budget,
+    )
     if _source_generation_signature(current) != _source_generation_signature(
         expected
     ):
@@ -1016,7 +1165,11 @@ def _stable_directory_identity(path: Path, label: str) -> _StatIdentity:
     return identities[1]
 
 
-def _read_stable_regular_file(path: Path) -> tuple[bytes, _StatIdentity]:
+def _read_stable_regular_file(
+    path: Path,
+    *,
+    aggregate_bytes_remaining: int,
+) -> tuple[bytes, _StatIdentity]:
     flags = (
         os.O_RDONLY
         | getattr(os, "O_CLOEXEC", 0)
@@ -1039,6 +1192,8 @@ def _read_stable_regular_file(path: Path) -> tuple[bytes, _StatIdentity]:
             or before.st_size > MAX_SOURCE_FILE_BYTES
         ):
             raise SafetyError("source_file_unsafe")
+        if before.st_size > aggregate_bytes_remaining:
+            raise SafetyError("source_bytes_limit_exceeded")
         chunks: list[bytes] = []
         remaining = before.st_size
         while remaining:
@@ -1153,6 +1308,8 @@ def _build_memory_rows(
 ) -> _MemoryRows:
     occurrences: list[_Occurrence] = []
     quarantines: list[_Quarantine] = []
+    limits = _BuildResourceBudget()
+    language_occurrences: Counter[str] = Counter()
     quarantined_key_occupancy: list[
         _QuarantinedKeyOccupancy
     ] = []
@@ -1160,6 +1317,21 @@ def _build_memory_rows(
         for source_file in snapshot.source_files:
             if source_file.parsed is None:
                 assert source_file.parse_reason is not None
+                if limits.file_quarantines >= MAX_FILE_QUARANTINES_TOTAL:
+                    raise SafetyError("file_quarantine_limit_exceeded")
+                candidate_count = sum(
+                    count
+                    for _, count in source_file.quarantined_key_occupancy
+                )
+                if (
+                    limits.quarantined_key_candidates + candidate_count
+                    > MAX_QUARANTINED_KEY_CANDIDATES
+                ):
+                    raise SafetyError(
+                        "quarantined_key_candidate_limit_exceeded"
+                    )
+                limits.file_quarantines += 1
+                limits.quarantined_key_candidates += candidate_count
                 quarantines.append(
                     _make_quarantine(
                         sequence=len(quarantines),
@@ -1187,6 +1359,20 @@ def _build_memory_rows(
                 continue
             parsed = source_file.parsed
             for ordinal, entry in enumerate(parsed.entries):
+                if (
+                    language_occurrences[snapshot.language]
+                    >= MAX_OCCURRENCES_PER_LANGUAGE
+                ):
+                    raise SafetyError(
+                        "source_occurrence_language_limit_exceeded"
+                    )
+                if limits.occurrences >= MAX_OCCURRENCES_TOTAL:
+                    raise SafetyError("source_occurrence_total_limit_exceeded")
+                if (
+                    limits.protected_tokens + len(entry.protected)
+                    > MAX_PROTECTED_TOKENS_TOTAL
+                ):
+                    raise SafetyError("protected_token_limit_exceeded")
                 tokens = tuple(
                     _Token(
                         ordinal=index,
@@ -1195,6 +1381,9 @@ def _build_memory_rows(
                     )
                     for index, token in enumerate(entry.protected)
                 )
+                language_occurrences[snapshot.language] += 1
+                limits.occurrences += 1
+                limits.protected_tokens += len(tokens)
                 suffix = _entry_version_suffix(parsed, entry)
                 raw_line = parsed.lines[entry.line_index]
                 occurrence_id = _stable_hash(
@@ -1227,6 +1416,11 @@ def _build_memory_rows(
             for diagnostic_index, diagnostic in enumerate(
                 parsed.diagnostics
             ):
+                if (
+                    limits.record_quarantines
+                    >= MAX_RECORD_QUARANTINES_TOTAL
+                ):
+                    raise SafetyError("record_quarantine_limit_exceeded")
                 line = _diagnostic_line(diagnostic, len(parsed.lines))
                 raw_line = parsed.lines[line - 1]
                 reason = _diagnostic_reason(diagnostic)
@@ -1246,6 +1440,7 @@ def _build_memory_rows(
                         reason=reason,
                     )
                 )
+                limits.record_quarantines += 1
 
     updated = {item.occurrence_id: item for item in occurrences}
     english_by_key: dict[str, list[_Occurrence]] = defaultdict(list)
@@ -1619,6 +1814,8 @@ def _diagnostic_key_hint(raw_line: bytes) -> str | None:
 
 def _quarantined_file_key_inventory(
     data: bytes,
+    *,
+    max_candidates: int,
 ) -> tuple[tuple[str, int], ...]:
     """Count a conservative superset of supported line-anchored keys."""
     inventory: Counter[str] = Counter()
@@ -1642,9 +1839,9 @@ def _quarantined_file_key_inventory(
         else:
             inventory[key_hint] += 1
             candidate_total += 1
-            if candidate_total > MAX_QUARANTINED_KEY_CANDIDATES:
+            if candidate_total > max_candidates:
                 raise SafetyError(
-                    "quarantined_key_inventory_limit_exceeded"
+                    "quarantined_key_candidate_limit_exceeded"
                 )
         if cursor >= len(data):
             break
@@ -1753,7 +1950,6 @@ def _derive_counts(
         "key_alias_groups": key_alias_groups,
         "source_mutations": 0,
         "ollama_calls": 0,
-        "private_content_in_git": 0,
     }
     _validate_count_algebra(counts)
     return counts
@@ -1886,7 +2082,6 @@ def _create_database(
             rows.counts["context_path_mismatches"],
             rows.counts["ambiguous_english_groups"],
             rows.counts["key_alias_groups"],
-            0,
             0,
             0,
         )
@@ -2179,7 +2374,6 @@ def _build_report(validated: dict[str, object]) -> dict[str, object]:
         "source_generations": "PASS",
         "source_mutations": 0,
         "ollama_calls": 0,
-        "private_content_in_git": 0,
     }
 
 
@@ -2268,9 +2462,10 @@ def _published_tree_identity(root: Path) -> _PublishedTreeIdentity:
     if [item.name for item in entries] != [REPORT_NAME, DATABASE_NAME]:
         raise SafetyError("publication_inventory_invalid")
     for path in entries:
-        _, identity = _read_stable_private_file(
+        _, _, identity = _hash_stable_private_file(
             path,
             max_bytes=2 * 1024 * 1024 * 1024,
+            prefix_bytes=0,
         )
         files.append((path.name, identity))
     return _PublishedTreeIdentity(
@@ -2284,24 +2479,47 @@ def _rollback_owned_publication(
     output: Path,
     expected: _PublishedTreeIdentity,
 ) -> bool:
+    rollback_root: Path | None = None
+    isolated: Path | None = None
+    moved = False
     try:
-        directory = output.lstat()
-        if (
-            not stat.S_ISDIR(directory.st_mode)
-            or stat.S_IMODE(directory.st_mode) != 0o700
-            or directory.st_dev != expected.directory_device
-            or directory.st_ino != expected.directory_inode
+        rollback_root = Path(
+            tempfile.mkdtemp(
+                prefix=f".{output.name}.rollback-",
+                dir=output.parent,
+            )
+        )
+        os.chmod(rollback_root, 0o700)
+        isolated = rollback_root / "owned-publication"
+        try:
+            atomic_publish_directory_no_replace(output, isolated)
+        except (
+            AtomicPublicationUnavailable,
+            DestinationExistsError,
+            OSError,
         ):
             return False
-        entries = sorted(output.iterdir(), key=lambda item: item.name)
-        if [item.name for item in entries] != [
-            name for name, _ in expected.files
-        ]:
-            return False
-        for path, (_, identity) in zip(entries, expected.files):
-            if _stat_identity(path.lstat()) != identity:
+        moved = True
+        try:
+            isolated_identity = _published_tree_identity(isolated)
+        except (OSError, SafetyError):
+            isolated_identity = None
+        if isolated_identity != expected:
+            try:
+                atomic_publish_directory_no_replace(isolated, output)
+            except (
+                AtomicPublicationUnavailable,
+                DestinationExistsError,
+                OSError,
+            ):
                 return False
-        shutil.rmtree(output)
+            moved = False
+            return False
+        if not _remove_isolated_owned_publication(isolated, expected):
+            return False
+        moved = False
+        rollback_root.rmdir()
+        rollback_root = None
         try:
             output.lstat()
         except FileNotFoundError:
@@ -2309,6 +2527,86 @@ def _rollback_owned_publication(
         return False
     except OSError:
         return False
+    finally:
+        if rollback_root is not None and not moved:
+            try:
+                rollback_root.rmdir()
+            except OSError:
+                pass
+
+
+def _remove_isolated_owned_publication(
+    isolated: Path,
+    expected: _PublishedTreeIdentity,
+) -> bool:
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    file_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    parent_descriptor: int | None = None
+    directory_descriptor: int | None = None
+    try:
+        parent_descriptor = os.open(isolated.parent, directory_flags)
+        directory_descriptor = os.open(
+            isolated.name,
+            directory_flags,
+            dir_fd=parent_descriptor,
+        )
+        opened_directory = os.fstat(directory_descriptor)
+        if (
+            not stat.S_ISDIR(opened_directory.st_mode)
+            or stat.S_IMODE(opened_directory.st_mode) != 0o700
+            or opened_directory.st_dev != expected.directory_device
+            or opened_directory.st_ino != expected.directory_inode
+        ):
+            return False
+        names = sorted(os.listdir(directory_descriptor))
+        if names != [name for name, _ in expected.files]:
+            return False
+        for name, identity in expected.files:
+            descriptor = os.open(
+                name,
+                file_flags,
+                dir_fd=directory_descriptor,
+            )
+            try:
+                if _stat_identity(os.fstat(descriptor)) != identity:
+                    return False
+            finally:
+                os.close(descriptor)
+        for name, _ in expected.files:
+            os.unlink(name, dir_fd=directory_descriptor)
+        if os.listdir(directory_descriptor):
+            return False
+        os.fsync(directory_descriptor)
+        current = os.stat(
+            isolated.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            current.st_dev != expected.directory_device
+            or current.st_ino != expected.directory_inode
+        ):
+            return False
+        os.rmdir(isolated.name, dir_fd=parent_descriptor)
+        return True
+    except OSError:
+        return False
+    finally:
+        if directory_descriptor is not None:
+            os.close(directory_descriptor)
+        if parent_descriptor is not None:
+            os.close(parent_descriptor)
 
 
 def _validate_database_read_only(
@@ -2322,19 +2620,20 @@ def _validate_database_read_only(
         require_complete_output=require_complete_output,
     )
     _require_sidecars_absent(database)
-    data_before, stat_before = _read_stable_private_file(
+    sha256_before, header_before, stat_before = _hash_stable_private_file(
         database,
         max_bytes=2 * 1024 * 1024 * 1024,
+        prefix_bytes=100,
     )
     if (
-        len(data_before) < 100
-        or not data_before.startswith(_SQLITE_HEADER)
-        or data_before[18:20] != b"\x01\x01"
+        len(header_before) < 100
+        or not header_before.startswith(_SQLITE_HEADER)
+        or header_before[18:20] != b"\x01\x01"
     ):
         raise SafetyError("database_header_mode_invalid")
     identity_before = _DatabaseIdentity(
         stat=stat_before,
-        sha256=_sha256(data_before),
+        sha256=sha256_before,
     )
     connection: sqlite3.Connection | None = None
     validated: dict[str, object]
@@ -2353,6 +2652,8 @@ def _validate_database_read_only(
         if connection.execute("PRAGMA query_only").fetchone()[0] != 1:
             raise SafetyError("database_not_query_only")
         _validate_database_structure(connection)
+        _validate_database_resource_bounds(connection)
+        _validate_database_integrity(connection)
         validated = _validate_database_rows(connection)
     except SafetyError:
         raise
@@ -2365,13 +2666,14 @@ def _validate_database_read_only(
             except sqlite3.Error as exc:
                 raise SafetyError("database_close_failed") from exc
     _require_sidecars_absent(database)
-    data_after, stat_after = _read_stable_private_file(
+    sha256_after, _, stat_after = _hash_stable_private_file(
         database,
         max_bytes=2 * 1024 * 1024 * 1024,
+        prefix_bytes=0,
     )
     identity_after = _DatabaseIdentity(
         stat=stat_after,
-        sha256=_sha256(data_after),
+        sha256=sha256_after,
     )
     if identity_after != identity_before:
         raise SafetyError("database_changed_during_inspection")
@@ -2482,15 +2784,66 @@ def _read_stable_private_file(
     return b"".join(chunks), identities[0]
 
 
+def _hash_stable_private_file(
+    path: Path,
+    *,
+    max_bytes: int,
+    prefix_bytes: int,
+) -> tuple[str, bytes, _StatIdentity]:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        before_path = path.lstat()
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise SafetyError("private_file_open_failed") from exc
+    digest = hashlib.sha256()
+    prefix = bytearray()
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or stat.S_IMODE(before.st_mode) != 0o600
+            or before.st_nlink != 1
+            or before.st_size < 0
+            or before.st_size > max_bytes
+        ):
+            raise SafetyError("private_file_unsafe")
+        remaining = before.st_size
+        while remaining:
+            chunk = os.read(descriptor, min(1024 * 1024, remaining))
+            if not chunk:
+                raise SafetyError("private_file_truncated")
+            digest.update(chunk)
+            if len(prefix) < prefix_bytes:
+                prefix.extend(chunk[: prefix_bytes - len(prefix)])
+            remaining -= len(chunk)
+        if os.read(descriptor, 1):
+            raise SafetyError("private_file_grew")
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        after_path = path.lstat()
+    except OSError as exc:
+        raise SafetyError("private_file_changed") from exc
+    identities = tuple(
+        _stat_identity(value)
+        for value in (before_path, before, after, after_path)
+    )
+    if any(identity != identities[0] for identity in identities[1:]):
+        raise SafetyError("private_file_changed")
+    return digest.hexdigest(), bytes(prefix), identities[0]
+
+
 def _validate_database_structure(connection: sqlite3.Connection) -> None:
     journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
     if journal_mode != "delete":
         raise SafetyError("database_journal_mode_invalid")
-    integrity = connection.execute("PRAGMA integrity_check").fetchall()
-    if [tuple(row) for row in integrity] != [("ok",)]:
-        raise SafetyError("database_integrity_check_failed")
-    if connection.execute("PRAGMA foreign_key_check").fetchall():
-        raise SafetyError("database_foreign_key_check_failed")
     if connection.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
         raise SafetyError("database_schema_version_unknown")
     if connection.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID:
@@ -2518,6 +2871,19 @@ def _validate_database_structure(connection: sqlite3.Connection) -> None:
             raise SafetyError(f"database_{name}_table_mode_invalid")
 
 
+def _validate_database_integrity(connection: sqlite3.Connection) -> None:
+    integrity = connection.execute("PRAGMA integrity_check(1)")
+    first = integrity.fetchone()
+    if (
+        first is None
+        or tuple(first) != ("ok",)
+        or integrity.fetchone() is not None
+    ):
+        raise SafetyError("database_integrity_check_failed")
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise SafetyError("database_foreign_key_check_failed")
+
+
 def _schema_table_names() -> set[str]:
     return {
         "metadata",
@@ -2530,6 +2896,106 @@ def _schema_table_names() -> set[str]:
         "reference_pairs",
         "quarantine_records",
     }
+
+
+def _validate_database_resource_bounds(
+    connection: sqlite3.Connection,
+) -> None:
+    for language in _LANGUAGES:
+        parameters = (language,)
+        if _database_count(
+            connection,
+            "SELECT COUNT(*) FROM manifest_entries WHERE language = ?",
+            parameters,
+        ) > MAX_MANIFEST_ENTRIES_PER_ROOT:
+            raise SafetyError("manifest_entry_limit_exceeded")
+        if _database_count(
+            connection,
+            """
+            SELECT COUNT(*) FROM manifest_entries
+            WHERE language = ? AND entry_kind = 'directory'
+            """,
+            parameters,
+        ) > MAX_SOURCE_DIRECTORIES_PER_ROOT:
+            raise SafetyError("source_directory_limit_exceeded")
+        if _database_count(
+            connection,
+            """
+            SELECT COUNT(*) FROM manifest_entries
+            WHERE language = ? AND entry_kind = 'file'
+            """,
+            parameters,
+        ) > MAX_REGULAR_FILES_PER_ROOT:
+            raise SafetyError("source_file_limit_exceeded")
+        if _database_count(
+            connection,
+            """
+            SELECT COALESCE(SUM(byte_count), 0) FROM manifest_entries
+            WHERE language = ? AND entry_kind = 'file'
+            """,
+            parameters,
+        ) > MAX_SOURCE_BYTES_PER_ROOT:
+            raise SafetyError("source_bytes_limit_exceeded")
+        if _database_count(
+            connection,
+            "SELECT COUNT(*) FROM source_files WHERE language = ?",
+            parameters,
+        ) > MAX_YML_SOURCE_FILES_PER_ROOT:
+            raise SafetyError("source_yml_file_limit_exceeded")
+        if _database_count(
+            connection,
+            "SELECT COUNT(*) FROM occurrences WHERE language = ?",
+            parameters,
+        ) > MAX_OCCURRENCES_PER_LANGUAGE:
+            raise SafetyError("source_occurrence_language_limit_exceeded")
+
+    if _database_count(
+        connection, "SELECT COUNT(*) FROM source_files"
+    ) > MAX_YML_SOURCE_FILES_TOTAL:
+        raise SafetyError("source_yml_file_total_limit_exceeded")
+    if _database_count(
+        connection, "SELECT COUNT(*) FROM occurrences"
+    ) > MAX_OCCURRENCES_TOTAL:
+        raise SafetyError("source_occurrence_total_limit_exceeded")
+    if _database_count(
+        connection, "SELECT COUNT(*) FROM protected_tokens"
+    ) > MAX_PROTECTED_TOKENS_TOTAL:
+        raise SafetyError("protected_token_limit_exceeded")
+    if _database_count(
+        connection,
+        """
+        SELECT COUNT(*) FROM quarantine_records
+        WHERE quarantine_scope = 'record'
+        """,
+    ) > MAX_RECORD_QUARANTINES_TOTAL:
+        raise SafetyError("record_quarantine_limit_exceeded")
+    if _database_count(
+        connection,
+        """
+        SELECT COUNT(*) FROM quarantine_records
+        WHERE quarantine_scope = 'file'
+        """,
+    ) > MAX_FILE_QUARANTINES_TOTAL:
+        raise SafetyError("file_quarantine_limit_exceeded")
+    if _database_count(
+        connection,
+        """
+        SELECT COALESCE(SUM(candidate_count), 0)
+        FROM quarantined_key_occupancy
+        """,
+    ) > MAX_QUARANTINED_KEY_CANDIDATES:
+        raise SafetyError("quarantined_key_candidate_limit_exceeded")
+
+
+def _database_count(
+    connection: sqlite3.Connection,
+    sql: str,
+    parameters: tuple[object, ...] = (),
+) -> int:
+    row = connection.execute(sql, parameters).fetchone()
+    if row is None or len(row) != 1 or type(row[0]) is not int or row[0] < 0:
+        raise SafetyError("database_resource_count_invalid")
+    return row[0]
 
 
 def _schema_signature(
@@ -2620,7 +3086,6 @@ _COUNT_FIELDS = (
     "key_alias_groups",
     "source_mutations",
     "ollama_calls",
-    "private_content_in_git",
 )
 
 
@@ -2821,7 +3286,6 @@ def _validated_metadata(row: sqlite3.Row) -> dict[str, object]:
     if (
         counts["source_mutations"] != 0
         or counts["ollama_calls"] != 0
-        or counts["private_content_in_git"] != 0
     ):
         raise SafetyError("metadata_zero_counter_invalid")
     expected_status = (
@@ -3871,7 +4335,6 @@ def _validate_alignment_semantics(
         "key_alias_groups": len(alias_groups),
         "source_mutations": 0,
         "ollama_calls": 0,
-        "private_content_in_git": 0,
     }
     quarantine_counts: Counter[str] = Counter()
     quarantine_counts["duplicate_key"] = state_counts["duplicate_key"]

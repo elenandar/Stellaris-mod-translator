@@ -501,7 +501,21 @@ game-version label. Это contextual reference memory, а не глобальн
 одинаковый English text может иметь разные Russian варианты в зависимости от
 key, occurrence и file family. Exact relative paths, keys и human values
 остаются только в приватной SQLite; CLI и build report выводят лишь hashes и
-агрегированные counts.
+агрегированные counts. Runtime builder/inspect не проверяют Git и поэтому не
+выводят `private_content_in_git` или иной leakage verdict; такой verdict может
+появиться только во внешнем validation после отдельного scan.
+
+Builder и immutable inspect применяют одинаковые совокупные ceilings до
+следующего крупного read/materialization: `4096` manifest entries, `2048`
+directories и `2048` regular files на root; `128 MiB` source bytes на root;
+`1024` YML на root и `2048` total; `1,500,000` parsed lines на язык и
+`3,000,000` total; `1,000,000` occurrences на язык и `2,000,000` total;
+`1,500,000` protected tokens; `500,000` record и `16,384` file quarantines;
+`2,000,000` aggregate quarantined key candidates. Превышение даёт только
+content-free `SafetyError`; unpublished SQLite/report и temporary output
+полностью отсутствуют или очищаются. Parsed-line ceiling относится к source
+snapshot/revalidation; остальные persisted ceilings повторно проверяет
+immutable inspect до materialization semantic rows.
 
 Duplicate, missing, suffix/atom-mismatched и malformed rows не входят в strict
 eligible set. Whole-file quarantine сохраняет отдельный консервативный

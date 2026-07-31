@@ -112,6 +112,39 @@ def _one_pair_files(
     )
 
 
+def _tree_bytes(root: Path) -> tuple[tuple[str, bytes], ...]:
+    return tuple(
+        (path.relative_to(root).as_posix(), path.read_bytes())
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    )
+
+
+def _assert_limit_failure(
+    tmp_path: Path,
+    english_files: dict[str, bytes],
+    russian_files: dict[str, bytes],
+    error: str,
+) -> None:
+    english, russian = _roots(tmp_path)
+    for relative, data in english_files.items():
+        _write(english, relative, data)
+    for relative, data in russian_files.items():
+        _write(russian, relative, data)
+    before = (_tree_bytes(english), _tree_bytes(russian))
+    output = tmp_path / "memory"
+
+    with pytest.raises(SafetyError) as raised:
+        build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    assert str(raised.value) == error
+    assert "synthetic.entry" not in str(raised.value)
+    assert "scene_l_english.yml" not in str(raised.value)
+    assert (_tree_bytes(english), _tree_bytes(russian)) == before
+    assert not output.exists()
+    assert list(tmp_path.glob(".memory.tmp-*")) == []
+
+
 def test_build_and_inspect_strict_reference_are_private_and_aggregate_only(
     tmp_path: Path,
 ) -> None:
@@ -126,7 +159,8 @@ def test_build_and_inspect_strict_reference_are_private_and_aggregate_only(
     assert report["source_generations"] == "PASS"
     assert report["source_mutations"] == 0
     assert report["ollama_calls"] == 0
-    assert report["private_content_in_git"] == 0
+    assert "private_content_in_git" not in report
+    assert "private_content_in_git" not in report["counts"]
     assert report["counts"]["strict_eligible_pairs"] == 1
     assert report["counts"]["quarantined_total"] == 0
 
@@ -141,6 +175,11 @@ def test_build_and_inspect_strict_reference_are_private_and_aggregate_only(
     assert inspected["game_version"] == report["game_version"]
     assert inspected["hashes"] == report["hashes"]
     assert inspected["counts"] == report["counts"]
+    metadata_columns = {
+        row["name"]
+        for row in _read_rows(database, "PRAGMA table_info(metadata)")
+    }
+    assert "private_content_in_git" not in metadata_columns
 
     public_bytes = json.dumps(
         {"report": report, "inspection": inspected},
@@ -709,6 +748,211 @@ def test_generic_publication_failure_leaves_no_output_or_temp(
     assert list(tmp_path.glob(".memory.tmp-*")) == []
 
 
+@pytest.mark.parametrize("language", ["english", "russian"])
+def test_publication_time_source_drift_rolls_back_and_retries_stably(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    language: str,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    english, russian = _roots(tmp_path)
+    for relative, data in english_files.items():
+        _write(english, relative, data)
+    for relative, data in russian_files.items():
+        _write(russian, relative, data)
+    target_root = english if language == "english" else russian
+    target = next(path for path in target_root.rglob("*.yml"))
+    output = tmp_path / "memory"
+    actual_publish = vanilla_memory.atomic_publish_directory_no_replace
+    publications = 0
+
+    def drift_first_publication(source: Path, destination: Path) -> None:
+        nonlocal publications
+        actual_publish(source, destination)
+        if destination != output:
+            return
+        publications += 1
+        if publications == 1:
+            current = target.read_bytes()
+            if language == "english":
+                changed = current.replace(
+                    b"Synthetic $ACTOR$ [Root.GetName]",
+                    b"Retried synthetic $ACTOR$ [Root.GetName]",
+                    1,
+                )
+            else:
+                changed = current.replace(
+                    "MVP6A_SYNTHETIC_CONTEXT_VALUE_20260731".encode("utf-8"),
+                    "MVP6A_RETRIED_CONTEXT_VALUE_20260731".encode("utf-8"),
+                    1,
+                )
+            assert changed != current
+            target.write_bytes(changed)
+
+    monkeypatch.setattr(
+        vanilla_memory,
+        "atomic_publish_directory_no_replace",
+        drift_first_publication,
+    )
+    report = build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    fresh = vanilla_memory._snapshot_source_tree(target_root, language)
+    assert publications == 2
+    assert report["source_generations"] == "PASS"
+    assert report["hashes"][f"{language}_manifest_sha256"] == (
+        fresh.manifest_sha256
+    )
+    assert report["hashes"][f"{language}_dataset_sha256"] == (
+        fresh.dataset_sha256
+    )
+    rows = _read_rows(
+        output / DATABASE_NAME,
+        """
+        SELECT human_value FROM occurrences
+        WHERE language = ?
+        """,
+        (language,),
+    )
+    assert len(rows) == 1
+    assert "Retried" in rows[0]["human_value"] or "RETRIED" in rows[0][
+        "human_value"
+    ]
+    assert inspect_vanilla_memory(output / DATABASE_NAME)["hashes"] == (
+        report["hashes"]
+    )
+    assert output.is_dir()
+    assert list(tmp_path.glob(".memory.tmp-*")) == []
+
+
+def test_publication_time_drift_on_both_attempts_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    english, russian = _roots(tmp_path)
+    for relative, data in english_files.items():
+        _write(english, relative, data)
+    for relative, data in russian_files.items():
+        _write(russian, relative, data)
+    target = next(path for path in english.rglob("*.yml"))
+    output = tmp_path / "memory"
+    actual_publish = vanilla_memory.atomic_publish_directory_no_replace
+    publications = 0
+
+    def drift_every_publication(source: Path, destination: Path) -> None:
+        nonlocal publications
+        actual_publish(source, destination)
+        if destination != output:
+            return
+        publications += 1
+        target.write_bytes(
+            target.read_bytes()
+            + f" # synthetic drift {publications}\n".encode("ascii")
+        )
+
+    monkeypatch.setattr(
+        vanilla_memory,
+        "atomic_publish_directory_no_replace",
+        drift_every_publication,
+    )
+    with pytest.raises(
+        SafetyError, match="source_generation_changed_after_retry"
+    ):
+        build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    assert publications == 2
+    assert not output.exists()
+    assert list(tmp_path.glob(".memory.tmp-*")) == []
+
+
+def test_drift_rollback_never_deletes_replacement_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    english, russian = _roots(tmp_path)
+    for relative, data in english_files.items():
+        _write(english, relative, data)
+    for relative, data in russian_files.items():
+        _write(russian, relative, data)
+    output = tmp_path / "memory"
+    displaced = tmp_path / "displaced-owned-output"
+    actual_verify = vanilla_memory._verify_source_snapshot
+    calls = 0
+
+    def replace_before_rollback(
+        snapshot: object,
+        budget: object | None = None,
+    ) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            output.rename(displaced)
+            output.mkdir()
+            (output / "competitor").write_bytes(b"preserve")
+            raise vanilla_memory._SourceGenerationChanged()
+        actual_verify(snapshot, budget)
+
+    monkeypatch.setattr(
+        vanilla_memory, "_verify_source_snapshot", replace_before_rollback
+    )
+    with pytest.raises(
+        SafetyError, match="post_publication_rollback_unproven"
+    ):
+        build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    assert (output / "competitor").read_bytes() == b"preserve"
+    assert (displaced / DATABASE_NAME).is_file()
+
+
+def test_rollback_isolates_owned_tree_before_replacement_can_appear(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    english, russian = _roots(tmp_path)
+    for relative, data in english_files.items():
+        _write(english, relative, data)
+    for relative, data in russian_files.items():
+        _write(russian, relative, data)
+    output = tmp_path / "memory"
+    actual_validate = vanilla_memory._validate_database_read_only
+    validation_calls = 0
+
+    def fail_post_publication(
+        path: Path,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        nonlocal validation_calls
+        validation_calls += 1
+        if validation_calls == 2:
+            raise SafetyError("synthetic_post_publication_failure")
+        return actual_validate(path, **kwargs)
+
+    actual_identity = vanilla_memory._published_tree_identity
+
+    def replace_after_isolation(root: Path):
+        identity = actual_identity(root)
+        if root.name == "owned-publication":
+            output.mkdir()
+            (output / "competitor").write_bytes(b"preserve")
+        return identity
+
+    monkeypatch.setattr(
+        vanilla_memory, "_validate_database_read_only", fail_post_publication
+    )
+    monkeypatch.setattr(
+        vanilla_memory, "_published_tree_identity", replace_after_isolation
+    )
+    with pytest.raises(
+        SafetyError, match="post_publication_rollback_unproven"
+    ):
+        build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    assert (output / "competitor").read_bytes() == b"preserve"
+    assert list(tmp_path.glob(".memory.rollback-*")) == []
+
+
 def test_inspect_is_immutable_read_only_and_preserves_database_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -914,6 +1158,444 @@ def test_logical_digest_is_reproducible_across_creation_and_output_order(
     assert first["counts"] == second["counts"]
 
 
+def test_manifest_entry_limit_fails_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_MANIFEST_ENTRIES_PER_ROOT", 1)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "manifest_entry_limit_exceeded",
+    )
+
+
+def test_source_directory_limit_fails_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_SOURCE_DIRECTORIES_PER_ROOT", 0)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "source_directory_limit_exceeded",
+    )
+
+
+def test_directory_discovery_stops_before_materializing_more_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    english, russian = _roots(tmp_path)
+    output = tmp_path / "memory"
+
+    class SyntheticEntry:
+        name = "synthetic-directory"
+
+        @staticmethod
+        def is_dir(*, follow_symlinks: bool) -> bool:
+            assert follow_symlinks is False
+            return True
+
+    class BoundedIterator:
+        calls = 0
+        closed = False
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            self.calls += 1
+            if self.calls == 1:
+                return SyntheticEntry()
+            raise AssertionError("source discovery read past the bound")
+
+        def close(self) -> None:
+            self.closed = True
+
+    iterator = BoundedIterator()
+    monkeypatch.setattr(vanilla_memory.os, "scandir", lambda _path: iterator)
+    monkeypatch.setattr(vanilla_memory, "MAX_SOURCE_DIRECTORIES_PER_ROOT", 0)
+
+    with pytest.raises(SafetyError, match="source_directory_limit_exceeded"):
+        build_vanilla_memory(english, russian, GAME_VERSION, output)
+
+    assert iterator.calls == 1
+    assert iterator.closed is True
+    assert not output.exists()
+
+
+def test_regular_file_limit_fails_before_read_or_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_REGULAR_FILES_PER_ROOT", 0)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "source_file_limit_exceeded",
+    )
+
+
+def test_source_byte_limit_fails_before_aggregate_read_or_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    monkeypatch.setattr(
+        vanilla_memory,
+        "MAX_SOURCE_BYTES_PER_ROOT",
+        len(next(iter(english_files.values()))) - 1,
+    )
+    _assert_limit_failure(
+        tmp_path,
+        english_files,
+        russian_files,
+        "source_bytes_limit_exceeded",
+    )
+
+
+def test_yml_file_limit_per_root_fails_before_read_or_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_YML_SOURCE_FILES_PER_ROOT", 0)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "source_yml_file_limit_exceeded",
+    )
+
+
+def test_yml_file_total_limit_fails_before_second_root_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_YML_SOURCE_FILES_TOTAL", 1)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "source_yml_file_total_limit_exceeded",
+    )
+
+
+def test_parsed_line_limit_fails_before_parser_materialization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_PARSED_LINES_PER_LANGUAGE", 1)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "source_line_limit_exceeded",
+    )
+
+
+def test_occurrence_limit_per_language_fails_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_OCCURRENCES_PER_LANGUAGE", 0)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "source_occurrence_language_limit_exceeded",
+    )
+
+
+def test_occurrence_total_limit_fails_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_OCCURRENCES_TOTAL", 1)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "source_occurrence_total_limit_exceeded",
+    )
+
+
+def test_protected_token_total_limit_fails_before_row_allocation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_PROTECTED_TOKENS_TOTAL", 3)
+    _assert_limit_failure(
+        tmp_path,
+        *_one_pair_files(),
+        "protected_token_limit_exceeded",
+    )
+
+
+def test_record_quarantine_limit_fails_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_RECORD_QUARANTINES_TOTAL", 0)
+    _assert_limit_failure(
+        tmp_path,
+        {
+            "bounded_l_english.yml": _localisation(
+                "english",
+                [("synthetic.entry", "0", "Supported")],
+                extra_lines=(" synthetic.quarantine:0 unquoted",),
+            )
+        },
+        {},
+        "record_quarantine_limit_exceeded",
+    )
+
+
+def test_file_quarantine_limit_fails_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(vanilla_memory, "MAX_FILE_QUARANTINES_TOTAL", 0)
+    _assert_limit_failure(
+        tmp_path,
+        {"bounded_l_english.yml": b"\xff"},
+        {},
+        "file_quarantine_limit_exceeded",
+    )
+
+
+def test_quarantined_key_candidate_limit_is_aggregate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        vanilla_memory, "MAX_QUARANTINED_KEY_CANDIDATES", 1
+    )
+    unsafe = BOM + b'l_english:\n synthetic.entry:0 "\xff"\n'
+    _assert_limit_failure(
+        tmp_path,
+        {
+            "first_l_english.yml": unsafe,
+            "second_l_english.yml": unsafe,
+        },
+        {},
+        "quarantined_key_candidate_limit_exceeded",
+    )
+
+
+def test_all_resource_classes_pass_immediately_below_their_limits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    english_files, russian_files = _one_pair_files()
+    largest_source = max(
+        len(data)
+        for data in (*english_files.values(), *russian_files.values())
+    )
+    limits = {
+        "MAX_MANIFEST_ENTRIES_PER_ROOT": 3,
+        "MAX_SOURCE_DIRECTORIES_PER_ROOT": 2,
+        "MAX_REGULAR_FILES_PER_ROOT": 2,
+        "MAX_SOURCE_BYTES_PER_ROOT": largest_source + 1,
+        "MAX_YML_SOURCE_FILES_PER_ROOT": 2,
+        "MAX_YML_SOURCE_FILES_TOTAL": 3,
+        "MAX_PARSED_LINES_PER_LANGUAGE": 4,
+        "MAX_PARSED_LINES_TOTAL": 7,
+        "MAX_OCCURRENCES_PER_LANGUAGE": 2,
+        "MAX_OCCURRENCES_TOTAL": 3,
+        "MAX_PROTECTED_TOKENS_TOTAL": 5,
+        "MAX_RECORD_QUARANTINES_TOTAL": 1,
+        "MAX_FILE_QUARANTINES_TOTAL": 1,
+        "MAX_QUARANTINED_KEY_CANDIDATES": 1,
+    }
+    for name, value in limits.items():
+        monkeypatch.setattr(vanilla_memory, name, value)
+
+    report, database, _, _ = _build(
+        tmp_path, english_files, russian_files
+    )
+
+    assert report["counts"]["english_occurrences"] == 1
+    assert report["counts"]["russian_occurrences"] == 1
+    assert inspect_vanilla_memory(database)["counts"] == report["counts"]
+
+
+def test_inspect_applies_resource_bounds_before_materializing_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report, database, _, _ = _build(tmp_path, *_one_pair_files())
+    assert report["counts"]["english_occurrences"] == 1
+    assert report["counts"]["russian_occurrences"] == 1
+    monkeypatch.setattr(vanilla_memory, "MAX_OCCURRENCES_TOTAL", 1)
+
+    def forbidden_rows(_connection: sqlite3.Connection) -> dict[str, object]:
+        raise AssertionError("rows materialized before resource bounds")
+
+    actual_read = vanilla_memory._read_stable_private_file
+
+    def forbid_buffered_database_read(
+        path: Path,
+        *,
+        max_bytes: int,
+    ):
+        assert path.name != DATABASE_NAME
+        return actual_read(path, max_bytes=max_bytes)
+
+    monkeypatch.setattr(
+        vanilla_memory, "_validate_database_rows", forbidden_rows
+    )
+    monkeypatch.setattr(
+        vanilla_memory,
+        "_read_stable_private_file",
+        forbid_buffered_database_read,
+    )
+
+    with pytest.raises(
+        SafetyError, match="source_occurrence_total_limit_exceeded"
+    ):
+        inspect_vanilla_memory(database)
+
+
+@pytest.mark.parametrize(
+    ("constant", "value", "error"),
+    [
+        ("MAX_MANIFEST_ENTRIES_PER_ROOT", 1, "manifest_entry_limit_exceeded"),
+        ("MAX_SOURCE_DIRECTORIES_PER_ROOT", 0, "source_directory_limit_exceeded"),
+        ("MAX_REGULAR_FILES_PER_ROOT", 0, "source_file_limit_exceeded"),
+        ("MAX_SOURCE_BYTES_PER_ROOT", 0, "source_bytes_limit_exceeded"),
+        ("MAX_YML_SOURCE_FILES_PER_ROOT", 0, "source_yml_file_limit_exceeded"),
+        ("MAX_YML_SOURCE_FILES_TOTAL", 1, "source_yml_file_total_limit_exceeded"),
+        (
+            "MAX_OCCURRENCES_PER_LANGUAGE",
+            0,
+            "source_occurrence_language_limit_exceeded",
+        ),
+        ("MAX_OCCURRENCES_TOTAL", 1, "source_occurrence_total_limit_exceeded"),
+        ("MAX_PROTECTED_TOKENS_TOTAL", 3, "protected_token_limit_exceeded"),
+    ],
+)
+def test_inspect_rejects_each_persisted_resource_class_before_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    constant: str,
+    value: int,
+    error: str,
+) -> None:
+    _, database, _, _ = _build(tmp_path, *_one_pair_files())
+    monkeypatch.setattr(vanilla_memory, constant, value)
+    monkeypatch.setattr(
+        vanilla_memory,
+        "_validate_database_rows",
+        lambda _connection: (_ for _ in ()).throw(
+            AssertionError("rows materialized before resource bounds")
+        ),
+    )
+
+    with pytest.raises(SafetyError, match=error):
+        inspect_vanilla_memory(database)
+
+
+def test_inspect_rejects_quarantine_bounds_before_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, record_database, _, _ = _build(
+        tmp_path,
+        {
+            "bounded_l_english.yml": _localisation(
+                "english",
+                [("synthetic.entry", "0", "Supported")],
+                extra_lines=(" synthetic.quarantine:0 unquoted",),
+            )
+        },
+        {},
+        name="record-memory",
+        roots_name="record-inputs",
+    )
+    monkeypatch.setattr(vanilla_memory, "MAX_RECORD_QUARANTINES_TOTAL", 0)
+    monkeypatch.setattr(
+        vanilla_memory,
+        "_validate_database_rows",
+        lambda _connection: (_ for _ in ()).throw(
+            AssertionError("rows materialized before resource bounds")
+        ),
+    )
+    with pytest.raises(SafetyError, match="record_quarantine_limit_exceeded"):
+        inspect_vanilla_memory(record_database)
+
+    monkeypatch.undo()
+    monkeypatch.setattr(
+        vanilla_memory,
+        "MAX_RECORD_QUARANTINES_TOTAL",
+        500_000,
+    )
+    unsafe = BOM + b'l_english:\n synthetic.entry:0 "\xff"\n'
+    _, file_database, _, _ = _build(
+        tmp_path,
+        {"bounded_l_english.yml": unsafe},
+        {},
+        name="file-memory",
+        roots_name="file-inputs",
+    )
+    monkeypatch.setattr(vanilla_memory, "MAX_FILE_QUARANTINES_TOTAL", 0)
+    with pytest.raises(SafetyError, match="file_quarantine_limit_exceeded"):
+        inspect_vanilla_memory(file_database)
+
+    monkeypatch.setattr(vanilla_memory, "MAX_FILE_QUARANTINES_TOTAL", 16_384)
+    monkeypatch.setattr(vanilla_memory, "MAX_QUARANTINED_KEY_CANDIDATES", 0)
+    with pytest.raises(
+        SafetyError, match="quarantined_key_candidate_limit_exceeded"
+    ):
+        inspect_vanilla_memory(file_database)
+
+
+def test_inspect_hashes_database_without_buffering_entire_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report, database, _, _ = _build(tmp_path, *_one_pair_files())
+    actual_read = vanilla_memory._read_stable_private_file
+
+    def guard(path: Path, *, max_bytes: int):
+        assert path.name != DATABASE_NAME
+        return actual_read(path, max_bytes=max_bytes)
+
+    monkeypatch.setattr(vanilla_memory, "_read_stable_private_file", guard)
+
+    assert inspect_vanilla_memory(database)["hashes"] == report["hashes"]
+
+
+def test_build_hashes_publication_identity_without_buffering_database(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actual_read = vanilla_memory._read_stable_private_file
+
+    def guard(path: Path, *, max_bytes: int):
+        assert path.name != DATABASE_NAME
+        return actual_read(path, max_bytes=max_bytes)
+
+    monkeypatch.setattr(vanilla_memory, "_read_stable_private_file", guard)
+
+    report, database, _, _ = _build(tmp_path, *_one_pair_files())
+
+    assert database.is_file()
+    assert inspect_vanilla_memory(database)["hashes"] == report["hashes"]
+
+
+def test_resource_limit_defaults_are_exactly_documented() -> None:
+    assert vanilla_memory.MAX_MANIFEST_ENTRIES_PER_ROOT == 4_096
+    assert vanilla_memory.MAX_SOURCE_DIRECTORIES_PER_ROOT == 2_048
+    assert vanilla_memory.MAX_REGULAR_FILES_PER_ROOT == 2_048
+    assert vanilla_memory.MAX_SOURCE_BYTES_PER_ROOT == 128 * 1024 * 1024
+    assert vanilla_memory.MAX_YML_SOURCE_FILES_PER_ROOT == 1_024
+    assert vanilla_memory.MAX_YML_SOURCE_FILES_TOTAL == 2_048
+    assert vanilla_memory.MAX_PARSED_LINES_PER_LANGUAGE == 1_500_000
+    assert vanilla_memory.MAX_PARSED_LINES_TOTAL == 3_000_000
+    assert vanilla_memory.MAX_OCCURRENCES_PER_LANGUAGE == 1_000_000
+    assert vanilla_memory.MAX_OCCURRENCES_TOTAL == 2_000_000
+    assert vanilla_memory.MAX_PROTECTED_TOKENS_TOTAL == 1_500_000
+    assert vanilla_memory.MAX_RECORD_QUARANTINES_TOTAL == 500_000
+    assert vanilla_memory.MAX_FILE_QUARANTINES_TOTAL == 16_384
+    assert vanilla_memory.MAX_QUARANTINED_KEY_CANDIDATES == 2_000_000
+
+
 @pytest.mark.parametrize("kind", ["symlink", "hardlink", "fifo"])
 def test_source_links_and_special_files_fail_before_publication(
     tmp_path: Path,
@@ -1075,18 +1757,21 @@ def test_one_full_source_generation_retry_can_succeed_without_residue(
     actual_verify = vanilla_memory._verify_source_snapshot
     calls = 0
 
-    def drift_once(snapshot: object) -> None:
+    def drift_once(
+        snapshot: object,
+        budget: object | None = None,
+    ) -> None:
         nonlocal calls
         calls += 1
         if calls == 1:
             raise vanilla_memory._SourceGenerationChanged()
-        actual_verify(snapshot)
+        actual_verify(snapshot, budget)
 
     monkeypatch.setattr(vanilla_memory, "_verify_source_snapshot", drift_once)
     report = build_vanilla_memory(english, russian, GAME_VERSION, output)
 
     assert report["source_generations"] == "PASS"
-    assert calls == 3
+    assert calls == 5
     assert output.is_dir()
     assert list(tmp_path.glob(".memory.tmp-*")) == []
 
@@ -1103,7 +1788,10 @@ def test_repeated_source_generation_drift_blocks_after_one_retry(
         _write(russian, relative, data)
     output = tmp_path / "memory"
 
-    def always_drift(_snapshot: object) -> None:
+    def always_drift(
+        _snapshot: object,
+        _budget: object | None = None,
+    ) -> None:
         raise vanilla_memory._SourceGenerationChanged()
 
     monkeypatch.setattr(
@@ -1147,6 +1835,34 @@ def test_inspect_rejects_schema_extension(tmp_path: Path) -> None:
 
     with pytest.raises(SafetyError, match="database_schema_signature_invalid"):
         inspect_vanilla_memory(database)
+
+
+@pytest.mark.parametrize(
+    ("pragma", "error"),
+    [
+        ("PRAGMA user_version = 2", "database_schema_version_unknown"),
+        ("PRAGMA application_id = 1397576758", "database_application_id_unknown"),
+    ],
+)
+def test_inspect_rejects_previous_schema_and_application_domains(
+    tmp_path: Path,
+    pragma: str,
+    error: str,
+) -> None:
+    _, database, _, _ = _build(tmp_path, *_one_pair_files())
+    with sqlite3.connect(database) as connection:
+        connection.execute(pragma)
+
+    with pytest.raises(SafetyError, match=error):
+        inspect_vanilla_memory(database)
+
+
+def test_schema_and_logical_digest_domains_are_v3() -> None:
+    assert vanilla_memory.SCHEMA_VERSION == 3
+    assert vanilla_memory.APPLICATION_ID == 0x534D5437
+    assert vanilla_memory._LOGICAL_DIGEST_DOMAIN == (
+        b"SMT_CONTEXTUAL_VANILLA_MEMORY_LOGICAL_V3"
+    )
 
 
 def test_build_never_constructs_ollama_or_network_clients(
@@ -1406,12 +2122,16 @@ def test_initial_snapshot_drift_gets_one_full_generation_retry(
     actual_snapshot = vanilla_memory._snapshot_source_tree
     calls = 0
 
-    def drift_once(root: Path, language: str):
+    def drift_once(
+        root: Path,
+        language: str,
+        budget: object | None = None,
+    ):
         nonlocal calls
         calls += 1
         if calls == 1:
             raise vanilla_memory._SourceGenerationChanged()
-        return actual_snapshot(root, language)
+        return actual_snapshot(root, language, budget)
 
     monkeypatch.setattr(
         vanilla_memory, "_snapshot_source_tree", drift_once
