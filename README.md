@@ -11,12 +11,14 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
-`MVP-6A` добавляет offline `build-vanilla-memory` и строго read-only
-`inspect-vanilla-memory`. Builder сопоставляет exact English/Russian
-occurrences с учётом key, suffix, ordered protected atoms и контекстного
-path family, сохраняет version-pinned private SQLite и публикует её только в
-fresh no-clobber каталог. Эта память не подключена к `translate-mod`, ничего
-не выбирает автоматически и не меняет vanilla localisation.
+`MVP-6B` добавляет строго read-only
+`inspect-vanilla-context-coverage` и typed policy `exact_context_v1` поверх
+private schema-v3 memory из MVP-6A. Exact key имеет приоритет; text fallback
+разрешён только при полном отсутствии key и exact Russian-byte consensus.
+Quarantine, aliases, conflicts и ambiguity остаются terminal exclusions.
+Команда выводит только pins, digest и агрегированные counts. Память всё ещё не
+подключена к `translate-mod` или Ollama, reference автоматически не
+применяется и не получает editorial approval.
 
 `MVP-5C` смержен в PR №18, а разрешённое владельцем live-применение полного
 decisions set завершилось отдельным private reviewed candidate: application
@@ -80,6 +82,13 @@ python3 -m stellaris_mod_translator build-vanilla-memory \
 
 python3 -m stellaris_mod_translator inspect-vanilla-memory \
   --database /path/to/new-private-memory/vanilla-memory.sqlite3
+
+python3 -m stellaris_mod_translator inspect-vanilla-context-coverage \
+  --source-mod /path/to/read-only-mod \
+  --database /path/to/private-memory/vanilla-memory.sqlite3 \
+  --database-sha256 64-lowercase-hex-database-pin \
+  --logical-digest 64-lowercase-hex-logical-pin \
+  --game-version "exact-version-label"
 
 python3 -m stellaris_mod_translator translate-mod \
   --source-mod /path/to/mod \
@@ -494,7 +503,7 @@ Descriptor-bound filesystem framework остаётся вне этого milesto
 `wheel`, доступен полностью локальный совместимый запуск:
 `python3 setup.py develop`.
 
-## Private contextual vanilla memory
+## Private contextual vanilla memory and retrieval
 
 MVP-6A хранит официальные EN→RU соответствия только локально и с exact
 game-version label. Это contextual reference memory, а не глобальный словарь:
@@ -524,8 +533,41 @@ key-occupancy inventory: он не восстанавливает строки, 
 только `REFERENCE_ONLY` и никогда не получают `editorially_approved`
 автоматически. Builder не вызывает Ollama, память пока не подключена к
 `translate-mod`, а ambiguous или quarantined rows никогда не выбираются
-автоматически. Будущий `MVP-6B` будет отдельным read-only retrieval/ranking
-gate после owner review и merge MVP-6A.
+автоматически.
+
+`exact_context_v1` принимает exact relative localisation path, case-sensitive
+key, version suffix (`None`, `"0"` и `"007"` различаются), English Unicode
+bytes и ordered `(token kind, exact bytes)` tuple. Каждая query получает ровно
+один terminal status: `exact_key_context`, `exact_text_consensus`,
+`excluded_key_conflict`, `excluded_quarantined_key`, `excluded_key_alias`,
+`excluded_ambiguous_text`, `excluded_candidate_overflow` или `no_match`.
+Exact-key reference разрешён только при совпадении value/suffix/tokens;
+`global_text_ambiguous` допустим только в этом exact-key контексте. Text
+fallback требует единственного exact Russian-byte value среди всех strict,
+alias-free references. Несколько одинаковых references сворачиваются в один
+candidate с лучшим provenance.
+
+Ranking лексикографический и не использует heuristic score: exact key раньше
+exact text, совпадающий canonical path family раньше несовпадающего, затем
+persistent `pair_id`. Default ceilings одного batch: `100000` queries, `256`
+examined references на query, максимум `3` returned candidates, `100000`
+materialized index units и `8192` bytes aggregate stdout. Index unit — один
+релевантный key fact, strict reference или protected token; строки вне текущих
+query key/value-suffix signatures не материализуются. Batch/index overflow
+остаётся content-free per-occurrence status. Source-localisation snapshot имеет
+отдельные ceilings: `8192` manifest entries, `4096` directories, `4096` files,
+`256 MiB` aggregate bytes, `128 MiB` на file, `2048` YML, `1,500,000` parsed
+lines, `250000` supported occurrences и `500000` protected tokens.
+
+Validation memory и extraction index выполняются в одном открытии SQLite с
+`mode=ro&immutable=1`, `query_only=ON`, `trusted_schema=OFF` и temporary state
+только в памяти. До/после сверяются точные database/report hashes и stat
+identities; source manifest проходит terminal revalidation, а один drift
+разрешает только один полный retry. Candidate остаётся process-local
+`REFERENCE_ONLY`, `editorially_approved=false`, `auto_applied=false`; CLI не
+создаёт candidate, context pack, workspace или report artifact и не выводит
+keys, paths, filenames, IDs либо human text. `PRIVATE_CONTENT_IN_GIT` остаётся
+только внешним leakage-scan verdict, не runtime claim.
 
 ## Исторический контекст до MVP-0
 
