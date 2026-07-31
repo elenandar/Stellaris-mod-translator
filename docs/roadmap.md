@@ -117,12 +117,24 @@ gate.
 Он читает только заданные English/Russian localisation roots, хранит exact
 occurrences в private SQLite и публикует агрегированный report без content.
 Память не является глобальным словарём, не подключена к `translate-mod` и не
-разрешает automatic acceptance. Следующий `MVP-6B` — отдельный read-only
-retrieval/ranking gate только после review и merge MVP-6A.
+разрешает automatic acceptance. До отдельного owner authorization `MVP-6B`
+оставался самостоятельным read-only retrieval/ranking gate после review и
+merge MVP-6A.
+
+MVP-6A смержен в PR №23 как `de02dc2f`. После этого владелец отдельно разрешил
+`MVP-6B`: read-only `exact_context_v1` retrieval и aggregate coverage exact
+NSC3 без подключения memory к `translate-mod`, workspace, prompt или Ollama.
+Exact-key context имеет приоритет; exact-text fallback требует strict
+alias-free Russian-byte consensus. Все references остаются
+`REFERENCE_ONLY`, `editorially_approved=false`, `auto_applied=false`, а
+candidate model text существует только внутри процесса. Реальный smoke не
+создаёт candidate/context-pack/workspace/evidence artifacts и не разрешает
+prompt integration; это отдельный будущий MVP-6C gate.
 
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
-| MVP-6A — Private contextual vanilla memory | duplicate-aware exact-key alignment с conservative whole-file key occupancy, version suffix и ordered protected-atom gates, private SQLite, canonical logical digest и aggregate-only inspect | merged MVP-5M, owner gameplay smoke и exact Pegasus 4.4.6 EN/RU roots | full synthetic suite, immutable real-corpus manifests, private no-clobber build, leakage scan и bounded Sol Ultra diff-review | **implemented for draft review; memory is not connected to translation, MVP-6B requires separate owner gate** |
+| MVP-6B — Read-only contextual retrieval and coverage | typed `exact_context_v1`, deterministic key/text/path-family ranking, quarantine/alias/ambiguity suppression и aggregate-only source coverage | merged MVP-6A PR №23, exact schema-v3 memory pins и owner authorization | full synthetic suite, one immutable exact NSC3 aggregate run, external leakage scan и independent Sol High ranking/privacy review | **implemented for draft review; memory is not connected to translation, prompt integration requires separate MVP-6C gate** |
+| MVP-6A — Private contextual vanilla memory | duplicate-aware exact-key alignment с conservative whole-file key occupancy, version suffix и ordered protected-atom gates, private SQLite, canonical logical digest и aggregate-only inspect | merged MVP-5M, owner gameplay smoke и exact Pegasus 4.4.6 EN/RU roots | full synthetic suite, immutable real-corpus manifests, private no-clobber build, leakage scan и bounded Sol Ultra diff-review | **merged in PR №23 as `de02dc2f`; memory remains private and reference-only** |
 | MVP-5M — Trusted reviewed-package consolidation | две pinned provenance-ветви, full-localisation/source-generation binding, раздельные technical smoke, 9 reviewed mappings / 3 owner-confirmed visual targets и fresh atomic no-clobber native package | merged MVP-5L, exact reviewed candidate, owner-reviewed replace supplement, technical smoke evidence и owner visual confirmation schema v2 | adversarial/full suite, exact private pre/post identities and materialized-package recheck | **R2 authority-scope remediation implemented for draft review; active installation migration, launcher and game smoke are separate gates** |
 | MVP-5L — Native qualified replace layer | exact `localisation/english/replace/**` discovery, collision-free mapping в `localisation/russian/replace/**` и сквозное сохранение через review/application/package | merged MVP-5H and verified canonical NSC3 source layout | synthetic lossless/collision/workspace/review/application/package suite, read-only aggregated NSC3 inspect and bounded Sol Ultra diff-review | **implemented for draft review; active patch migration, launcher and game smoke are separate gates** |
 | MVP-5H — Safe local-mod package | exact application-report pin, strict reviewed inventory, typed descriptor renderer, metadata-only package report и atomic no-clobber package publication | merged MVP-5C/MVP-5D, exact private reviewed candidate and explicit owner authorization | full synthetic suite, private package smoke and immutability checks; затем отдельный live-install/load-order/in-game gate | **implemented for review; private NSC3 package smoke PASS, active installation and launcher remain untouched** |

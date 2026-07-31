@@ -13,6 +13,7 @@ from .package_reviewed_mod import package_reviewed_mod
 from .review import build_review_pack
 from .review_application import apply_review_decisions
 from .vanilla_memory import build_vanilla_memory, inspect_vanilla_memory
+from .vanilla_retrieval import inspect_vanilla_context_coverage
 
 
 def _occurrence_limit(value: str) -> int:
@@ -58,6 +59,26 @@ def parser() -> argparse.ArgumentParser:
         help="inspect a private vanilla translation memory read-only",
     )
     inspect_memory.add_argument("--database", required=True, type=Path)
+
+    inspect_context = commands.add_parser(
+        "inspect-vanilla-context-coverage",
+        help="inspect exact contextual vanilla-memory coverage read-only",
+    )
+    inspect_context.add_argument("--source-mod", required=True, type=Path)
+    inspect_context.add_argument("--database", required=True, type=Path)
+    inspect_context.add_argument(
+        "--database-sha256",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    inspect_context.add_argument(
+        "--logical-digest",
+        required=True,
+        type=_sha256_pin,
+        metavar="SHA256",
+    )
+    inspect_context.add_argument("--game-version", required=True)
 
     translate = commands.add_parser(
         "translate-mod", help="translate supported localisation through local Ollama"
@@ -260,6 +281,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "inspect-vanilla-memory":
             report = inspect_vanilla_memory(args.database)
+        elif args.command == "inspect-vanilla-context-coverage":
+            report = inspect_vanilla_context_coverage(
+                args.source_mod,
+                args.database,
+                args.database_sha256,
+                args.logical_digest,
+                args.game_version,
+            )
         elif args.command == "translate-mod":
             report = translate_mod(
                 args.source_mod,

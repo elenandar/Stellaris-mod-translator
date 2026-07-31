@@ -13,6 +13,7 @@ import shutil
 import sqlite3
 import stat
 import tempfile
+from typing import Callable, TypeVar
 import unicodedata
 from urllib.parse import quote
 
@@ -120,6 +121,7 @@ _PAIR_ID_DOMAIN = b"SMT_VANILLA_REFERENCE_PAIR_ID_V1"
 _TOKEN_SIGNATURE_DOMAIN = b"SMT_VANILLA_TOKEN_SIGNATURE_V1"
 _KEY_OCCUPANCY_SCAN_CONTRACT = "ascii_line_key_occupancy_v1"
 _SQLITE_CACHE_KIB = 64 * 1024
+_SessionValue = TypeVar("_SessionValue")
 
 
 _SCHEMA = """
@@ -2617,6 +2619,23 @@ def _validate_database_read_only(
     *,
     require_complete_output: bool = True,
 ) -> dict[str, object]:
+    validated, _, _ = _read_validated_database_session(
+        path,
+        lambda _connection, _validated: None,
+        require_complete_output=require_complete_output,
+    )
+    return validated
+
+
+def _read_validated_database_session(
+    path: Path,
+    reader: Callable[
+        [sqlite3.Connection, dict[str, object]], _SessionValue
+    ],
+    *,
+    require_complete_output: bool = True,
+) -> tuple[dict[str, object], _SessionValue, _DatabaseIdentity]:
+    """Validate and extract through one immutable query-only connection."""
     database = path.absolute()
     _require_database_envelope(
         database,
@@ -2640,6 +2659,7 @@ def _validate_database_read_only(
     )
     connection: sqlite3.Connection | None = None
     validated: dict[str, object]
+    extracted: _SessionValue
     try:
         uri = (
             "file:"
@@ -2658,6 +2678,11 @@ def _validate_database_read_only(
         _validate_database_resource_bounds(connection)
         _validate_database_integrity(connection)
         validated = _validate_database_rows(connection)
+        hashes = validated.get("hashes")
+        if not isinstance(hashes, dict):
+            raise AssertionError("validated hash mapping unavailable")
+        hashes["database_sha256"] = identity_before.sha256
+        extracted = reader(connection, validated)
     except SafetyError:
         raise
     except sqlite3.Error as exc:
@@ -2680,11 +2705,8 @@ def _validate_database_read_only(
     )
     if identity_after != identity_before:
         raise SafetyError("database_changed_during_inspection")
-    hashes = validated.get("hashes")
-    if not isinstance(hashes, dict):
-        raise AssertionError("validated hash mapping unavailable")
     hashes["database_sha256"] = identity_after.sha256
-    return validated
+    return validated, extracted, identity_after
 
 
 def _require_database_envelope(
