@@ -48,7 +48,12 @@ from .package_reviewed_mod import (
     parse_strict_descriptor,
     render_descriptor,
 )
-from .parser import ParseError, ParsedFile, parse_localisation
+from .parser import (
+    ParseError,
+    ParsedFile,
+    has_safe_leading_header_prefix,
+    parse_localisation,
+)
 from .publication import (
     AtomicPublicationUnavailable,
     DestinationExistsError,
@@ -1178,8 +1183,11 @@ def _validate_source_target_mapping(
     if (
         parsed_source.language != "english"
         or parsed_target.language != "russian"
-        or parsed_source.header_line != 0
-        or parsed_target.header_line != 0
+        or parsed_source.header_line != parsed_target.header_line
+        or not has_safe_leading_header_prefix(parsed_source)
+        or not has_safe_leading_header_prefix(parsed_target)
+        or parsed_source.lines[: parsed_source.header_line]
+        != parsed_target.lines[: parsed_target.header_line]
         or parsed_source.bom != parsed_target.bom
         or parsed_source.newline != parsed_target.newline
         or parsed_source.diagnostics

@@ -103,14 +103,20 @@ def _descriptor(
     return ("\n".join(lines) + "\n").encode()
 
 
-def _source_and_target() -> tuple[bytes, bytes]:
+def _source_and_target(
+    *, leading_prefix: bytes = b""
+) -> tuple[bytes, bytes]:
     lines = ["l_english:"]
     for index in range(9):
         lines.append(
             f' key_{index}:{index % 3} "Source {index} '
             '$TOKEN$ [Root.GetName] \\"quoted\\""'
         )
-    source = b"\xef\xbb\xbf" + ("\r\n".join(lines) + "\r\n").encode()
+    source = (
+        b"\xef\xbb\xbf"
+        + leading_prefix
+        + ("\r\n".join(lines) + "\r\n").encode()
+    )
     parsed = parse_localisation(source)
     replacements = {
         entry.line_index: (
@@ -1334,6 +1340,97 @@ def test_source_target_mapping_rejects_semantic_and_structure_drift(
     _refresh_source(fixture, data)
     with pytest.raises(SafetyError):
         _run(fixture)
+
+
+def test_source_target_mapping_accepts_byte_identical_safe_prefix(
+    tmp_path: Path,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    source, target = _source_and_target(
+        leading_prefix=(
+            b"# safe leading comment\r\n"
+            b"\r\n"
+            b"\t# second comment\r\n"
+        )
+    )
+    _refresh_source(fixture, source)
+    _refresh_target(fixture, target)
+
+    report = _run(fixture)
+
+    assert report["status"] == (
+        "consolidated_reviewed_mod_package_created"
+    )
+    packaged = (
+        fixture.output_parent
+        / "consolidated/install/synthetic_native/localisation/"
+        "russian/replace/synthetic_l_russian.yml"
+    )
+    assert packaged.read_bytes() == target
+
+
+@pytest.mark.parametrize(
+    "target_mutation",
+    [
+        "prefix-bytes",
+        "header-position",
+    ],
+)
+def test_source_target_mapping_rejects_prefix_or_header_position_mismatch(
+    tmp_path: Path, target_mutation: str
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    source, target = _source_and_target(
+        leading_prefix=b"# safe leading comment\r\n\r\n"
+    )
+    if target_mutation == "prefix-bytes":
+        target = target.replace(
+            b"# safe leading comment", b"# other safe comment", 1
+        )
+    else:
+        target = target.replace(
+            b"# safe leading comment\r\n",
+            b"# safe leading comment\r\n\r\n",
+            1,
+        )
+    _refresh_source(fixture, source)
+    _refresh_target(fixture, target)
+
+    with pytest.raises(
+        SafetyError, match="supplement_source_target_structure_mismatch"
+    ):
+        _run(fixture)
+
+
+def test_source_target_mapping_rejects_unsafe_source_prefix(
+    tmp_path: Path,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+    source, target = _source_and_target(
+        leading_prefix=b"# safe leading comment\r\n"
+    )
+    source = source.replace(
+        b"# safe leading comment", b"visible text", 1
+    )
+    _refresh_source(fixture, source)
+    _refresh_target(fixture, target)
+
+    with pytest.raises(
+        SafetyError, match="supplement_localisation_invalid"
+    ):
+        _run(fixture)
+
+
+def test_source_target_mapping_keeps_header_first_compatibility(
+    tmp_path: Path,
+) -> None:
+    fixture = _synthetic_fixture(tmp_path)
+
+    report = _run(fixture)
+
+    assert report["status"] == (
+        "consolidated_reviewed_mod_package_created"
+    )
 
 
 def test_duplicate_source_target_identity_is_rejected(

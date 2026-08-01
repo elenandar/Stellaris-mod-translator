@@ -201,9 +201,84 @@ def test_ambiguous_markup_is_an_entry_fallback() -> None:
     assert parsed.diagnostics[0]["reason"] == "ambiguous_markup"
 
 
-def test_late_english_header_rejects_the_whole_file() -> None:
-    data = b'# leading comment\nl_english:\n key:0 "text"\n'
-    with pytest.raises(ParseError, match="english_header_not_first_line"):
+@pytest.mark.parametrize("bom", [b"", b"\xef\xbb\xbf"])
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        (b"",),
+        (b"   \t",),
+        (
+            b"# l_english: here is comment text, not the header",
+            b"",
+            b" \t# second",
+        ),
+    ],
+)
+def test_safe_leading_header_prefix_is_lossless_and_rendered_exactly(
+    bom: bytes,
+    newline: bytes,
+    prefix: tuple[bytes, ...],
+) -> None:
+    lines = (*prefix, b"l_english: # header", b' key:0 "Human"', b"")
+    data = bom + newline.join(lines)
+
+    parsed = parse_localisation(data)
+
+    assert parsed.header_line == len(prefix)
+    assert parsed.render() == data
+    expected = bom + newline.join(
+        (*prefix, b"l_russian: # header", b' key:0 "Human"', b"")
+    )
+    assert parsed.render(russian_header=True) == expected
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        b' key:0 "entry"\n',
+        b"arbitrary visible text\n",
+    ],
+)
+def test_unsafe_content_before_english_header_is_rejected(
+    prefix: bytes,
+) -> None:
+    with pytest.raises(
+        ParseError, match="unsafe_content_before_english_header"
+    ):
+        parse_localisation(prefix + b'l_english:\n key:0 "text"\n')
+
+
+def test_header_first_legacy_render_remains_byte_identical() -> None:
+    data = b'\xef\xbb\xbfl_english:\r\n key:0 "text"\r\n'
+    parsed = parse_localisation(data)
+
+    assert parsed.header_line == 0
+    assert parsed.render() == data
+    assert parsed.render(russian_header=True) == data.replace(
+        b"l_english:", b"l_russian:", 1
+    )
+
+
+@pytest.mark.parametrize(
+    ("data", "reason"),
+    [
+        (
+            b"\n\xef\xbb\xbfl_english:\n key:0 \"text\"\n",
+            "hidden_bom",
+        ),
+        (b"# unsafe\x01\nl_english:\n key:0 \"text\"\n", "c0_control"),
+        (
+            "# unsafe\u200b\nl_english:\n key:0 \"text\"\n".encode(),
+            "unicode_format_control",
+        ),
+    ],
+)
+def test_hidden_bom_control_or_format_in_prefix_is_rejected(
+    data: bytes,
+    reason: str,
+) -> None:
+    with pytest.raises(ParseError, match=reason):
         parse_localisation(data)
 
 

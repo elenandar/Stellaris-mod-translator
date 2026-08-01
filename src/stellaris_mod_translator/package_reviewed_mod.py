@@ -14,7 +14,11 @@ import tempfile
 import unicodedata
 
 from .engine import SafetyError, _tree_hash, _write_new
-from .parser import ParseError, parse_localisation
+from .parser import (
+    ParseError,
+    has_safe_leading_header_prefix,
+    parse_localisation,
+)
 from .publication import (
     AtomicPublicationUnavailable,
     DestinationExistsError,
@@ -732,7 +736,10 @@ def _validate_localisation_file(item: StableFile) -> None:
         parsed = parse_localisation(item.data)
     except ParseError as exc:
         raise SafetyError("reviewed_candidate_localisation_invalid") from exc
-    if parsed.language != "russian" or parsed.header_line != 0:
+    if (
+        parsed.language != "russian"
+        or not has_safe_leading_header_prefix(parsed)
+    ):
         raise SafetyError("reviewed_candidate_header_mismatch")
 
 

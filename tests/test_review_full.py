@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 
-from stellaris_mod_translator import review
+from stellaris_mod_translator import engine, review
 from stellaris_mod_translator.engine import (
     SafetyError,
     _snapshot,
@@ -60,6 +60,7 @@ def make_full_review_inputs(
     entry_count: int | None = None,
     hostile_text: bool = False,
     include_replace: bool = False,
+    leading_prefix: bool = False,
 ) -> tuple[Path, Path, str]:
     source = tmp_path / "source"
     source_file = source / "localisation/english/full_l_english.yml"
@@ -85,7 +86,8 @@ def make_full_review_inputs(
             f' scale.{index}:0 "Scale entry {index}"'
             for index in range(entry_count)
         ]
-    source_file.write_text("\n".join(lines) + "\n")
+    prefix = "# leading comment\n\n" if leading_prefix else ""
+    source_file.write_text(prefix + "\n".join(lines) + "\n")
     if include_replace:
         replace_file = (
             source
@@ -160,17 +162,34 @@ def test_review_pack_rejects_ambiguous_source_candidate_mapping_before_output(
     candidate.mkdir()
     source_files = colliding_review_source_files()
 
-    def snapshot(path: Path) -> list[review.SourceFile]:
+    def snapshot(
+        path: Path, **kwargs: object
+    ) -> list[review.SourceFile]:
         return source_files if path == source.resolve() else []
 
     monkeypatch.setattr(review, "_snapshot", snapshot)
+    report_path = candidate / "translation-report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "resumability": {
+                    "parser_order_version": (
+                        "mvp7a-leading-header-parser-order-v2"
+                    )
+                },
+            }
+        )
+        + "\n"
+    )
+    pin = hashlib.sha256(report_path.read_bytes()).hexdigest()
     output = tmp_path / "review"
     with pytest.raises(SafetyError, match="candidate_path_collision"):
         build_review_pack(
             source,
             candidate,
             output,
-            candidate_report_sha256="0" * 64,
+            candidate_report_sha256=pin,
         )
 
     assert not output.exists()
@@ -313,6 +332,34 @@ def test_schema_v3_full_candidate_builds_pack_schema_v2_with_warnings(
     )
 
 
+def test_full_review_rejects_rebound_candidate_prefix_mutation(
+    tmp_path: Path,
+) -> None:
+    source, candidate, _ = make_full_review_inputs(
+        tmp_path,
+        leading_prefix=True,
+    )
+    candidate_file = (
+        candidate / "localisation/russian/full_l_russian.yml"
+    )
+    candidate_file.write_bytes(
+        candidate_file.read_bytes().replace(
+            b"# leading comment", b"# changed comment", 1
+        )
+    )
+    pin = rebind_candidate_hash(candidate)
+
+    with pytest.raises(
+        SafetyError, match="candidate_line_alignment_mismatch"
+    ):
+        build_review_pack(
+            source,
+            candidate,
+            tmp_path / "review",
+            candidate_report_sha256=pin,
+        )
+
+
 def test_full_review_pack_propagates_qualified_replace_entries(
     tmp_path: Path,
 ) -> None:
@@ -429,6 +476,57 @@ def test_schema_v3_requires_pin_and_mismatched_pin_is_rejected(
         )
 
 
+@pytest.mark.parametrize(
+    ("parser_order_version", "expected_entries"),
+    [
+        ("mvp4-lossless-parser-order-v1", 1),
+        ("mvp7a-leading-header-parser-order-v2", 2),
+    ],
+)
+def test_full_review_replays_known_parser_order_generations(
+    tmp_path: Path,
+    parser_order_version: str,
+    expected_entries: int,
+) -> None:
+    source = tmp_path / "source"
+    english = source / "localisation/english"
+    english.mkdir(parents=True)
+    (english / "header_first_l_english.yml").write_bytes(
+        b'l_english:\n first:0 "Header first"\n'
+    )
+    (english / "leading_prefix_l_english.yml").write_bytes(
+        b'# leading comment\n\nl_english:\n second:0 "Prefixed"\n'
+    )
+    (english / "unsafe_prefix_l_english.yml").write_bytes(
+        b' visible content\nl_english:\n third:0 "Unsafe prefix"\n'
+    )
+    candidate = tmp_path / "candidate"
+    with pytest.MonkeyPatch.context() as generation:
+        generation.setattr(
+            engine, "PARSER_ORDER_VERSION", parser_order_version
+        )
+        translate_mod(
+            source,
+            candidate,
+            "synthetic-review:1",
+            workspace=tmp_path / "translation.smt-workspace.sqlite3",
+            client_factory=FullReviewClient,
+        )
+    report_path = candidate / "translation-report.json"
+    pin = hashlib.sha256(report_path.read_bytes()).hexdigest()
+
+    result = build_review_pack(
+        source,
+        candidate,
+        tmp_path / "review",
+        candidate_report_sha256=pin,
+    )
+
+    assert result["status"] == "review_pack_created"
+    assert result["counts"]["total"] == expected_entries
+    assert len(list(candidate.rglob("*.yml"))) == expected_entries
+
+
 def test_schema_v2_rejects_full_candidate_pin(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source_file = source / "localisation/english/pilot_l_english.yml"
@@ -461,7 +559,7 @@ def test_schema_v2_rejects_full_candidate_pin(tmp_path: Path) -> None:
     ("mutation", "error"),
     [
         (lambda report: report.__setitem__("extra", True), "schema"),
-        (lambda report: report.pop("resumability"), "schema"),
+        (lambda report: report.pop("resumability"), "resumability"),
         (
             lambda report: report["counts"].__setitem__(
                 "accepted_unchanged",
@@ -500,6 +598,20 @@ def test_schema_v2_rejects_full_candidate_pin(tmp_path: Path) -> None:
             lambda report: report["resumability"].__setitem__(
                 "prompt_profile_hash",
                 "not-a-hash",
+            ),
+            "resumability",
+        ),
+        (
+            lambda report: report["resumability"].__setitem__(
+                "parser_order_version",
+                "unknown-parser-order-v999",
+            ),
+            "resumability",
+        ),
+        (
+            lambda report: report["resumability"].__setitem__(
+                "parser_order_version",
+                ["mvp7a-leading-header-parser-order-v2"],
             ),
             "resumability",
         ),

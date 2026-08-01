@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from stellaris_mod_translator import review, review_application
+from stellaris_mod_translator import engine, review, review_application
 from stellaris_mod_translator.engine import (
     SafetyError,
     _snapshot,
@@ -43,44 +43,49 @@ def make_full_application_inputs(
     *,
     entry_count: int | None = None,
     include_replace: bool = False,
+    leading_prefix_first: bool = False,
+    generation_parser_order_version: str | None = None,
 ) -> tuple[Path, Path, str]:
     source = tmp_path / "source"
     first = source / "localisation/english/first_l_english.yml"
     first.parent.mkdir(parents=True)
     if entry_count is None:
+        first_payload = (
+            "\r\n".join(
+                [
+                    "l_english: # synthetic header",
+                    ' changed:0 "CHANGE_SENTINEL $NAME$" # keep-changed',
+                    ' unchanged:0 "UNCHANGED_SENTINEL" # keep-unchanged',
+                    (
+                        ' fallback:0 "FALLBACK_SENTINEL '
+                        '§Yhighlight§!" # keep-fallback'
+                    ),
+                    (
+                        ' leading:0 " LEADING_SENTINEL '
+                        '$NAME$ tail" # keep-leading'
+                    ),
+                    (
+                        ' trailing:0 "TRAILING_SENTINEL '
+                        '$NAME$ tail " # keep-trailing'
+                    ),
+                    (
+                        r' escape:7 "ESCAPE_SENTINEL \"quote\" and '
+                        r'\\ path \n marker" # keep-escape'
+                    ),
+                    (
+                        " unsupported:0 SYNTHETIC_UNSUPPORTED "
+                        "# keep-unsupported"
+                    ),
+                    "# keep-final-comment",
+                ]
+            )
+            + "\r\n"
+        )
+        prefix = (
+            b"# leading comment\r\n\r\n" if leading_prefix_first else b""
+        )
         first.write_bytes(
-            b"\xef\xbb\xbf"
-            + (
-                "\r\n".join(
-                    [
-                        "l_english: # synthetic header",
-                        ' changed:0 "CHANGE_SENTINEL $NAME$" # keep-changed',
-                        ' unchanged:0 "UNCHANGED_SENTINEL" # keep-unchanged',
-                        (
-                            ' fallback:0 "FALLBACK_SENTINEL '
-                            '§Yhighlight§!" # keep-fallback'
-                        ),
-                        (
-                            ' leading:0 " LEADING_SENTINEL '
-                            '$NAME$ tail" # keep-leading'
-                        ),
-                        (
-                            ' trailing:0 "TRAILING_SENTINEL '
-                            '$NAME$ tail " # keep-trailing'
-                        ),
-                        (
-                            r' escape:7 "ESCAPE_SENTINEL \"quote\" and '
-                            r'\\ path \n marker" # keep-escape'
-                        ),
-                        (
-                            " unsupported:0 SYNTHETIC_UNSUPPORTED "
-                            "# keep-unsupported"
-                        ),
-                        "# keep-final-comment",
-                    ]
-                )
-                + "\r\n"
-            ).encode("utf-8")
+            b"\xef\xbb\xbf" + prefix + first_payload.encode("utf-8")
         )
         second = source / "localisation/english/second_l_english.yml"
         second.write_text(
@@ -129,33 +134,43 @@ def make_full_application_inputs(
             b' replace.reject:0 "REPLACE_REJECT \xc2\xa3energy\xc2\xa3"\r\n'
         )
     candidate = tmp_path / "candidate"
-    translate_mod(
-        source,
-        candidate,
-        MODEL_TAG,
-        workspace=tmp_path / "translation.smt-workspace.sqlite3",
-        client_factory=FullApplicationClient,
-    )
+    with pytest.MonkeyPatch.context() as generation:
+        if generation_parser_order_version is not None:
+            generation.setattr(
+                engine,
+                "PARSER_ORDER_VERSION",
+                generation_parser_order_version,
+            )
+        translate_mod(
+            source,
+            candidate,
+            MODEL_TAG,
+            workspace=tmp_path / "translation.smt-workspace.sqlite3",
+            client_factory=FullApplicationClient,
+        )
     if entry_count is None:
         first_candidate = (
             candidate / "localisation/russian/first_l_russian.yml"
         )
-        parsed = parse_localisation(first_candidate.read_bytes())
-        by_line = {
-            item.line_index + 1: item for item in parsed.entries
-        }
-        leading = by_line[5].value
-        trailing = by_line[6].value
-        assert leading.startswith(" ")
-        assert trailing.endswith(" ")
-        first_candidate.write_bytes(
-            parsed.render(
-                {
-                    by_line[5].line_index: leading[1:],
-                    by_line[6].line_index: trailing[:-1],
-                }
+        if first_candidate.exists():
+            parsed = parse_localisation(first_candidate.read_bytes())
+            by_line = {
+                item.line_index + 1: item for item in parsed.entries
+            }
+            leading_line = 7 if leading_prefix_first else 5
+            trailing_line = 8 if leading_prefix_first else 6
+            leading = by_line[leading_line].value
+            trailing = by_line[trailing_line].value
+            assert leading.startswith(" ")
+            assert trailing.endswith(" ")
+            first_candidate.write_bytes(
+                parsed.render(
+                    {
+                        by_line[leading_line].line_index: leading[1:],
+                        by_line[trailing_line].line_index: trailing[:-1],
+                    }
+                )
             )
-        )
         report_path = candidate / "translation-report.json"
         report = json.loads(report_path.read_text())
         report["hashes"]["output_localisation_sha256"] = localisation_hash(
@@ -167,6 +182,39 @@ def make_full_application_inputs(
         )
     report = candidate / "translation-report.json"
     return source, candidate, hashlib.sha256(report.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize(
+    ("parser_order_version", "expected_candidate_files"),
+    [
+        ("mvp4-lossless-parser-order-v1", 1),
+        ("mvp7a-leading-header-parser-order-v2", 2),
+    ],
+)
+def test_full_application_replays_known_parser_order_generations(
+    tmp_path: Path,
+    parser_order_version: str,
+    expected_candidate_files: int,
+) -> None:
+    source, candidate, pin = make_full_application_inputs(
+        tmp_path,
+        leading_prefix_first=True,
+        generation_parser_order_version=parser_order_version,
+    )
+    payload = make_full_decisions(source, candidate, pin)
+    decisions = tmp_path / "decisions.json"
+    write_decisions(decisions, payload)
+
+    report = apply_review_decisions(
+        source,
+        candidate,
+        decisions,
+        tmp_path / "reviewed",
+        candidate_report_sha256=pin,
+    )
+
+    assert report["status"] == "full_candidate_review_applied"
+    assert len(list(candidate.rglob("*.yml"))) == expected_candidate_files
 
 
 def make_full_decisions(
@@ -258,10 +306,27 @@ def test_application_rejects_ambiguous_mapping_before_decision_or_output_spans(
         ),
     ]
 
-    def snapshot(path: Path) -> list[review.SourceFile]:
+    def snapshot(
+        path: Path, **kwargs: object
+    ) -> list[review.SourceFile]:
         return source_files if path == source.resolve() else []
 
     monkeypatch.setattr(review, "_snapshot", snapshot)
+    report_path = candidate / "translation-report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "resumability": {
+                    "parser_order_version": (
+                        "mvp7a-leading-header-parser-order-v2"
+                    )
+                },
+            }
+        )
+        + "\n"
+    )
+    pin = hashlib.sha256(report_path.read_bytes()).hexdigest()
     decisions = tmp_path / "decisions.json"
     write_decisions(
         decisions,
@@ -281,7 +346,7 @@ def test_application_rejects_ambiguous_mapping_before_decision_or_output_spans(
             candidate,
             decisions,
             output,
-            candidate_report_sha256="0" * 64,
+            candidate_report_sha256=pin,
         )
 
     assert not output.exists()

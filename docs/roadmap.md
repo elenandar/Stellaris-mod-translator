@@ -139,8 +139,18 @@ terminal statuses получают reference; остальные сохраня�
 request. Quality verdict и включение context по умолчанию остаются отдельным
 owner decision после review code PR и локального A/B pack.
 
+После merge MVP-6C владелец отдельно разрешил `MVP-7A`: bounded parser
+compatibility для English localisation с blank/comment prefix перед exact
+header. Расширение сохраняет fail-closed syntax/control gates, поднимает
+parser-order identity до v2 и не разрешает смешивать v1 workspace с новым
+occurrence plan. Исторические завершённые v1 reports остаются читаемыми
+downstream вместе с v2 через закрытый version allowlist и воспроизведение
+соответствующего occurrence plan; candidate, Ollama,
+active paths, launcher и source mod этим этапом не создаются и не меняются.
+
 | Milestone | Результат | Зависит от | Шлюз перехода | Статус |
 |---|---|---|---|---|
+| MVP-7A — Lossless leading header compatibility | blank/comment prefix перед единственным exact `l_english:`, byte-identical render, parser-order v2 и закрытая downstream v1/v2 compatibility | merged MVP-6C PR №25, exact More Events Mod read-only evidence и owner authorization | synthetic parser/workspace/review/application suite, exact aggregate real-mod inspect, context coverage, leakage scan и independent Sol Ultra diff-review | **implemented for draft review; translation, workspace creation for the real mod and active paths remain out of scope** |
 | MVP-6C — Optional exact-context prompt and bounded A/B | all-or-none opt-in `exact_context_v1`, canonical untrusted-data prompt, schema-v2 resume binding, schema-v4 aggregate-only context report и private offline blind pack | merged MVP-6B PR №24, exact memory/source/candidate pins и owner authorization | full synthetic suite, bounded 23-entry live pilot or explicit deferred evidence, external leakage scan и independent Sol High prompt/identity/resume review | **implemented for draft review; context remains default-off and quality requires owner blind review** |
 | MVP-6B — Read-only contextual retrieval and coverage | typed `exact_context_v1`, deterministic key/text/path-family ranking, quarantine/alias/ambiguity suppression и aggregate-only source coverage | merged MVP-6A PR №23, exact schema-v3 memory pins и owner authorization | full synthetic suite, one immutable exact NSC3 aggregate run, external leakage scan и independent Sol High ranking/privacy review | **merged in PR №24 as `0237581b`; prompt integration is separately gated by MVP-6C** |
 | MVP-6A — Private contextual vanilla memory | duplicate-aware exact-key alignment с conservative whole-file key occupancy, version suffix и ordered protected-atom gates, private SQLite, canonical logical digest и aggregate-only inspect | merged MVP-5M, owner gameplay smoke и exact Pegasus 4.4.6 EN/RU roots | full synthetic suite, immutable real-corpus manifests, private no-clobber build, leakage scan и bounded Sol Ultra diff-review | **merged in PR №23 as `de02dc2f`; memory remains private and reference-only** |

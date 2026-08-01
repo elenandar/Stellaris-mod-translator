@@ -11,6 +11,18 @@ runtime-зависимостей. Source mod читается без измен�
 
 ## Статус
 
+`MVP-7A` расширяет lossless English parser только для файлов, где перед
+единственным exact `l_english:` находятся пустые, space/tab-only или
+комментарные строки. BOM по-прежнему разрешён только в byte zero, а render
+сохраняет prefix, newline style и все прочие bytes, меняя для русского
+candidate только exact header token. Visible/entry/header-like либо
+control/format content в prefix остаётся fail-closed. Изменившийся порядок
+occurrences имеет identity `mvp7a-leading-header-parser-order-v2`: workspace
+v1 нельзя продолжить как v2, но завершённые candidate/report artifacts с
+известными parser-order v1 и v2 остаются допустимы для downstream review и
+application: валидатор воспроизводит соответствующий versioned occurrence
+plan и не смешивает поколения.
+
 `MVP-6C` добавляет default-off подключение строго read-only
 `exact_context_v1` к resumable `translate-mod --workspace`. Полный набор из
 policy, database path, database SHA-256, logical digest и game version
@@ -259,7 +271,10 @@ lease. Lease захватывается до SQLite recovery/preflight, `run_cou
 Также проверяются source bytes/inventory/order, occurrence identities, output
 path, parser/order version, prompt profile и exact model tag/digest до первого
 нового translation call. Уже committed occurrences модели повторно не
-отправляются. Если остановка произошла после model call, но до SQLite commit,
+отправляются. Parser-order identity MVP-7A —
+`mvp7a-leading-header-parser-order-v2`; старый v1 workspace сохраняется, но
+отклоняется как version drift и требует fresh workspace. Если остановка
+произошла после model call, но до SQLite commit,
 только этот незафиксированный вызов может повториться.
 
 До любого SQLite open preflight проверяет БД и возможные `-journal`, `-wal`,
