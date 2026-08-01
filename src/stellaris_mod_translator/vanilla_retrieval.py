@@ -18,6 +18,7 @@ from .parser import (
     Entry,
     ParseError,
     ParseResourceLimit,
+    ParsedFile,
     ProtectedToken,
     parse_localisation,
 )
@@ -238,6 +239,25 @@ class _SourceGenerationChanged(RuntimeError):
     pass
 
 
+def retrieval_query_for_entry(
+    relative_path: str, parsed: ParsedFile, entry: Entry
+) -> RetrievalQuery:
+    """Build the exact typed query used by the translation plan."""
+    return RetrievalQuery(
+        relative_path=_validated_relative_path(relative_path),
+        localisation_key=entry.key,
+        version_suffix=_entry_version_suffix(parsed, entry),
+        english_human_value=entry.value,
+        protected_tokens=tuple(
+            QueryToken(
+                kind=_token_kind(token.original),
+                exact=token.original,
+            )
+            for token in entry.protected
+        ),
+    )
+
+
 def retrieve_exact_context_v1(
     database: Path,
     queries: tuple[RetrievalQuery, ...],
@@ -302,6 +322,18 @@ def retrieve_exact_context_v1(
         database_identity=database_identity,
         memory_identity=memory_after,
     )
+
+
+def verify_retrieval_batch_identity(
+    database: Path, batch: RetrievalBatch
+) -> None:
+    """Recheck the exact private memory generation without exposing content."""
+    if not isinstance(batch, RetrievalBatch):
+        raise SafetyError("retrieval_batch_type_invalid")
+    database_path = database.absolute()
+    if _memory_tree_identity(database_path) != batch.memory_identity:
+        raise SafetyError("memory_changed_after_retrieval")
+    _verify_database_identity(database_path, batch.database_identity)
 
 
 def inspect_vanilla_context_coverage(
@@ -1389,7 +1421,7 @@ def _aggregate_report(
         "source_mutations": 0,
         "memory_mutations": 0,
         "ollama_calls": 0,
-        "private_inputs_read": "BOUNDED_EXACT_MEMORY_AND_NSC3_SOURCE",
+        "private_inputs_read": "BOUNDED_EXACT_MEMORY_AND_SOURCE_MOD",
         "private_text_output": 0,
     }
 

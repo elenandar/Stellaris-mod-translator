@@ -165,6 +165,7 @@ def test_root_help_lists_vanilla_memory_commands(
     output = capsys.readouterr().out
     assert "build-vanilla-memory" in output
     assert "inspect-vanilla-memory" in output
+    assert "inspect-vanilla-context-coverage" in output
 
 
 @pytest.mark.parametrize(
@@ -177,6 +178,22 @@ def test_root_help_lists_vanilla_memory_commands(
                 "inspect-vanilla-memory",
                 "--database",
                 "/private/memory/vanilla-memory.sqlite3",
+            ],
+        ),
+        (
+            "inspect_vanilla_context_coverage",
+            [
+                "inspect-vanilla-context-coverage",
+                "--source-mod",
+                "/private/source",
+                "--database",
+                "/private/memory/vanilla-memory.sqlite3",
+                "--database-sha256",
+                "a" * 64,
+                "--logical-digest",
+                "b" * 64,
+                "--game-version",
+                "Synthetic v1",
             ],
         ),
     ],
@@ -276,6 +293,60 @@ def test_workspace_and_resume_arguments_are_exposed() -> None:
     assert args.resume is True
 
 
+def test_context_arguments_are_exposed_and_dispatched(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    received: dict[str, object] = {}
+
+    def fake_translate(
+        source_mod: Path,
+        output: Path,
+        model: str,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        received.update(
+            {"source_mod": source_mod, "output": output, "model": model}
+        )
+        received.update(kwargs)
+        return {"status": "synthetic"}
+
+    monkeypatch.setattr(cli, "translate_mod", fake_translate)
+    result = main(
+        [
+            "translate-mod",
+            "--source-mod",
+            "/source",
+            "--output",
+            "/output",
+            "--model",
+            "synthetic:1",
+            "--workspace",
+            "/job.smt-workspace.sqlite3",
+            "--context-policy",
+            "exact_context_v1",
+            "--vanilla-memory-database",
+            "/private/memory.sqlite3",
+            "--vanilla-memory-database-sha256",
+            "a" * 64,
+            "--vanilla-memory-logical-digest",
+            "b" * 64,
+            "--vanilla-memory-game-version",
+            "Synthetic v1",
+        ]
+    )
+
+    assert result == 0
+    assert json.loads(capsys.readouterr().out) == {"status": "synthetic"}
+    assert received["context_policy"] == "exact_context_v1"
+    assert received["vanilla_memory_database"] == Path(
+        "/private/memory.sqlite3"
+    )
+    assert received["vanilla_memory_database_sha256"] == "a" * 64
+    assert received["vanilla_memory_logical_digest"] == "b" * 64
+    assert received["vanilla_memory_game_version"] == "Synthetic v1"
+
+
 def test_resume_requires_workspace_at_dispatch(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -307,6 +378,11 @@ def test_translate_help_lists_workspace_and_resume(
     output = capsys.readouterr().out
     assert "--workspace WORKSPACE" in output
     assert "--resume" in output
+    assert "--context-policy CONTEXT_POLICY" in output
+    assert "--vanilla-memory-database VANILLA_MEMORY_DATABASE" in output
+    assert "--vanilla-memory-database-sha256 SHA256" in output
+    assert "--vanilla-memory-logical-digest SHA256" in output
+    assert "--vanilla-memory-game-version VANILLA_MEMORY_GAME_VERSION" in output
 
 
 def test_build_review_pack_requires_all_three_paths() -> None:

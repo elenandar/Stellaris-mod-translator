@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 import hashlib
 import json
@@ -11,7 +12,7 @@ import shutil
 import sqlite3
 import stat
 import tempfile
-from typing import Callable
+from typing import Any, Callable
 import unicodedata
 
 from . import ollama
@@ -69,6 +70,26 @@ class PlannedOccurrence:
 
 
 @dataclass(frozen=True)
+class TranslationContextConfiguration:
+    policy: str
+    database: Path
+    database_sha256: str
+    logical_digest: str
+    game_version: str
+
+
+@dataclass(frozen=True, repr=False)
+class _TranslationContextRuntime:
+    configuration: TranslationContextConfiguration
+    batch: Any
+    binding_sha256: str
+    prompt_profile_hash: str
+    status_counts: tuple[tuple[str, int], ...]
+    source_localisation_sha256: str
+    inventory_sha256: str
+
+
+@dataclass(frozen=True)
 class OutputTreeIdentity:
     sha256: str
     file_count: int
@@ -101,6 +122,229 @@ def inspect_mod(source_mod: Path) -> dict[str, object]:
     return _inspect_report(source, files)
 
 
+def _validated_translation_context_configuration(
+    *,
+    context_policy: str | None,
+    database: Path | None,
+    database_sha256: str | None,
+    logical_digest: str | None,
+    game_version: str | None,
+) -> TranslationContextConfiguration | None:
+    supplied = tuple(
+        item is not None
+        for item in (
+            context_policy,
+            database,
+            database_sha256,
+            logical_digest,
+            game_version,
+        )
+    )
+    if not any(supplied):
+        return None
+    if not all(supplied):
+        raise SafetyError("context_arguments_must_be_complete")
+    if context_policy != "exact_context_v1":
+        raise SafetyError("context_policy_unsupported")
+    if not isinstance(database, Path):
+        raise SafetyError("vanilla_memory_database_path_invalid")
+    if (
+        not isinstance(database_sha256, str)
+        or len(database_sha256) != 64
+        or any(item not in "0123456789abcdef" for item in database_sha256)
+    ):
+        raise SafetyError("vanilla_memory_database_sha256_invalid")
+    if (
+        not isinstance(logical_digest, str)
+        or len(logical_digest) != 64
+        or any(item not in "0123456789abcdef" for item in logical_digest)
+    ):
+        raise SafetyError("vanilla_memory_logical_digest_invalid")
+    if not isinstance(game_version, str) or not game_version:
+        raise SafetyError("vanilla_memory_game_version_invalid")
+    return TranslationContextConfiguration(
+        policy=context_policy,
+        database=database.absolute(),
+        database_sha256=database_sha256,
+        logical_digest=logical_digest,
+        game_version=game_version,
+    )
+
+
+def _prepare_translation_context(
+    configuration: TranslationContextConfiguration | None,
+    *,
+    files: list[SourceFile],
+    plan: tuple[PlannedOccurrence, ...],
+    source_tree_hash: str,
+    inventory_hash: str,
+) -> _TranslationContextRuntime | None:
+    if configuration is None:
+        return None
+    from .vanilla_retrieval import (
+        REFERENCE_STATUS,
+        TERMINAL_STATUSES,
+        RetrievalLimits,
+        retrieval_query_for_entry,
+        retrieve_exact_context_v1,
+    )
+
+    limits = RetrievalLimits(returned_candidates=1)
+    queries = []
+    sequence = 0
+    for source_file in files:
+        parsed = source_file.parsed
+        if parsed is None or not parsed.is_english:
+            continue
+        for entry in parsed.entries:
+            if sequence >= len(plan):
+                raise SafetyError("context_translation_plan_mismatch")
+            item = plan[sequence]
+            if (
+                item.sequence != sequence
+                or item.relative_path != source_file.relative.as_posix()
+                or item.entry is not entry
+            ):
+                raise SafetyError("context_translation_plan_mismatch")
+            queries.append(
+                retrieval_query_for_entry(
+                    item.relative_path, parsed, item.entry
+                )
+            )
+            sequence += 1
+    if sequence != len(plan):
+        raise SafetyError("context_translation_plan_mismatch")
+
+    batch = retrieve_exact_context_v1(
+        configuration.database,
+        tuple(queries),
+        database_sha256=configuration.database_sha256,
+        logical_digest=configuration.logical_digest,
+        game_version=configuration.game_version,
+        limits=limits,
+    )
+    if len(batch.results) != len(plan):
+        raise SafetyError("context_retrieval_result_count_mismatch")
+    counts = Counter(item.status for item in batch.results)
+    if set(counts) - set(TERMINAL_STATUSES):
+        raise SafetyError("context_retrieval_status_invalid")
+
+    occurrences: list[dict[str, object]] = []
+    for item, result in zip(plan, batch.results):
+        eligible = result.status in {
+            "exact_key_context",
+            "exact_text_consensus",
+        }
+        if eligible:
+            if len(result.candidates) != 1:
+                raise SafetyError("context_candidate_count_invalid")
+            candidate = result.candidates[0]
+            if (
+                candidate.reference_status != REFERENCE_STATUS
+                or candidate.editorially_approved is not False
+                or candidate.auto_applied is not False
+                or not isinstance(candidate.russian_model_text, str)
+            ):
+                raise SafetyError("context_candidate_contract_invalid")
+            try:
+                item.entry.restore_translation(candidate.russian_model_text)
+            except ValueError as exc:
+                raise SafetyError("context_reference_invalid") from exc
+            reference_binding: dict[str, object] = {
+                "kind": "sha256",
+                "sha256": hashlib.sha256(
+                    candidate.russian_model_text.encode("utf-8")
+                ).hexdigest(),
+            }
+        else:
+            if result.candidates:
+                raise SafetyError("context_excluded_candidate_present")
+            reference_binding = {"kind": "absent"}
+        occurrences.append(
+            {
+                "reference_prompt_bytes": reference_binding,
+                "sequence": item.sequence,
+                "source_span_sha256": item.source_span_sha256,
+                "terminal_status": result.status,
+            }
+        )
+
+    binding = {
+        "binding_schema": "mvp6c-context-binding-v1",
+        "database_sha256": batch.database_sha256,
+        "framing_version": ollama.CONTEXTUAL_PROMPT_FRAMING_VERSION,
+        "game_version": batch.memory_game_version,
+        "inventory_sha256": inventory_hash,
+        "logical_digest": batch.logical_digest,
+        "memory_schema": batch.memory_schema,
+        "occurrences": occurrences,
+        "policy": configuration.policy,
+        "profile_version": ollama.CONTEXTUAL_PROMPT_PROFILE_VERSION,
+        "retrieval_limits": {
+            "aggregate_stdout_bytes": limits.aggregate_stdout_bytes,
+            "batch_queries": limits.batch_queries,
+            "examined_references_per_query": (
+                limits.examined_references_per_query
+            ),
+            "materialized_index_units": limits.materialized_index_units,
+            "returned_candidates": limits.returned_candidates,
+        },
+        "source_tree_sha256": source_tree_hash,
+    }
+    binding_sha256 = hashlib.sha256(
+        json.dumps(
+            binding,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    prompt_profile_hash = (
+        ollama.contextual_translation_prompt_profile_hash(
+            context_binding_sha256=binding_sha256
+        )
+    )
+    return _TranslationContextRuntime(
+        configuration=configuration,
+        batch=batch,
+        binding_sha256=binding_sha256,
+        prompt_profile_hash=prompt_profile_hash,
+        status_counts=tuple(
+            (status, counts[status]) for status in TERMINAL_STATUSES
+        ),
+        source_localisation_sha256=source_tree_hash,
+        inventory_sha256=inventory_hash,
+    )
+
+
+def _context_reference_text(
+    runtime: _TranslationContextRuntime | None, sequence: int
+) -> str | None:
+    if runtime is None:
+        return None
+    try:
+        result = runtime.batch.results[sequence]
+    except (IndexError, TypeError) as exc:
+        raise SafetyError("context_retrieval_result_missing") from exc
+    if result.status not in {"exact_key_context", "exact_text_consensus"}:
+        return None
+    if len(result.candidates) != 1:
+        raise SafetyError("context_candidate_count_invalid")
+    return result.candidates[0].russian_model_text
+
+
+def _verify_translation_context_identity(
+    runtime: _TranslationContextRuntime | None,
+) -> None:
+    if runtime is None:
+        return
+    from .vanilla_retrieval import verify_retrieval_batch_identity
+
+    verify_retrieval_batch_identity(
+        runtime.configuration.database, runtime.batch
+    )
+
+
 def translate_mod(
     source_mod: Path,
     output: Path,
@@ -110,10 +354,24 @@ def translate_mod(
     max_occurrences_per_file: int | None = None,
     workspace: Path | None = None,
     resume: bool = False,
+    context_policy: str | None = None,
+    vanilla_memory_database: Path | None = None,
+    vanilla_memory_database_sha256: str | None = None,
+    vanilla_memory_logical_digest: str | None = None,
+    vanilla_memory_game_version: str | None = None,
     client_factory: Callable[[], OllamaClient] = OllamaClient,
 ) -> dict[str, object]:
+    context_configuration = _validated_translation_context_configuration(
+        context_policy=context_policy,
+        database=vanilla_memory_database,
+        database_sha256=vanilla_memory_database_sha256,
+        logical_digest=vanilla_memory_logical_digest,
+        game_version=vanilla_memory_game_version,
+    )
     if resume and workspace is None:
         raise SafetyError("resume_requires_workspace")
+    if context_configuration is not None and workspace is None:
+        raise SafetyError("context_requires_workspace")
     if workspace is not None:
         if dry_run:
             raise SafetyError("workspace_mode_incompatible_with_dry_run")
@@ -127,6 +385,7 @@ def translate_mod(
             model,
             workspace=workspace,
             resume=resume,
+            context_configuration=context_configuration,
             client_factory=client_factory,
         )
     return _translate_mod_single_pass(
@@ -281,6 +540,7 @@ def _translate_mod_resumable(
     *,
     workspace: Path,
     resume: bool,
+    context_configuration: TranslationContextConfiguration | None,
     client_factory: Callable[[], OllamaClient],
 ) -> dict[str, object]:
     source = _validated_source(source_mod)
@@ -288,11 +548,12 @@ def _translate_mod_resumable(
     workspace_abs = _normalized_workspace(workspace, resume=resume)
     _validate_workspace_path_relationships(source, output_abs, workspace_abs)
     initial_files: list[SourceFile] | None = None
-    if not resume:
+    context_runtime: _TranslationContextRuntime | None = None
+    if not resume or context_configuration is not None:
         initial_files = _snapshot(source)
         _validate_candidate_path_mappings(initial_files)
         planned, _ = _translation_plan_counts(initial_files, None)
-        if planned == 0:
+        if planned == 0 and context_configuration is None:
             _require_output_absent(output_abs)
             return _translate_mod_single_pass_snapshot(
                 source,
@@ -303,6 +564,18 @@ def _translate_mod_resumable(
                 max_occurrences_per_file=None,
                 client_factory=client_factory,
             )
+        if context_configuration is not None:
+            _, plan, source_tree_hash, inventory_hash = _workspace_inputs(
+                initial_files
+            )
+            context_runtime = _prepare_translation_context(
+                context_configuration,
+                files=initial_files,
+                plan=plan,
+                source_tree_hash=source_tree_hash,
+                inventory_hash=inventory_hash,
+            )
+            _verify_translation_context_identity(context_runtime)
         _verify_snapshot(source, initial_files)
     try:
         with WorkspaceRunLock(workspace_abs):
@@ -312,6 +585,8 @@ def _translate_mod_resumable(
                 model,
                 workspace=workspace_abs,
                 resume=resume,
+                context_configuration=context_configuration,
+                context_runtime=context_runtime,
                 client_factory=client_factory,
                 initial_files=initial_files,
             )
@@ -326,6 +601,8 @@ def _translate_mod_resumable_locked(
     *,
     workspace: Path,
     resume: bool,
+    context_configuration: TranslationContextConfiguration | None,
+    context_runtime: _TranslationContextRuntime | None,
     client_factory: Callable[[], OllamaClient],
     initial_files: list[SourceFile] | None,
 ) -> dict[str, object]:
@@ -352,7 +629,23 @@ def _translate_mod_resumable_locked(
     files = initial_files if initial_files is not None else _snapshot(source)
     _validate_candidate_path_mappings(files)
     inventory, plan, source_tree_hash, inventory_hash = _workspace_inputs(files)
-    prompt_profile_hash = ollama.translation_prompt_profile_hash()
+    if (context_configuration is None) != (context_runtime is None):
+        raise SafetyError("context_preflight_state_invalid")
+    if context_runtime is not None:
+        if (
+            context_runtime.configuration != context_configuration
+            or context_runtime.source_localisation_sha256
+            != source_tree_hash
+            or context_runtime.inventory_sha256 != inventory_hash
+            or len(context_runtime.batch.results) != len(plan)
+        ):
+            raise SafetyError("context_preflight_binding_mismatch")
+        _verify_translation_context_identity(context_runtime)
+    prompt_profile_hash = (
+        ollama.translation_prompt_profile_hash()
+        if context_runtime is None
+        else context_runtime.prompt_profile_hash
+    )
 
     if initial_workspace is not None:
         _validate_workspace_semantics(
@@ -373,6 +666,7 @@ def _translate_mod_resumable_locked(
 
     if output_exists:
         assert initial_workspace is not None
+        _verify_translation_context_identity(context_runtime)
         identity = _validated_model_identity(
             {
                 "tag": initial_workspace.job.model_tag,
@@ -406,6 +700,7 @@ def _translate_mod_resumable_locked(
             reused=report_reused,
             calls_in_final_run=report_calls,
             prompt_profile_hash=prompt_profile_hash,
+            context_runtime=context_runtime,
         )
         _validate_intended_output_identity(initial_workspace, expected_output)
         actual_output = _output_tree_identity(output_abs)
@@ -512,9 +807,19 @@ def _translate_mod_resumable_locked(
                     item = plan_by_sequence[row.sequence]
                     calls_in_final_run += 1
                     try:
-                        result = client.translate(
-                            tag=model, text=item.entry.model_text()
+                        reference_text = _context_reference_text(
+                            context_runtime, item.sequence
                         )
+                        if reference_text is None:
+                            result = client.translate(
+                                tag=model, text=item.entry.model_text()
+                            )
+                        else:
+                            result = client.translate_with_context(
+                                tag=model,
+                                text=item.entry.model_text(),
+                                reference_text=reference_text,
+                            )
                         restored = item.entry.restore_translation(result)
                         if (
                             restored.encode("utf-8")
@@ -564,6 +869,8 @@ def _translate_mod_resumable_locked(
     if any(row.state == "pending" for row in completed_workspace.occurrences):
         raise SafetyError("workspace_pending_occurrences_remain")
 
+    _verify_translation_context_identity(context_runtime)
+
     final_files = _snapshot(source)
     if _snapshot_identity(final_files) != _snapshot_identity(files):
         raise SafetyError("source_generation_changed")
@@ -573,6 +880,11 @@ def _translate_mod_resumable_locked(
         final_source_tree_hash,
         final_inventory_hash,
     ) = _workspace_inputs(final_files)
+    if (
+        final_source_tree_hash != source_tree_hash
+        or final_inventory_hash != inventory_hash
+    ):
+        raise SafetyError("source_generation_changed")
     _validate_workspace_semantics(
         completed_workspace,
         source=source,
@@ -613,8 +925,10 @@ def _translate_mod_resumable_locked(
         reused=report_reused,
         calls_in_final_run=report_calls,
         prompt_profile_hash=prompt_profile_hash,
+        context_runtime=context_runtime,
     )
     _verify_snapshot(source, final_files)
+    _verify_translation_context_identity(context_runtime)
     if completed_workspace.job.finalization_state == "none":
         if client is None:
             if final_plan:
@@ -626,6 +940,7 @@ def _translate_mod_resumable_locked(
             if final_identity != identity:
                 raise SafetyError("model_identity_changed")
         _verify_snapshot(source, final_files)
+        _verify_translation_context_identity(context_runtime)
 
         try:
             set_finalization_intent(
@@ -654,6 +969,7 @@ def _translate_mod_resumable_locked(
         if _output_tree_identity(temp) != output_identity:
             raise SafetyError("finalization_materialized_identity_mismatch")
         _verify_snapshot(source, final_files)
+        _verify_translation_context_identity(context_runtime)
         _require_output_absent(output_abs)
         try:
             atomic_publish_directory_no_replace(temp, output_abs)
@@ -849,9 +1165,10 @@ def _workspace_translation_report(
     reused: int,
     calls_in_final_run: int,
     prompt_profile_hash: str,
+    context_runtime: _TranslationContextRuntime | None,
 ) -> dict[str, object]:
     report = _translation_report(source, files)
-    report["schema_version"] = 3
+    report["schema_version"] = 3 if context_runtime is None else 4
     report["output"] = str(output)
     report["dry_run"] = False
     report["max_occurrences_per_file"] = None
@@ -924,6 +1241,40 @@ def _workspace_translation_report(
         "calls_in_final_run": calls_in_final_run,
         "checkpoint_boundary": "committed_after_each_finished_occurrence",
     }
+    if context_runtime is not None:
+        counts_by_status = dict(context_runtime.status_counts)
+        report["translation_context"] = {
+            "enabled": True,
+            "policy": context_runtime.configuration.policy,
+            "prompt_framing_version": (
+                ollama.CONTEXTUAL_PROMPT_FRAMING_VERSION
+            ),
+            "memory_schema": context_runtime.batch.memory_schema,
+            "game_version": context_runtime.batch.memory_game_version,
+            "database_sha256": context_runtime.batch.database_sha256,
+            "logical_digest": context_runtime.batch.logical_digest,
+            "source_localisation_sha256": (
+                context_runtime.source_localisation_sha256
+            ),
+            "context_binding_sha256": context_runtime.binding_sha256,
+            **counts_by_status,
+            "context_prompt_count": sum(
+                counts_by_status[name]
+                for name in (
+                    "exact_key_context",
+                    "exact_text_consensus",
+                )
+            ),
+            "legacy_prompt_count": sum(
+                counts_by_status[name]
+                for name in counts_by_status
+                if name
+                not in {"exact_key_context", "exact_text_consensus"}
+            ),
+            "reference_status": "REFERENCE_ONLY",
+            "editorially_approved": False,
+            "auto_applied": False,
+        }
     return report
 
 
@@ -940,6 +1291,7 @@ def _build_workspace_candidate_tree(
     reused: int,
     calls_in_final_run: int,
     prompt_profile_hash: str,
+    context_runtime: _TranslationContextRuntime | None,
 ) -> tuple[dict[str, object], _LogicalOutputTree, OutputTreeIdentity]:
     report = _workspace_translation_report(
         source=source,
@@ -952,6 +1304,7 @@ def _build_workspace_candidate_tree(
         reused=reused,
         calls_in_final_run=calls_in_final_run,
         prompt_profile_hash=prompt_profile_hash,
+        context_runtime=context_runtime,
     )
     candidates = _render_workspace_candidates(
         files,
