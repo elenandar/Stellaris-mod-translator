@@ -170,6 +170,23 @@ class ParsedFile:
         return prefix + b"".join(lines)
 
 
+def has_safe_leading_header_prefix(parsed: ParsedFile) -> bool:
+    """Return whether every byte line before the header is MVP-7A-safe."""
+    return _has_safe_leading_header_prefix(
+        parsed.lines, parsed.header_line
+    )
+
+
+def _has_safe_leading_header_prefix(
+    lines: tuple[bytes, ...], header_line: int
+) -> bool:
+    return all(
+        _SAFE_LEADING_HEADER_LINE.fullmatch(_split_ending(raw)[0])
+        is not None
+        for raw in lines[:header_line]
+    )
+
+
 def parse_localisation(
     data: bytes,
     *,
@@ -235,11 +252,10 @@ def parse_localisation(
 
     language_line, language_header = language_headers[0]
     is_english = language_header.group("language") == b"english"
-    if is_english:
-        for raw in lines[:language_line]:
-            body, _ = _split_ending(raw)
-            if _SAFE_LEADING_HEADER_LINE.fullmatch(body) is None:
-                raise ParseError("unsafe_content_before_english_header")
+    if is_english and not _has_safe_leading_header_prefix(
+        lines, language_line
+    ):
+        raise ParseError("unsafe_content_before_english_header")
 
     language = language_header.group("language").decode("ascii")
     entries: list[Entry] = []

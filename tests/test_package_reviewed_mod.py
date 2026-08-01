@@ -10,7 +10,12 @@ import unicodedata
 
 import pytest
 
-from stellaris_mod_translator.engine import SafetyError, _tree_hash
+from stellaris_mod_translator import review, review_application
+from stellaris_mod_translator.engine import (
+    SafetyError,
+    _tree_hash,
+    translate_mod,
+)
 import stellaris_mod_translator.package_reviewed_mod as packaging
 from stellaris_mod_translator.package_reviewed_mod import (
     DescriptorSpec,
@@ -19,6 +24,10 @@ from stellaris_mod_translator.package_reviewed_mod import (
     render_descriptor,
 )
 from stellaris_mod_translator.publication import DestinationExistsError
+from stellaris_mod_translator.review import build_review_pack
+from stellaris_mod_translator.review_application import (
+    apply_review_decisions,
+)
 
 
 PRODUCTION_ATOMIC_PUBLISH = (
@@ -48,6 +57,14 @@ def portable_atomic_publication(
 
     monkeypatch.setattr(
         packaging, "atomic_publish_directory_no_replace", publish
+    )
+    monkeypatch.setattr(
+        review, "atomic_publish_directory_no_replace", publish
+    )
+    monkeypatch.setattr(
+        review_application,
+        "atomic_publish_directory_no_replace",
+        publish,
     )
 
 
@@ -230,6 +247,144 @@ def _run(
         planned_install_root or inputs.planned_install_root,
         allow_technical_residue=allow_technical_residue,
     )
+
+
+class V2PackagingClient:
+    def exact_model(self, tag: str) -> dict[str, str]:
+        assert tag == "synthetic-package-v2:1"
+        return {"tag": tag, "digest": "9" * 64}
+
+    def translate(self, *, tag: str, text: str) -> str:
+        assert tag == "synthetic-package-v2:1"
+        assert text == "Source text"
+        return "Синтетический перевод"
+
+
+@pytest.mark.parametrize(
+    "source_bytes",
+    [
+        (
+            b"# safe leading comment\n"
+            b" \t\n"
+            b"l_english: # keep header\n"
+            b' key:0 "Source text" # keep tail\n'
+        ),
+        (
+            b"\xef\xbb\xbf# safe leading comment\r\n"
+            b"\r\n"
+            b"\t# second comment\r\n"
+            b"l_english: # keep header\r\n"
+            b' key:0 "Source text" # keep tail\r\n'
+        ),
+    ],
+    ids=["lf", "bom-crlf"],
+)
+def test_v2_leading_prefix_survives_translation_review_and_package(
+    tmp_path: Path, source_bytes: bytes
+) -> None:
+    source = tmp_path / "source"
+    source_file = (
+        source / "localisation/english/demo_l_english.yml"
+    )
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(source_bytes)
+    candidate = tmp_path / "candidate"
+    translate_mod(
+        source,
+        candidate,
+        "synthetic-package-v2:1",
+        workspace=tmp_path / "translation.smt-workspace.sqlite3",
+        client_factory=V2PackagingClient,
+    )
+    report_path = candidate / "translation-report.json"
+    report_pin = hashlib.sha256(report_path.read_bytes()).hexdigest()
+    review_output = tmp_path / "review-pack"
+    build_review_pack(
+        source,
+        candidate,
+        review_output,
+        candidate_report_sha256=report_pin,
+    )
+    review_inputs = review._validated_review_inputs(
+        source.resolve(), candidate.resolve(), None, report_pin
+    )
+    entries = review_inputs.pack_data["entries"]
+    assert isinstance(entries, list)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert isinstance(entry, dict)
+    decisions_payload = {
+        "schema_version": 1,
+        "pack_fingerprint": review_inputs.pack_data[
+            "pack_fingerprint"
+        ],
+        "decisions": [
+            {
+                "occurrence_id": entry["id"],
+                "decision": "accept",
+                "note": "synthetic v2 package regression",
+                "tags": [],
+                "glossary_candidate": False,
+                "source_span_sha256": entry["source_span_sha256"],
+                "candidate_span_sha256": entry[
+                    "candidate_span_sha256"
+                ],
+            }
+        ],
+    }
+    decisions = tmp_path / "decisions.json"
+    decisions.write_text(
+        json.dumps(decisions_payload, ensure_ascii=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    reviewed = tmp_path / "reviewed"
+    apply_review_decisions(
+        source,
+        candidate,
+        decisions,
+        reviewed,
+        candidate_report_sha256=report_pin,
+    )
+    application_report = reviewed / "review-application-report.json"
+    application_pin = hashlib.sha256(
+        application_report.read_bytes()
+    ).hexdigest()
+    planned_install_root = tmp_path / "active-mods"
+    planned_install_root.mkdir()
+    package_parent = tmp_path / "packages"
+    package_parent.mkdir()
+    package = package_parent / "v2-package"
+    package_reviewed_mod(
+        reviewed,
+        application_pin,
+        package,
+        "synthetic_v2",
+        "Synthetic V2",
+        "Synthetic source mod",
+        "4.4.*",
+        planned_install_root,
+    )
+
+    expected = source_bytes.replace(
+        b"l_english:", b"l_russian:", 1
+    ).replace(
+        b"Source text", "Синтетический перевод".encode("utf-8"), 1
+    )
+    candidate_file = (
+        candidate / "localisation/russian/demo_l_russian.yml"
+    )
+    reviewed_file = (
+        reviewed / "localisation/russian/demo_l_russian.yml"
+    )
+    packaged_file = (
+        package
+        / "install/synthetic_v2/localisation/russian/"
+        "demo_l_russian.yml"
+    )
+    assert source_file.read_bytes() == source_bytes
+    assert candidate_file.read_bytes() == expected
+    assert reviewed_file.read_bytes() == expected
+    assert packaged_file.read_bytes() == expected
 
 
 def test_package_reviewed_mod_builds_exact_private_package(
@@ -745,6 +900,55 @@ def test_candidate_requires_russian_header(tmp_path: Path) -> None:
     with pytest.raises(
         SafetyError, match="reviewed_candidate_header_mismatch"
     ):
+        _run(inputs)
+
+
+@pytest.mark.parametrize(
+    ("data", "error"),
+    [
+        (
+            b'visible text\nl_russian:\n key_one:0 "value"\n',
+            "reviewed_candidate_header_mismatch",
+        ),
+        (
+            b' before:0 "entry"\nl_russian:\n key_one:0 "value"\n',
+            "reviewed_candidate_header_mismatch",
+        ),
+        (
+            b'l_russian:\n key_one:0 "value"\nl_russian:\n',
+            "reviewed_candidate_localisation_invalid",
+        ),
+        (
+            b'l_russian :\nl_russian:\n key_one:0 "value"\n',
+            "reviewed_candidate_localisation_invalid",
+        ),
+        (
+            (
+                "# unsafe \u200b format\n"
+                'l_russian:\n key_one:0 "value"\n'
+            ).encode("utf-8"),
+            "reviewed_candidate_localisation_invalid",
+        ),
+    ],
+    ids=[
+        "visible-text",
+        "entry-before-header",
+        "additional-header",
+        "malformed-header",
+        "unsafe-unicode",
+    ],
+)
+def test_candidate_rejects_unsafe_v2_leading_prefix(
+    tmp_path: Path, data: bytes, error: str
+) -> None:
+    inputs = _synthetic_inputs(tmp_path)
+    (
+        inputs.candidate
+        / "localisation/russian/one_l_russian.yml"
+    ).write_bytes(data)
+    _refresh_localisation_pin(inputs)
+
+    with pytest.raises(SafetyError, match=error):
         _run(inputs)
 
 
