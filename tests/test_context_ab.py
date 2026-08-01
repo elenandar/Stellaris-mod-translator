@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
 
 import pytest
 
@@ -28,7 +30,9 @@ from stellaris_mod_translator.vanilla_retrieval import (
 )
 
 
-def _entries(marker: str = "SYNTHETIC_AB_PRIVATE_SENTINEL"):
+def _entries(
+    marker: str = "SYNTHETIC_AB_PRIVATE_SENTINEL", count: int = 3
+):
     return tuple(
         ABReviewEntry(
             occurrence_identity_sha256=hashlib.sha256(
@@ -39,7 +43,7 @@ def _entries(marker: str = "SYNTHETIC_AB_PRIVATE_SENTINEL"):
             contextual=f"Contextual {index} {marker}",
             reviewed_reference=f"Reviewed {index} {marker}",
         )
-        for index in range(3)
+        for index in range(count)
     )
 
 
@@ -80,6 +84,12 @@ def test_pack_is_private_content_separated_and_stably_blinded(
     assert "https://" not in html
     assert "connect-src 'none'" in html
     mapping = json.loads(mapping_text)
+    summary = json.loads(summary_text)
+    assert mapping["schema_version"] == 2
+    assert summary["schema_version"] == 2
+    assert summary["mapping_schema_version"] == 2
+    assert summary["storage_schema_version"] == 2
+    assert summary["decisions_schema_version"] == 2
     assert len(mapping["entries"]) == 3
     assert all(
         {item["variant_a"], item["variant_b"]}
@@ -102,6 +112,22 @@ def test_pack_is_private_content_separated_and_stably_blinded(
     ).read_bytes()
 
 
+def test_generic_pack_builder_accepts_100_but_rejects_101(
+    tmp_path: Path,
+) -> None:
+    output, result = _build(tmp_path, _entries(count=100))
+    assert result["ab_entries"] == 100
+    assert output.exists()
+    with pytest.raises(SafetyError, match="ab_entry_count_invalid"):
+        build_context_ab_review_pack(
+            _entries(count=101),
+            tmp_path / "too-many",
+            context_binding_sha256="a" * 64,
+            source_localisation_sha256="b" * 64,
+            model_digest="sha256:synthetic",
+        )
+
+
 def test_pack_escapes_script_delimiters_and_has_matching_csp_hash(
     tmp_path: Path,
 ) -> None:
@@ -121,6 +147,170 @@ def test_pack_escapes_script_delimiters_and_has_matching_csp_hash(
         hashlib.sha256(scripts[-1].encode("utf-8")).digest()
     ).decode("ascii")
     assert actual == csp_hash.group(1)
+
+
+def test_actual_javascript_locks_reloads_and_imports_atomically(
+    tmp_path: Path,
+) -> None:
+    node = shutil.which("node")
+    assert node is not None, "Node.js is required for JavaScript regression"
+    injection = '</script><script>globalThis.PWNED=true</script>'
+    output, _ = _build(tmp_path, _entries(injection))
+    html = (output / "index.html").read_text()
+    scripts = re.findall(r"<script(?: [^>]*)?>(.*?)</script>", html, re.S)
+    assert len(scripts) == 2
+    pack_match = re.search(
+        r'<script id="pack-data" type="application/json">(.*?)</script>',
+        html,
+        re.S,
+    )
+    assert pack_match is not None
+    runtime = tmp_path / "context-ab-runtime.js"
+    runtime.write_text(scripts[-1])
+    pack_data = tmp_path / "context-ab-pack.json"
+    pack_data.write_text(pack_match.group(1))
+    harness = tmp_path / "context-ab-harness.cjs"
+    harness.write_text(
+        r'''
+const fs = require("fs");
+const vm = require("vm");
+if (typeof Blob === "undefined") globalThis.Blob = require("buffer").Blob;
+class StubElement {
+  constructor(tagName="div", id="") {
+    this.tagName=tagName.toUpperCase();this.id=id;this.children=[];
+    this.listeners=new Map();this.className="";this.textContent="";
+    this.value="";this.checked=false;this.disabled=false;this.files=[];
+    this.type="";this.name="";this.href="";this.download="";
+  }
+  addEventListener(type,listener){const values=this.listeners.get(type)||[];values.push(listener);this.listeners.set(type,values);}
+  append(...children){this.children.push(...children);}
+  replaceChildren(...children){this.children=children;}
+  querySelectorAll(selector){
+    const values=[];const visit=node=>{if(!(node instanceof StubElement))return;
+      if(selector==="input"&&node.tagName==="INPUT")values.push(node);
+      if(selector==="button"&&node.tagName==="BUTTON")values.push(node);
+      if(selector==="textarea"&&node.tagName==="TEXTAREA")values.push(node);
+      node.children.forEach(visit);};this.children.forEach(visit);return values;
+  }
+  async fire(type,event={}){if(!event.target)event.target=this;for(const listener of this.listeners.get(type)||[])await listener(event);}
+  click(){if(this.tagName==="A"){globalThis.downloadCount=(globalThis.downloadCount||0)+1;return;}return this.fire("click",{target:this});}
+}
+const ids=["pack-data","status","export","import","entries"];
+const makeElements=()=>new Map(ids.map(id=>[id,new StubElement("div",id)]));
+let elements=makeElements();
+elements.get("import").tagName="INPUT";
+elements.get("pack-data").textContent=fs.readFileSync(process.argv[3],"utf8");
+globalThis.document={
+  getElementById(id){return elements.get(id);},
+  createElement(tagName){return new StubElement(tagName);},
+  createTextNode(text){return {textContent:text};}
+};
+globalThis.localStorage={values:new Map(),getItem(key){return this.values.has(key)?this.values.get(key):null;},setItem(key,value){this.values.set(key,value);},removeItem(key){this.values.delete(key);}};
+globalThis.alerts=[];globalThis.alert=value=>globalThis.alerts.push(String(value));
+globalThis.URL={createObjectURL(blob){globalThis.capturedBlob=blob;return "blob:synthetic";},revokeObjectURL(){}};
+globalThis.setTimeout=callback=>callback();
+globalThis.FileReader=class{readAsText(file){this.result=file.text;this.onload();}};
+const runtime=fs.readFileSync(process.argv[2],"utf8");
+const run=()=>vm.runInThisContext(runtime);
+const resetDom=()=>{elements=makeElements();elements.get("import").tagName="INPUT";elements.get("pack-data").textContent=fs.readFileSync(process.argv[3],"utf8");};
+const card=()=>elements.get("entries").children[0];
+const radios=()=>card().querySelectorAll("input");
+const button=()=>card().querySelectorAll("button")[0];
+const note=()=>card().querySelectorAll("textarea")[0];
+const cardText=()=>{const values=[];const visit=node=>{if(node&&typeof node.textContent==="string")values.push(node.textContent);if(node instanceof StubElement)node.children.forEach(visit);};visit(card());return values.join("\n");};
+const importText=async text=>{elements.get("import").files=[{text}];await elements.get("import").fire("change",{target:elements.get("import")});};
+(async()=>{
+  run();
+  const fingerprint=JSON.parse(elements.get("pack-data").textContent).pack_fingerprint;
+  const storageKey="smt-mvp6c-ab-v2:"+fingerprint;
+  const oldStorageKey="smt-mvp6c-ab:"+fingerprint;
+  const hiddenBefore=!cardText().includes("Reviewed 0");
+  await radios()[0].fire("change");
+  const hiddenAfterTentative=!cardText().includes("Reviewed 0");
+  await radios()[1].fire("change");
+  const tentative=JSON.parse(localStorage.getItem(storageKey)).decisions[0];
+  globalThis.capturedBlob=undefined;await elements.get("export").fire("click");
+  const tentativeBytes=Buffer.from(await globalThis.capturedBlob.arrayBuffer());
+  const tentativeExport=JSON.parse(tentativeBytes.toString("utf8"));
+  await button().fire("click");
+  const revealedAfterLock=cardText().includes("Reviewed 0");
+  const radiosDisabled=radios().every(item=>item.disabled);
+  const lockedBeforeManual=JSON.parse(localStorage.getItem(storageKey)).decisions[0];
+  radios()[0].checked=true;await radios()[0].fire("change");
+  const lockedAfterManual=JSON.parse(localStorage.getItem(storageKey)).decisions[0];
+  note().value="editable after lock";await note().fire("input");
+  const afterNote=JSON.parse(localStorage.getItem(storageKey)).decisions[0];
+  globalThis.capturedBlob=undefined;await elements.get("export").fire("click");
+  const exportBytes=Buffer.from(await globalThis.capturedBlob.arrayBuffer());
+  const exportText=exportBytes.toString("utf8");
+  const exported=JSON.parse(exportText);
+  resetDom();run();
+  const reloadLocked=radios().every(item=>item.disabled)&&cardText().includes("Reviewed 0");
+  localStorage.removeItem(storageKey);resetDom();run();
+  await importText(exportText);
+  const roundTripLocked=radios().every(item=>item.disabled)&&cardText().includes("Reviewed 0");
+  const beforeInvalid=localStorage.getItem(storageKey);
+  const first=exported.decisions[0];const ids=JSON.parse(elements.get("pack-data").textContent).entries.map(item=>item.id);
+  const invalidDocuments=[
+    {schema_version:2,pack_fingerprint:fingerprint,decisions:[{occurrence_id:first.occurrence_id,choice:first.choice}]},
+    {schema_version:2,pack_fingerprint:fingerprint,decisions:[first,first]},
+    {schema_version:2,pack_fingerprint:fingerprint,decisions:[{occurrence_id:"0".repeat(64),choice:"tie",note:""}]},
+    {schema_version:2,pack_fingerprint:fingerprint,decisions:[{occurrence_id:ids[1],choice:"tie",note:"valid prefix"},{occurrence_id:ids[2],choice:"invalid",note:"bad tail"}]},
+    {schema_version:1,pack_fingerprint:fingerprint,decisions:[first]},
+    {schema_version:2,pack_fingerprint:"f".repeat(64),decisions:[first]},
+    {schema_version:2,pack_fingerprint:fingerprint,decisions:[{...first,choice:first.choice==="A better"?"B better":"A better"}]}
+  ];
+  let invalidAtomic=true;
+  for(const value of invalidDocuments){await importText(JSON.stringify(value));invalidAtomic=invalidAtomic&&localStorage.getItem(storageKey)===beforeInvalid;}
+  localStorage.removeItem(storageKey);
+  localStorage.setItem(oldStorageKey,JSON.stringify({schema_version:1,pack_fingerprint:fingerprint,decisions:[first]}));
+  resetDom();run();
+  const oldKeyIsolated=!localStorage.getItem(storageKey)&&!cardText().includes("Reviewed 0")&&radios().every(item=>!item.disabled);
+  localStorage.setItem(storageKey,JSON.stringify({schema_version:1,pack_fingerprint:fingerprint,decisions:[first]}));
+  resetDom();run();
+  const v1AtNewKeyRejected=!localStorage.getItem(storageKey)&&!cardText().includes("Reviewed 0");
+  process.stdout.write(JSON.stringify({
+    hiddenBefore,hiddenAfterTentative,tentativeChoiceChanged:tentative.choice==="B better"&&!tentative.locked,
+    tentativeExportExcluded:tentativeExport.schema_version===2&&tentativeExport.decisions.length===0,
+    tentativeExportLf:tentativeBytes.at(-1)===10&&tentativeBytes.at(-2)!==10,
+    revealedAfterLock,radiosDisabled,manualMutationRejected:lockedBeforeManual.choice===lockedAfterManual.choice&&lockedAfterManual.locked,
+    noteEditable:afterNote.choice===lockedAfterManual.choice&&afterNote.note==="editable after lock",
+    exportLf:exportBytes.at(-1)===10&&exportBytes.at(-2)!==10,
+    exportValid:exported.schema_version===2&&exported.decisions.length===1,
+    reloadLocked,roundTripLocked,invalidAtomic,invalidCaseCount:invalidDocuments.length,
+    oldKeyIsolated,v1AtNewKeyRejected,pwned:globalThis.PWNED===true,alerts:globalThis.alerts.length
+  }));
+})().catch(error=>{process.stderr.write(String(error.stack||error));process.exitCode=1;});
+'''.strip()
+        + "\n"
+    )
+    completed = subprocess.run(
+        [node, str(harness), str(runtime), str(pack_data)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(completed.stdout) == {
+        "hiddenBefore": True,
+        "hiddenAfterTentative": True,
+        "tentativeChoiceChanged": True,
+        "tentativeExportExcluded": True,
+        "tentativeExportLf": True,
+        "revealedAfterLock": True,
+        "radiosDisabled": True,
+        "manualMutationRejected": True,
+        "noteEditable": True,
+        "exportLf": True,
+        "exportValid": True,
+        "reloadLocked": True,
+        "roundTripLocked": True,
+        "invalidAtomic": True,
+        "invalidCaseCount": 7,
+        "oldKeyIsolated": True,
+        "v1AtNewKeyRejected": True,
+        "pwned": False,
+        "alerts": 7,
+    }
 
 
 def test_prepublication_failure_removes_temp_and_publishes_nothing(
@@ -194,12 +384,18 @@ class PilotClient:
         return "CTX " + text
 
 
-def _pilot_inputs(tmp_path: Path, *, include_skipped: bool = False):
+def _pilot_inputs(
+    tmp_path: Path, *, include_skipped: bool = False, entry_count: int = 2
+):
     source = tmp_path / "source"
     source_file = source / "localisation/english/demo_l_english.yml"
     source_file.parent.mkdir(parents=True)
     source_file.write_bytes(
-        b'l_english:\n first:0 "First"\n second:0 "Second"\n'
+        b"l_english:\n"
+        + b"".join(
+            f' key_{index}:0 "Source {index}"\n'.encode("ascii")
+            for index in range(entry_count)
+        )
     )
     if include_skipped:
         (source_file.parent / "skipped_l_english.yml").write_bytes(
@@ -260,12 +456,14 @@ def _pilot_inputs(tmp_path: Path, *, include_skipped: bool = False):
     return source, baseline, report_pin, reviewed, application_pin
 
 
-def _install_pilot_retrieval(monkeypatch: pytest.MonkeyPatch) -> None:
+def _install_pilot_retrieval(
+    monkeypatch: pytest.MonkeyPatch, *, eligible_count: int = 1
+) -> None:
     def retrieve(
         database: Path, queries: tuple[object, ...], **kwargs: object
     ) -> RetrievalBatch:
-        return RetrievalBatch(
-            results=(
+        results = tuple(
+            (
                 RetrievalResult(
                     status="exact_key_context",
                     candidates=(
@@ -281,11 +479,16 @@ def _install_pilot_retrieval(monkeypatch: pytest.MonkeyPatch) -> None:
                         ),
                     ),
                     examined_references=1,
-                ),
-                RetrievalResult(
+                )
+                if index < eligible_count
+                else RetrievalResult(
                     status="no_match", candidates=(), examined_references=0
-                ),
-            ),
+                )
+            )
+            for index, _ in enumerate(queries)
+        )
+        return RetrievalBatch(
+            results=results,
             memory_schema=3,
             memory_game_version=str(kwargs["game_version"]),
             database_sha256=str(kwargs["database_sha256"]),
@@ -357,6 +560,78 @@ def test_bounded_pilot_calls_only_eligible_and_reuses_or_rebuilds_baseline(
     assert report["ab_entries"] == 1
     assert report["legacy_prompts_changed_outside_eligible"] == 0
     assert output.exists()
+
+
+def test_pilot_limit_accepts_23_with_exact_call_ceilings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, baseline, report_pin, reviewed, application_pin = _pilot_inputs(
+        tmp_path, entry_count=23
+    )
+    _install_pilot_retrieval(monkeypatch, eligible_count=23)
+    client = PilotClient("e" * 64)
+    evaluation_root = tmp_path / "evaluations"
+    evaluation_root.mkdir(mode=0o700)
+    memory_root = tmp_path / "memory"
+    memory_root.mkdir(mode=0o700)
+    database = memory_root / "memory.sqlite3"
+    database.touch(mode=0o600)
+
+    report = run_context_ab_pilot(
+        source,
+        database,
+        baseline,
+        report_pin,
+        reviewed,
+        application_pin,
+        evaluation_root / "ab-pilot-23",
+        "synthetic:1",
+        evaluation_root=evaluation_root,
+        vanilla_memory_database_sha256="a" * 64,
+        vanilla_memory_logical_digest="b" * 64,
+        vanilla_memory_game_version="Synthetic v1",
+        expected_entries=23,
+        client_factory=lambda: client,
+    )
+
+    assert report["eligible_context"] == 23
+    assert report["context_prompts"] == 23
+    assert report["baseline_calls"] == 23
+    assert report["ollama_calls"] == 46
+    assert [kind for kind, _ in client.calls].count("context") == 23
+    assert [kind for kind, _ in client.calls].count("legacy") == 23
+
+
+def test_pilot_limit_rejects_24_before_inputs_client_or_writes(
+    tmp_path: Path,
+) -> None:
+    factory_calls = 0
+
+    def forbidden_factory() -> PilotClient:
+        nonlocal factory_calls
+        factory_calls += 1
+        raise AssertionError("limit must precede model creation")
+
+    output = tmp_path / "must-not-exist"
+    with pytest.raises(SafetyError, match="ab_expected_entry_count_invalid"):
+        run_context_ab_pilot(
+            tmp_path / "missing-source",
+            tmp_path / "missing-memory.sqlite3",
+            tmp_path / "missing-baseline",
+            "invalid-before-private-read",
+            tmp_path / "missing-reviewed",
+            "invalid-before-private-read",
+            output,
+            "synthetic:1",
+            evaluation_root=tmp_path / "missing-evaluations",
+            vanilla_memory_database_sha256="invalid-before-private-read",
+            vanilla_memory_logical_digest="invalid-before-private-read",
+            vanilla_memory_game_version="Synthetic v1",
+            expected_entries=24,
+            client_factory=forbidden_factory,
+        )
+    assert factory_calls == 0
+    assert not output.exists()
 
 
 def test_pilot_output_is_contained_before_retrieval_or_model_calls(

@@ -608,7 +608,10 @@ bytes либо typed absence. Resume заново получает тот же b
 повторно проверяются перед finalization и publication.
 
 `context_ab.run_context_ab_pilot` предназначен только для owner-authorized
-bounded private validation. Он вызывает contextual model только для eligible
+bounded private validation и принимает не более `23` eligible occurrences,
+хотя generic pack builder сохраняет отдельный технический максимум `100`.
+Значение `24` отклоняется до private input reads, client creation и output
+writes. Pilot вызывает contextual model только для eligible
 occurrences, переиспользует exact совместимый baseline либо при digest drift
 перестраивает обе стороны на одном текущем digest. Совместимость baseline
 включает exact legacy prompt-profile hash. Обязательный `evaluation_root`
@@ -616,7 +619,14 @@ occurrences, переиспользует exact совместимый baseline 
 каталогом и лексически и физически не пересекаться с source, memory, baseline
 или reviewed candidate. Offline pack имеет каталог `0700`, файлы `0600`,
 автономный CSP, stable hidden mapping, local draft, JSON export/import и
-отдельный reviewed-candidate reference, доступный только после выбора. Pack не
+отдельный reviewed-candidate reference. Review/storage/decisions protocol v2
+не раскрывает reference при tentative radio selection: владелец отдельно
+фиксирует выбор, после чего radio controls блокируются навсегда, а note остаётся
+редактируемым. Export включает только зафиксированные decisions; valid import
+считает все decisions зафиксированными и атомарно отклоняет malformed,
+duplicate, unknown, incompatible или конфликтующий с уже locked choice JSON.
+V1 localStorage/decisions не принимаются как v2 и используют другой storage
+key/fingerprint. Pack не
 выставляет quality verdict:
 `AB_QUALITY_STATUS: HUMAN_REVIEW_REQUIRED`.
 

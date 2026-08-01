@@ -23,12 +23,14 @@ from .publication import (
 )
 
 
-AB_PACK_SCHEMA_VERSION = 1
-AB_MAPPING_SCHEMA_VERSION = 1
-AB_DECISIONS_SCHEMA_VERSION = 1
+AB_PACK_SCHEMA_VERSION = 2
+AB_MAPPING_SCHEMA_VERSION = 2
+AB_STORAGE_SCHEMA_VERSION = 2
+AB_DECISIONS_SCHEMA_VERSION = 2
 AB_QUALITY_STATUS = "HUMAN_REVIEW_REQUIRED"
 AB_CHOICES = ("A better", "B better", "tie", "both bad")
 MAX_AB_ENTRIES = 100
+MAX_AB_PILOT_ENTRIES = 23
 MAX_AB_TEXT_BYTES = 1024 * 1024
 
 
@@ -76,7 +78,7 @@ def run_context_ab_pilot(
         isinstance(expected_entries, bool)
         or not isinstance(expected_entries, int)
         or expected_entries < 1
-        or expected_entries > MAX_AB_ENTRIES
+        or expected_entries > MAX_AB_PILOT_ENTRIES
     ):
         raise SafetyError("ab_expected_entry_count_invalid")
     report_pin = _sha256(
@@ -572,30 +574,45 @@ _SCRIPT = r"""
 (()=>{"use strict";
 const pack=JSON.parse(document.getElementById("pack-data").textContent);
 const choices=new Set(["A better","B better","tie","both bad"]);
-const storageKey="smt-mvp6c-ab:"+pack.pack_fingerprint;
+const storageKey="smt-mvp6c-ab-v2:"+pack.pack_fingerprint;
 let state={};
 const exact=(value,fields)=>value&&typeof value==="object"&&!Array.isArray(value)&&Object.keys(value).sort().join("\0")===fields.slice().sort().join("\0");
-function clean(value){
-  if(!exact(value,["schema_version","pack_fingerprint","decisions"])||value.schema_version!==1||value.pack_fingerprint!==pack.pack_fingerprint||!Array.isArray(value.decisions))throw new Error("invalid decisions document");
+function cleanDecisions(value){
+  if(!exact(value,["schema_version","pack_fingerprint","decisions"])||value.schema_version!==2||value.pack_fingerprint!==pack.pack_fingerprint||!Array.isArray(value.decisions))throw new Error("invalid decisions document");
   const known=new Set(pack.entries.map(entry=>entry.id));const next={};
-  for(const item of value.decisions){if(!exact(item,["occurrence_id","choice","note"])||!known.has(item.occurrence_id)||next[item.occurrence_id]||!choices.has(item.choice)||typeof item.note!=="string")throw new Error("invalid decision record");next[item.occurrence_id]={choice:item.choice,note:item.note};}
+  for(const item of value.decisions){if(!exact(item,["occurrence_id","choice","note"])||!known.has(item.occurrence_id)||Object.hasOwn(next,item.occurrence_id)||!choices.has(item.choice)||typeof item.note!=="string")throw new Error("invalid decision record");next[item.occurrence_id]={choice:item.choice,note:item.note,locked:true};}
   return next;
 }
-function documentValue(){return {schema_version:1,pack_fingerprint:pack.pack_fingerprint,decisions:pack.entries.filter(entry=>state[entry.id]).map(entry=>({occurrence_id:entry.id,choice:state[entry.id].choice,note:state[entry.id].note}))};}
-function persist(){localStorage.setItem(storageKey,JSON.stringify(documentValue()));updateStatus();}
-function updateStatus(){document.getElementById("status").textContent=Object.keys(state).length+" / "+pack.entries.length+" reviewed";}
+function cleanStorage(value){
+  if(!exact(value,["schema_version","pack_fingerprint","decisions"])||value.schema_version!==2||value.pack_fingerprint!==pack.pack_fingerprint||!Array.isArray(value.decisions))throw new Error("invalid storage document");
+  const known=new Set(pack.entries.map(entry=>entry.id));const next={};
+  for(const item of value.decisions){if(!exact(item,["occurrence_id","choice","note","locked"])||!known.has(item.occurrence_id)||Object.hasOwn(next,item.occurrence_id)||!choices.has(item.choice)||typeof item.note!=="string"||typeof item.locked!=="boolean")throw new Error("invalid storage record");next[item.occurrence_id]={choice:item.choice,note:item.note,locked:item.locked};}
+  return next;
+}
+function documentValue(value=state){return {schema_version:2,pack_fingerprint:pack.pack_fingerprint,decisions:pack.entries.filter(entry=>value[entry.id]?.locked===true).map(entry=>({occurrence_id:entry.id,choice:value[entry.id].choice,note:value[entry.id].note}))};}
+function storageValue(value=state){return {schema_version:2,pack_fingerprint:pack.pack_fingerprint,decisions:pack.entries.filter(entry=>value[entry.id]).map(entry=>({occurrence_id:entry.id,choice:value[entry.id].choice,note:value[entry.id].note,locked:value[entry.id].locked}))};}
+function commit(next){localStorage.setItem(storageKey,JSON.stringify(storageValue(next)));state=next;updateStatus();}
+function changed(next,renderAfter=true){try{commit(next);if(renderAfter)render();return true;}catch(error){alert(error.message);if(renderAfter)render();return false;}}
+function nextState(){const next={};for(const entry of pack.entries){const item=state[entry.id];if(item)next[entry.id]={choice:item.choice,note:item.note,locked:item.locked};}return next;}
+function setTentativeChoice(id,choice){const current=state[id];if(current?.locked===true){render();return false;}const next=nextState();next[id]={choice,note:current?.note||"",locked:false};return changed(next);}
+function lockChoice(id){const current=state[id];if(!current||current.locked===true)return false;const next=nextState();next[id]={choice:current.choice,note:current.note,locked:true};return changed(next);}
+function updateNote(id,note){const current=state[id];if(!current)return false;const next=nextState();next[id]={choice:current.choice,note,locked:current.locked};return changed(next,false);}
+function importedState(value){const imported=cleanDecisions(value);const next=nextState();for(const entry of pack.entries){const item=imported[entry.id];if(!item)continue;const current=next[entry.id];if(current?.locked===true&&current.choice!==item.choice)throw new Error("locked choice conflict");next[entry.id]=item;}return next;}
+function updateStatus(){const locked=Object.values(state).filter(item=>item.locked===true).length;const tentative=Object.values(state).length-locked;document.getElementById("status").textContent=locked+" / "+pack.entries.length+" locked; "+tentative+" tentative";}
 function node(tag,text,className){const value=document.createElement(tag);if(text!==undefined)value.textContent=text;if(className)value.className=className;return value;}
 function render(){const root=document.getElementById("entries");root.replaceChildren();for(const [index,entry] of pack.entries.entries()){
+  const current=state[entry.id];const locked=current?.locked===true;
   const card=node("section",undefined,"entry");card.append(node("h2","Entry "+(index+1)));
   card.append(node("h3","Source"),node("div",entry.source,"text"));
   const variants=node("div",undefined,"variants");for(const label of ["A","B"]){const box=node("div");box.append(node("h3","Variant "+label),node("div",entry[label.toLowerCase()],"text"));variants.append(box);}card.append(variants);
-  const controls=node("div",undefined,"choices");for(const choice of choices){const label=node("label");const radio=document.createElement("input");radio.type="radio";radio.name="choice-"+entry.id;radio.value=choice;radio.checked=state[entry.id]?.choice===choice;radio.addEventListener("change",()=>{state[entry.id]={choice,note:state[entry.id]?.note||""};persist();render();});label.append(radio,document.createTextNode(" "+choice));controls.append(label);}card.append(controls);
-  const note=document.createElement("textarea");note.className="note";note.placeholder="Optional note";note.value=state[entry.id]?.note||"";note.addEventListener("input",()=>{if(state[entry.id]){state[entry.id].note=note.value;persist();}});card.append(note);
-  if(state[entry.id]&&entry.reviewed_reference!==null){const details=document.createElement("details");details.append(node("summary","Show reviewed-candidate reference (after choice)"),node("div",entry.reviewed_reference,"text"));card.append(details);}root.append(card);}updateStatus();}
+  const controls=node("div",undefined,"choices");for(const choice of choices){const label=node("label");const radio=document.createElement("input");radio.type="radio";radio.name="choice-"+entry.id;radio.value=choice;radio.checked=current?.choice===choice;radio.disabled=locked;radio.addEventListener("change",()=>setTentativeChoice(entry.id,choice));label.append(radio,document.createTextNode(" "+choice));controls.append(label);}card.append(controls);
+  const confirm=document.createElement("button");confirm.type="button";confirm.className="lock-choice";confirm.textContent=locked?"Выбор зафиксирован":"Зафиксировать выбор и показать эталон";confirm.disabled=locked||!current;confirm.addEventListener("click",()=>lockChoice(entry.id));card.append(confirm);
+  const note=document.createElement("textarea");note.className="note";note.placeholder="Optional note";note.value=current?.note||"";note.disabled=!current;note.addEventListener("input",()=>updateNote(entry.id,note.value));card.append(note);
+  if(locked&&entry.reviewed_reference!==null){card.append(node("h3","Reviewed-candidate reference"),node("div",entry.reviewed_reference,"text reviewed-reference"));}root.append(card);}updateStatus();}
 function download(){const blob=new Blob([JSON.stringify(documentValue(),null,2)+"\n"],{type:"application/json"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="mvp6c-ab-decisions.json";link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0);}
 document.getElementById("export").addEventListener("click",download);
-document.getElementById("import").addEventListener("change",event=>{const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{state=clean(JSON.parse(reader.result));persist();render();}catch(error){alert(error.message);}};reader.readAsText(file);});
-try{const saved=localStorage.getItem(storageKey);if(saved)state=clean(JSON.parse(saved));}catch(error){localStorage.removeItem(storageKey);state={};}
+document.getElementById("import").addEventListener("change",event=>{const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{changed(importedState(JSON.parse(reader.result)));}catch(error){alert(error.message);}};reader.readAsText(file);});
+try{const saved=localStorage.getItem(storageKey);if(saved)state=cleanStorage(JSON.parse(saved));}catch(error){localStorage.removeItem(storageKey);state={};}
 render();
 })();
 """.strip()
@@ -668,10 +685,12 @@ def build_context_ab_review_pack(
         )
     ).hexdigest()
     pack = {
+        "decisions_schema_version": AB_DECISIONS_SCHEMA_VERSION,
         "entries": displayed,
         "pack_fingerprint": fingerprint,
         "quality_status": AB_QUALITY_STATUS,
         "schema_version": AB_PACK_SCHEMA_VERSION,
+        "storage_schema_version": AB_STORAGE_SCHEMA_VERSION,
     }
     mapping_document = {
         "entries": mapping,
@@ -682,11 +701,14 @@ def build_context_ab_review_pack(
         "ab_entries": len(normalized),
         "ab_quality_status": AB_QUALITY_STATUS,
         "context_binding_sha256": binding,
+        "decisions_schema_version": AB_DECISIONS_SCHEMA_VERSION,
+        "mapping_schema_version": AB_MAPPING_SCHEMA_VERSION,
         "model_digest": digest,
         "network_dependencies": 0,
         "pack_fingerprint": fingerprint,
         "schema_version": AB_PACK_SCHEMA_VERSION,
         "source_localisation_sha256": source_hash,
+        "storage_schema_version": AB_STORAGE_SCHEMA_VERSION,
     }
     html = _render_html(pack)
 
