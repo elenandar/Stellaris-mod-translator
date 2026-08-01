@@ -207,6 +207,14 @@ def test_resume_reuses_committed_results_and_retries_only_uncommitted_call(
     assert report["counts"]["reused_from_workspace_occurrences"] == 1
     assert report["counts"]["calls_in_final_run"] == 2
     assert report["resumability"]["run_count"] == 2
+    assert (
+        report["resumability"]["parser_order_version"]
+        == "mvp7a-leading-header-parser-order-v2"
+    )
+    assert (
+        load_workspace(workspace).job.parser_order_version
+        == "mvp7a-leading-header-parser-order-v2"
+    )
     assert read_states(workspace) == [
         "accepted_changed",
         "accepted_changed",
@@ -529,7 +537,10 @@ def test_workspace_with_old_skipped_qualified_replace_inventory_is_rejected(
             client_factory=forbidden_factory,
         )
 
-    assert engine.PARSER_ORDER_VERSION == "mvp4-lossless-parser-order-v1"
+    assert (
+        engine.PARSER_ORDER_VERSION
+        == "mvp7a-leading-header-parser-order-v2"
+    )
     assert constructed is False
     assert not output.exists()
 
@@ -1041,7 +1052,9 @@ def test_parser_and_prompt_profile_drift_are_rejected_before_model_calls(
         )
     assert parser_client.inventory_calls == 0
     monkeypatch.setattr(
-        engine, "PARSER_ORDER_VERSION", "mvp4-lossless-parser-order-v1"
+        engine,
+        "PARSER_ORDER_VERSION",
+        "mvp7a-leading-header-parser-order-v2",
     )
 
     prompt_client = SyntheticClient()
@@ -1058,6 +1071,41 @@ def test_parser_and_prompt_profile_drift_are_rejected_before_model_calls(
             client_factory=lambda: prompt_client,
         )
     assert prompt_client.inventory_calls == 0
+
+
+def test_v1_workspace_is_preserved_but_rejected_as_v2_before_model_calls(
+    tmp_path: Path,
+) -> None:
+    source, output, workspace, _ = start_interrupted_workspace(tmp_path)
+    with sqlite3.connect(workspace) as connection:
+        connection.execute(
+            "UPDATE job SET parser_order_version = ?",
+            ("mvp4-lossless-parser-order-v1",),
+        )
+        connection.commit()
+    before = workspace.read_bytes()
+    constructed = False
+
+    def forbidden_factory() -> SyntheticClient:
+        nonlocal constructed
+        constructed = True
+        return SyntheticClient()
+
+    with pytest.raises(
+        SafetyError, match="workspace_parser_order_version_drift"
+    ):
+        translate_mod(
+            source,
+            output,
+            "synthetic:1",
+            workspace=workspace,
+            resume=True,
+            client_factory=forbidden_factory,
+        )
+
+    assert constructed is False
+    assert workspace.read_bytes() == before
+    assert not output.exists()
 
 
 def test_failed_resume_preflight_does_not_change_source_or_workspace(

@@ -17,6 +17,8 @@ import unicodedata
 from typing import Iterable
 
 from .engine import (
+    LEGACY_PARSER_ORDER_VERSION,
+    PARSER_ORDER_VERSION,
     SafetyError,
     SourceFile,
     _candidate_relative,
@@ -39,6 +41,12 @@ LEGACY_REVIEW_PACK_SCHEMA_VERSION = 1
 FULL_REVIEW_PACK_SCHEMA_VERSION = 2
 DECISIONS_SCHEMA_VERSION = 1
 FULL_REVIEW_SCOPE = "full_candidate"
+SUPPORTED_PARSER_ORDER_VERSIONS = frozenset(
+    {
+        LEGACY_PARSER_ORDER_VERSION,
+        PARSER_ORDER_VERSION,
+    }
+)
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 MODEL_TAG_RE = re.compile(
     r"(?=.{1,255}\Z)[A-Za-z0-9][A-Za-z0-9._/-]*:"
@@ -278,13 +286,9 @@ def _validated_review_inputs(
     candidate_report_sha256: str | None = None,
 ) -> ValidatedReviewInputs:
     """Recompute authoritative alignment without trusting generated HTML."""
-    source_files = _snapshot(source)
-    _validate_candidate_path_mappings(source_files)
-    candidate_files = _snapshot(candidate)
     report_file = _read_stable_file(
         candidate / "translation-report.json", "candidate_report"
     )
-    inventory = _candidate_inventory(candidate)
     report = _load_report(report_file.data)
     report_schema = report.get("schema_version")
     report_is_schema_v3 = type(report_schema) is int and report_schema == 3
@@ -293,13 +297,6 @@ def _validated_review_inputs(
     if candidate_report_sha256 is not None and not report_is_schema_v3:
         raise SafetyError("candidate_report_pin_requires_schema_v3")
     full_candidate = candidate_report_sha256 is not None
-    identity = expected_identity or MVP2_PILOT_IDENTITY
-    source_hash = _tree_hash(
-        [(item.relative, item.data) for item in source_files]
-    )
-    candidate_hash = _tree_hash(
-        [(item.relative, item.data) for item in candidate_files]
-    )
     if full_candidate:
         assert candidate_report_sha256 is not None
         _require_identity(
@@ -307,7 +304,24 @@ def _validated_review_inputs(
             candidate_report_sha256,
             "candidate_report_identity_mismatch",
         )
+        source_parser_order_version = _known_parser_order_version(report)
     else:
+        source_parser_order_version = PARSER_ORDER_VERSION
+    source_files = _snapshot(
+        source,
+        parser_order_version=source_parser_order_version,
+    )
+    _validate_candidate_path_mappings(source_files)
+    candidate_files = _snapshot(candidate)
+    inventory = _candidate_inventory(candidate)
+    identity = expected_identity or MVP2_PILOT_IDENTITY
+    source_hash = _tree_hash(
+        [(item.relative, item.data) for item in source_files]
+    )
+    candidate_hash = _tree_hash(
+        [(item.relative, item.data) for item in candidate_files]
+    )
+    if not full_candidate:
         _require_identity(
             source_hash,
             identity.source_localisation_sha256,
@@ -408,6 +422,19 @@ def _validated_review_inputs(
         review_scope=review_scope,
         candidate_report_schema_version=candidate_report_schema_version,
     )
+
+
+def _known_parser_order_version(report: dict[str, object]) -> str:
+    resumability = report.get("resumability")
+    if not isinstance(resumability, dict):
+        raise SafetyError("invalid_candidate_resumability")
+    version = resumability.get("parser_order_version")
+    if (
+        not isinstance(version, str)
+        or version not in SUPPORTED_PARSER_ORDER_VERSIONS
+    ):
+        raise SafetyError("invalid_candidate_resumability")
+    return version
 
 
 def _verify_review_inputs(inputs: ValidatedReviewInputs) -> None:
@@ -991,7 +1018,9 @@ def _validate_full_resumability(
         or workspace in {str(source), str(candidate)}
         or type(value["workspace_schema_version"]) is not int
         or value["workspace_schema_version"] != 2
-        or value["parser_order_version"] != "mvp4-lossless-parser-order-v1"
+        or not isinstance(value["parser_order_version"], str)
+        or value["parser_order_version"]
+        not in SUPPORTED_PARSER_ORDER_VERSIONS
         or not isinstance(value["prompt_profile_hash"], str)
         or SHA256_RE.fullmatch(value["prompt_profile_hash"]) is None
         or value["finalization_protocol"]
@@ -1174,7 +1203,7 @@ def _validate_file_alignment(
         raise SafetyError("candidate_parse_failure")
     if not source.is_english or candidate.language != "russian":
         raise SafetyError("candidate_header_mismatch")
-    if source.header_line != 0 or candidate.header_line != 0:
+    if source.header_line != candidate.header_line:
         raise SafetyError("candidate_header_mismatch")
     if (
         source.bom != candidate.bom
@@ -1182,10 +1211,10 @@ def _validate_file_alignment(
         or len(source.lines) != len(candidate.lines)
     ):
         raise SafetyError("candidate_line_alignment_mismatch")
-    expected_header = source.lines[0].replace(
+    expected_header = source.lines[source.header_line].replace(
         b"l_english:", b"l_russian:", 1
     )
-    if candidate.lines[0] != expected_header:
+    if candidate.lines[candidate.header_line] != expected_header:
         raise SafetyError("candidate_header_mismatch")
     if candidate.diagnostics != source.diagnostics:
         raise SafetyError("candidate_diagnostic_alignment_mismatch")
@@ -1202,7 +1231,7 @@ def _validate_file_alignment(
     for index, (source_line, candidate_line) in enumerate(
         zip(source.lines, candidate.lines)
     ):
-        if index == 0:
+        if index == source.header_line:
             continue
         source_entry = source_by_line.get(index)
         candidate_entry = candidate_by_line.get(index)

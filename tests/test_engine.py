@@ -755,7 +755,8 @@ def test_bounded_dry_run_with_skipped_file_is_partial(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "unsafe_source",
     [
-        b'# comment\nl_english:\n key:0 "text"\n',
+        b' key:0 "before"\nl_english:\n key:0 "text"\n',
+        b'arbitrary visible text\nl_english:\n key:0 "text"\n',
         b'l_english:\n key:0 "text"\nl_french:\n other:0 "texte"\n',
         'l_english:\n key:0 "x\ufeffy"\n'.encode(),
         b'l_english:\n key:0 "x\x00y"\n',
@@ -783,6 +784,65 @@ def test_unsafe_file_is_skipped_without_translation_or_candidate_bytes(
     assert FakeClient.calls == 0
     assert not (output / "localisation").exists()
     assert source_file.read_bytes() == unsafe_source
+
+
+def test_leading_comments_and_blank_lines_are_lossless_end_to_end(
+    tmp_path: Path,
+) -> None:
+    source_bytes = (
+        b"\xef\xbb\xbf# first comment\r\n"
+        b"\t\r\n"
+        b"  # second comment\r\n"
+        b"l_english: # exact tail\r\n"
+        b' duplicate.key:0 "First" # keep-first\r\n'
+        b' duplicate.key:1 "Second" # keep-second\r\n'
+    )
+    source = make_source(tmp_path, source_bytes)
+    output = tmp_path / "candidate"
+    EchoClient.calls = 0
+
+    inspect = inspect_mod(source)
+    report = translate_mod(
+        source,
+        output,
+        "synthetic:1",
+        client_factory=EchoClient,
+    )
+
+    candidate = output / "localisation/russian/demo_l_russian.yml"
+    assert inspect["counts"]["english_files"] == 1
+    assert inspect["counts"]["occurrences"] == 2
+    assert inspect["counts"]["skipped_files"] == 0
+    assert candidate.read_bytes() == source_bytes.replace(
+        b"l_english:", b"l_russian:", 1
+    )
+    assert report["counts"]["translated_occurrences"] == 2
+    assert report["counts"]["unchanged_accepted_occurrences"] == 2
+    assert EchoClient.calls == 2
+
+
+def test_duplicate_keys_with_distinct_values_keep_occurrence_identity(
+    tmp_path: Path,
+) -> None:
+    source = make_source(
+        tmp_path,
+        (
+            b"# prefix\n"
+            b"l_english:\n"
+            b' duplicate.key:0 "First value"\n'
+            b' duplicate.key:0 "Second value"\n'
+        ),
+    )
+
+    files = engine._snapshot(source)
+    _, plan, _, _ = engine._workspace_inputs(files)
+
+    assert [(item.sequence, item.relative_path, item.line_number, item.ordinal)
+            for item in plan] == [
+        (0, "localisation/english/demo_l_english.yml", 3, 0),
+        (1, "localisation/english/demo_l_english.yml", 4, 1),
+    ]
+    assert plan[0].source_span_sha256 != plan[1].source_span_sha256
 
 
 def test_qualified_replace_layer_is_discovered_rendered_and_lossless(

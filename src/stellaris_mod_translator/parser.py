@@ -23,6 +23,7 @@ _LANGUAGE_HEADER = re.compile(
 _LANGUAGE_HEADER_LIKE = re.compile(
     rb"^[ \t]*l_[A-Za-z][A-Za-z0-9_]*[ \t]*:(?![0-9])"
 )
+_SAFE_LEADING_HEADER_LINE = re.compile(rb"^[ \t]*(?:#.*)?$")
 _ENTRY = re.compile(
     rb'^(?P<indent>[ \t]*)(?P<key>[A-Za-z0-9_.-]+)(?P<precolon>[ \t]*):'
     rb'(?P<version>[0-9]*)(?P<space>[ \t]+)"'
@@ -234,8 +235,11 @@ def parse_localisation(
 
     language_line, language_header = language_headers[0]
     is_english = language_header.group("language") == b"english"
-    if is_english and language_line != 0:
-        raise ParseError("english_header_not_first_line")
+    if is_english:
+        for raw in lines[:language_line]:
+            body, _ = _split_ending(raw)
+            if _SAFE_LEADING_HEADER_LINE.fullmatch(body) is None:
+                raise ParseError("unsafe_content_before_english_header")
 
     language = language_header.group("language").decode("ascii")
     entries: list[Entry] = []

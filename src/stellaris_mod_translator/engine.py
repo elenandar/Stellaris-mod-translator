@@ -46,7 +46,8 @@ class SafetyError(RuntimeError):
     pass
 
 
-PARSER_ORDER_VERSION = "mvp4-lossless-parser-order-v1"
+LEGACY_PARSER_ORDER_VERSION = "mvp4-lossless-parser-order-v1"
+PARSER_ORDER_VERSION = "mvp7a-leading-header-parser-order-v2"
 
 
 @dataclass(frozen=True)
@@ -1844,7 +1845,16 @@ def _validated_output(source: Path, output: Path) -> Path:
     return resolved
 
 
-def _snapshot(source: Path) -> list[SourceFile]:
+def _snapshot(
+    source: Path,
+    *,
+    parser_order_version: str | None = None,
+) -> list[SourceFile]:
+    effective_parser_order_version = (
+        PARSER_ORDER_VERSION
+        if parser_order_version is None
+        else parser_order_version
+    )
     localisation = source / "localisation"
     if not localisation.exists():
         return []
@@ -1896,6 +1906,21 @@ def _snapshot(source: Path) -> list[SourceFile]:
             except ParseError as exc:
                 parsed = None
                 error = str(exc)
+                if (
+                    effective_parser_order_version
+                    == LEGACY_PARSER_ORDER_VERSION
+                    and error == "unsafe_content_before_english_header"
+                ):
+                    error = "english_header_not_first_line"
+            if (
+                effective_parser_order_version
+                == LEGACY_PARSER_ORDER_VERSION
+                and parsed is not None
+                and parsed.is_english
+                and parsed.header_line != 0
+            ):
+                parsed = None
+                error = "english_header_not_first_line"
             if (
                 parsed is not None
                 and parsed.is_english

@@ -1265,7 +1265,7 @@ def test_cli_emits_only_aggregate_allowed_fields(
     assert marker not in captured.err
 
 
-def test_legacy_parser_prompt_workspace_and_report_contracts_are_unchanged(
+def test_noncontext_prompt_workspace_and_report_contracts_remain_stable(
     tmp_path: Path,
 ) -> None:
     source = _source_mod(
@@ -1282,7 +1282,10 @@ def test_legacy_parser_prompt_workspace_and_report_contracts_are_unchanged(
         source, tmp_path / "unused", "synthetic:1", dry_run=True
     )
 
-    assert engine.PARSER_ORDER_VERSION == "mvp4-lossless-parser-order-v1"
+    assert (
+        engine.PARSER_ORDER_VERSION
+        == "mvp7a-leading-header-parser-order-v2"
+    )
     assert workspace.SCHEMA_VERSION == 2
     assert ollama.translation_prompt_profile_hash() == (
         "3e991aa062c660ad2286befc47fb80d571ec6de9bde0ef52512ff9cadc3ee6da"
