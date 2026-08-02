@@ -792,6 +792,35 @@ vm.runInThisContext(`
     }
 
 
+def test_review_json_limits_have_one_python_authority_and_exact_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert review.MAX_REVIEW_PACK_JSON_BYTES == 32 * 1024 * 1024
+    assert review.MAX_DECISIONS_BYTES == 32 * 1024 * 1024
+    pack = {
+        "schema_version": review.FULL_REVIEW_PACK_SCHEMA_VERSION,
+        "pack_fingerprint": "a" * 64,
+        "entry_order_sha256": "b" * 64,
+        "summary": {},
+        "entries": [],
+    }
+    exact_size = len(review._canonical_json(pack).encode("utf-8"))
+    monkeypatch.setattr(review, "MAX_REVIEW_PACK_JSON_BYTES", exact_size)
+    html = review._render_review_html(pack).decode("utf-8")
+    assert f"const MAX_REVIEW_PACK_JSON_BYTES={exact_size};" in html
+    assert (
+        f"const MAX_DECISIONS_BYTES={32 * 1024 * 1024};" in html
+    )
+
+    monkeypatch.setattr(
+        review,
+        "MAX_REVIEW_PACK_JSON_BYTES",
+        exact_size - 1,
+    )
+    with pytest.raises(SafetyError, match="review_pack_json_too_large"):
+        review._render_review_html(pack)
+
+
 def valid_decisions(pack: dict[str, object]) -> dict[str, object]:
     record = pack["entries"][0]
     return {

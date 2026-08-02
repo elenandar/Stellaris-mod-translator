@@ -902,12 +902,12 @@ def test_schema_v3_html_is_csp_safe_base64_and_offline(
         assert network_api not in html
 
 
-def test_schema_v3_full_pack_scales_to_about_1700_entries(
+def test_schema_v3_full_pack_scales_to_12871_entries(
     tmp_path: Path,
 ) -> None:
     source, candidate, pin = make_full_review_inputs(
         tmp_path,
-        entry_count=1700,
+        entry_count=12871,
     )
     output = tmp_path / "review"
     result = build_review_pack(
@@ -917,10 +917,12 @@ def test_schema_v3_full_pack_scales_to_about_1700_entries(
         candidate_report_sha256=pin,
     )
     pack = extract_pack(output)
-    assert result["counts"]["review_entries"] == 1700
-    assert result["counts"]["accepted_changed"] == 1700
-    assert len(pack["entries"]) == 1700
-    assert (output / "index.html").stat().st_size < 4 * 1024 * 1024
+    assert result["counts"]["review_entries"] == 12871
+    assert result["counts"]["accepted_changed"] == 12871
+    assert len(pack["entries"]) == 12871
+    assert len(review._canonical_json(pack).encode()) <= (
+        review.MAX_REVIEW_PACK_JSON_BYTES
+    )
 
 
 def test_full_ui_sparse_storage_exports_imports_keyboard_and_dom_window(
@@ -930,7 +932,7 @@ def test_full_ui_sparse_storage_exports_imports_keyboard_and_dom_window(
     assert node is not None, "Node.js is required for JavaScript regression"
     source, candidate, pin = make_full_review_inputs(
         tmp_path,
-        entry_count=1678,
+        entry_count=12871,
     )
     output = tmp_path / "review"
     build_review_pack(
@@ -977,6 +979,7 @@ def test_full_ui_sparse_storage_exports_imports_keyboard_and_dom_window(
     runtime_pack["entries"][6]["warnings"] = [
         "leading_boundary_whitespace_changed"
     ]
+    runtime_pack["entries"][1200]["key"] = "unique_search_key_sentinel"
     encoded_pack = base64.b64encode(
         json.dumps(
             runtime_pack,
@@ -1114,6 +1117,7 @@ globalThis.localStorage = {
   values: new Map(),
   setCounts: new Map(),
   fail: false,
+  removeFail: false,
   getItem(key) {
     if (this.fail) throw new Error("synthetic quota");
     return this.values.has(key) ? this.values.get(key) : null;
@@ -1125,6 +1129,11 @@ globalThis.localStorage = {
   },
   removeItem(key) {
     if (this.fail) throw new Error("synthetic quota");
+    if (this.removeFail) {
+      const error = new Error("synthetic remove restriction");
+      error.name = "SecurityError";
+      throw error;
+    }
     this.values.delete(key);
   }
 };
@@ -1331,9 +1340,9 @@ async function fireDocument(type, event) {
     )
   );
   const progressCountersImmediate = vm.runInThisContext(
-    'el("progressText").textContent==="100 / 1678 проверено"'
+    'el("progressText").textContent==="100 / 12871 проверено"'
     + '&&el("progressDetails").textContent.includes('
-    + '"Непроверенные: 1578")'
+    + '"Непроверенные: 12771")'
     + '&&el("progressDetails").textContent.includes('
     + '"невалидные edits: 0")'
     + '&&el("progressDetails").textContent.includes('
@@ -1341,10 +1350,11 @@ async function fireDocument(type, event) {
     + '&&el("selectedCount").textContent==="Выбрано на странице: 0"'
   );
   const undoStoredForExactPack = vm.runInThisContext(
-    "JSON.parse(localStorage.getItem(storageKey)).last_batch_undo"
-    + ".pack_fingerprint===pack.pack_fingerprint"
-    + "&&JSON.parse(localStorage.getItem(storageKey)).last_batch_undo"
-    + ".entries.length===100"
+    "(()=>{const saved=JSON.parse(localStorage.getItem(storageKey));"
+    + "return saved.storage_schema_version===3"
+    + "&&saved.pack_fingerprint===pack.pack_fingerprint"
+    + "&&saved.entry_order_sha256===pack.entry_order_sha256"
+    + "&&saved.last_batch_undo.records.length===100})()"
   );
   const validUndoDocument = vm.runInThisContext(
     "JSON.stringify(undoDocument())"
@@ -1407,10 +1417,99 @@ async function fireDocument(type, event) {
   const reviewedCheckboxDisabled = (
     elements.get("entryList").children[0].children[0].disabled === true
   );
+  vm.runInThisContext(`
+    {
+      const record=pack.entries[1];
+      const item=defaults(record);item.note="pending clear sentinel";
+      updateDraft(record,item);
+      selected=new Set([pack.entries[2].id]);
+      currentId=record.id;
+      el("decisionFilter").value="unreviewed";
+      applyFilters(false,true)
+    }
+  `);
+  function captureClearParts() {
+    return vm.runInThisContext(`({
+      stateBytes:JSON.stringify([...state.entries()]),
+      sparseBytes:JSON.stringify(sparseDocument()),
+      draftsBytes:JSON.stringify([...drafts.entries()].map(
+        ([id,draft])=>[id,{
+          item:draft.item,valid:draft.valid,error:draft.error
+        }]
+      )),
+      undoBytes:JSON.stringify(undoDocument()),
+      selectedBytes:JSON.stringify([...selected]),
+      currentId,
+      filtersBytes:JSON.stringify({
+        search:el("search").value,
+        attention:el("attentionFilter").checked,
+        file:el("fileFilter").value,
+        status:el("statusFilter").value,
+        decision:el("decisionFilter").value,
+        warning:el("warningFilter").value,
+        repeat:el("repeatFilter").value
+      }),
+      visibleBytes:JSON.stringify(visible.map(record=>record.id)),
+      pageIndex,
+      progressBytes:JSON.stringify({
+        text:el("progressText").textContent,
+        width:el("progressBar").style.width,
+        details:el("progressDetails").textContent,
+        selected:el("selectedCount").textContent,
+        result:el("resultCount").textContent
+      }),
+      pendingSave:saveTimer!==null
+    })`);
+  }
+  const storageKeyValue = vm.runInThisContext("storageKey");
+  const clearFailureStorageBefore = localStorage.getItem(storageKeyValue);
+  const clearFailureBefore = captureClearParts();
+  localStorage.removeFail = true;
   await elements.get("clear").fire("click");
-  const clearResetsUndo = vm.runInThisContext(
-    "state.size===0&&undoState===null&&selected.size===0"
-    + "&&localStorage.getItem(storageKey)===null"
+  localStorage.removeFail = false;
+  const clearFailureAfter = captureClearParts();
+  const clearFailureStorageUnchanged = (
+    clearFailureStorageBefore === localStorage.getItem(storageKeyValue)
+  );
+  const clearFailureMemoryUnchanged = (
+    clearFailureBefore.stateBytes === clearFailureAfter.stateBytes
+    && clearFailureBefore.sparseBytes === clearFailureAfter.sparseBytes
+    && clearFailureBefore.draftsBytes === clearFailureAfter.draftsBytes
+    && clearFailureBefore.currentId === clearFailureAfter.currentId
+    && clearFailureBefore.pendingSave === true
+    && clearFailureAfter.pendingSave === true
+  );
+  const clearFailureUndoSelectionUnchanged = (
+    clearFailureBefore.undoBytes === clearFailureAfter.undoBytes
+    && clearFailureBefore.selectedBytes === clearFailureAfter.selectedBytes
+  );
+  const clearRemoveFailureAtomic = (
+    clearFailureStorageUnchanged
+    && clearFailureMemoryUnchanged
+    && clearFailureUndoSelectionUnchanged
+    && clearFailureBefore.filtersBytes === clearFailureAfter.filtersBytes
+    && clearFailureBefore.visibleBytes === clearFailureAfter.visibleBytes
+    && clearFailureBefore.pageIndex === clearFailureAfter.pageIndex
+    && clearFailureBefore.progressBytes === clearFailureAfter.progressBytes
+    && elements.get("storageWarning").textContent.includes(
+      "Решения и интерфейс сохранены без изменений"
+    )
+    && elements.get("error").textContent.startsWith("Очистка отклонена:")
+  );
+  await elements.get("clear").fire("click");
+  const clearSuccess = vm.runInThisContext(
+    "state.size===0&&drafts.size===0&&undoState===null&&selected.size===0"
+    + "&&saveTimer===null&&localStorage.getItem(storageKey)===null"
+    + '&&el("decisionFilter").value==="unreviewed"'
+    + "&&visible.length===pack.entries.length"
+    + '&&el("progressText").textContent==="0 / 12871 проверено"'
+    + '&&el("selectedCount").textContent==="Выбрано на странице: 0"'
+    + '&&el("storageWarning").classList.contains("hidden")'
+    + '&&el("error").textContent===""'
+  );
+  await new Promise(resolve => setTimeout(resolve, 400));
+  const pendingSaveAfterClearAbsent = vm.runInThisContext(
+    "saveTimer===null&&localStorage.getItem(storageKey)===null"
   );
   vm.runInThisContext(`
     state=new Map();drafts.clear();selected.clear();undoState=null;
@@ -1443,7 +1542,12 @@ async function fireDocument(type, event) {
   );
   const legacyV2UnsortedUndoCompatible = vm.runInThisContext(`
     (()=>{
-      const legacy=JSON.parse(localStorage.getItem(storageKey));
+      const legacy={
+        storage_schema_version:2,
+        pack_fingerprint:pack.pack_fingerprint,
+        changes:sparseDocument().changes,
+        last_batch_undo:undoDocument()
+      };
       const entry=legacy.last_batch_undo.entries.find(
         item=>item.occurrence_id===pack.entries[0].id
       );
@@ -1453,8 +1557,78 @@ async function fireDocument(type, event) {
         JSON.parse(JSON.stringify(legacy))
       );
       return restored.undo!==null&&restored.undoDiscarded===false
+        &&restored.migrated===true
         &&JSON.stringify(restored.state.get(pack.entries[0].id).tags)
           ===JSON.stringify(["lore","terminology"])
+    })()
+  `);
+  const legacyV2ReverseUndoMigratesCanonically = vm.runInThisContext(`
+    (()=>{
+      const records=pack.entries.slice(0,2);
+      const before=records.map(record=>defaults(record));
+      const after=before.map((item,index)=>{
+        const result=cloneItem(item);result.decision="accept";
+        result.edited_segments=records[index].candidate_segments.slice();
+        return result
+      });
+      const legacy={
+        storage_schema_version:2,
+        pack_fingerprint:pack.pack_fingerprint,
+        changes:records.map((record,index)=>decisionRecord(record,after[index])),
+        last_batch_undo:{
+          undo_schema_version:1,
+          pack_fingerprint:pack.pack_fingerprint,
+          decision:"accept",
+          entries:[1,0].map(index=>({
+            occurrence_id:records[index].id,
+            before:cloneItem(before[index]),
+            after:cloneItem(after[index])
+          }))
+        }
+      };
+      const restored=validateStorageDocument(legacy);
+      const compact=storageDocument(restored.state,restored.undo);
+      const reloaded=validateStorageDocument(
+        JSON.parse(JSON.stringify(compact))
+      );
+      return restored.migrated===true&&restored.undoDiscarded===false
+        &&compact.last_batch_undo.records[0][0]===0
+        &&compact.last_batch_undo.records[1][0]===1
+        &&reloaded.undo!==null&&reloaded.undo.entries.length===2
+    })()
+  `);
+  const corruptLegacyUndoSalvagesDecisions = vm.runInThisContext(`
+    (()=>{
+      const records=pack.entries.slice(0,2);
+      const after=records.map(record=>{
+        const item=defaults(record);item.decision="accept";return item
+      });
+      const legacy={
+        storage_schema_version:2,
+        pack_fingerprint:pack.pack_fingerprint,
+        changes:records.map((record,index)=>decisionRecord(record,after[index])),
+        last_batch_undo:{
+          undo_schema_version:1,
+          pack_fingerprint:pack.pack_fingerprint,
+          decision:"accept",
+          entries:[{
+            occurrence_id:"0".repeat(64),
+            before:cloneItem(defaults(records[0])),
+            after:cloneItem(after[0])
+          }]
+        }
+      };
+      const restored=validateStorageDocument(legacy);
+      const migrated=storageDocument(restored.state,restored.undo);
+      const reloaded=validateStorageDocument(
+        JSON.parse(JSON.stringify(migrated))
+      );
+      return restored.migrated===true&&restored.undo===null
+        &&restored.undoDiscarded===true&&restored.state.size===2
+        &&migrated.storage_schema_version===3
+        &&migrated.last_batch_undo===null
+        &&reloaded.state.size===2&&reloaded.undo===null
+        &&records.every(record=>reloaded.state.get(record.id).decision==="accept")
     })()
   `);
   const repeatedSaveReloadUndo = vm.runInThisContext(`
@@ -1527,7 +1701,10 @@ async function fireDocument(type, event) {
         pack_fingerprint:pack.pack_fingerprint,
         changes:[item]
       });
+      const migrated=storageDocument(restored.state,restored.undo);
       return restored.undo===null&&restored.undoDiscarded===false
+        &&restored.migrated===true
+        &&validateStorageDocument(migrated).migrated===false
         &&JSON.stringify(restored.state.get(record.id).tags)
           ===JSON.stringify(["lore","terminology"])
     })()
@@ -1554,6 +1731,56 @@ async function fireDocument(type, event) {
       const draft=exportDocument(new Map(),false,false);
       draft.decisions[0].tags=["unknown"];
       try{validateDocument(draft);return false}catch(error){return true}
+    })()
+  `);
+  const storageV3Validation = vm.runInThisContext(`
+    (()=>{
+      const value=new Map();
+      const edit=defaults(pack.entries[0]);
+      edit.decision="edit";edit.edited_segments=["Юникод 😀"];
+      value.set(pack.entries[0].id,edit);
+      const noted=defaults(pack.entries[1]);
+      noted.decision="accept";noted.note="compact note";
+      value.set(pack.entries[1].id,noted);
+      const tagged=defaults(pack.entries[2]);
+      tagged.decision="reject";tagged.tags=["lore","terminology"];
+      tagged.glossary_candidate=true;
+      value.set(pack.entries[2].id,tagged);
+      const envelope=storageDocument(value,null);
+      const restored=validateStorageDocument(envelope);
+      const beforeState=JSON.stringify(sparseDocument());
+      const beforeStorage=localStorage.getItem(storageKey);
+      const beforeUndo=JSON.stringify(undoDocument());
+      const rejects=documentValue=>{
+        try{validateStorageDocument(documentValue);return false}
+        catch(error){return JSON.stringify(sparseDocument())===beforeState
+          &&localStorage.getItem(storageKey)===beforeStorage
+          &&JSON.stringify(undoDocument())===beforeUndo}
+      };
+      const mutate=callback=>{const clone=JSON.parse(JSON.stringify(envelope));callback(clone);return clone};
+      const cases=[
+        mutate(clone=>{clone.records.at(-1)[2].unknown=true}),
+        mutate(clone=>{clone.records.splice(1,0,JSON.parse(JSON.stringify(clone.records[0])))}),
+        mutate(clone=>{clone.records.at(-1)[1]="0".repeat(64)}),
+        mutate(clone=>{clone.records=clone.records.filter(record=>record[0]!==0)}),
+        mutate(clone=>{clone.records.reverse()}),
+        mutate(clone=>{clone.pack_fingerprint="0".repeat(64)}),
+        mutate(clone=>{clone.entry_order_sha256="0".repeat(64)}),
+        mutate(clone=>{clone.decision_states=clone.decision_states.slice(1)}),
+        mutate(clone=>{const left=clone.records[0][1];clone.records[0][1]=clone.records[1][1];clone.records[1][1]=left})
+      ];
+      return {
+        roundTrip:restored.state.size===3
+          &&restored.state.get(pack.entries[0].id).edited_segments[0]==="Юникод 😀"
+          &&restored.state.get(pack.entries[1].id).note==="compact note"
+          &&JSON.stringify(storageDocument(restored.state,restored.undo))===JSON.stringify(envelope),
+        compact:envelope.decision_states.length===pack.entries.length
+          &&envelope.records.length===3
+          &&envelope.records[0][2].edited_translation==="Юникод 😀"
+          &&!Object.hasOwn(envelope.records[1][2],"edited_translation")
+          &&envelope.records[1][2].note==="compact note",
+        invalidAtomic:cases.every(rejects)
+      }
     })()
   `);
   const persistedBeforeStorageFailure = localStorage.getItem(
@@ -1626,13 +1853,12 @@ async function fireDocument(type, event) {
   const corruptedUndoEnvelope = JSON.parse(
     JSON.stringify(coherentBatchEnvelope)
   );
-  corruptedUndoEnvelope.last_batch_undo.entries[0].after.note =
-    "stale undo sentinel";
-  const staleUndoSalvagesDecisions = vm.runInThisContext(
-    "(()=>{const restored=validateStorageDocument("
-    + JSON.stringify(corruptedUndoEnvelope)
-    + ");return restored.state.get(pack.entries[0].id).decision==='accept'"
-    + "&&restored.undo===null&&restored.undoDiscarded===true})()"
+  corruptedUndoEnvelope.last_batch_undo.records[0][1] = "0".repeat(64);
+  const malformedUndoRejectedAtomically = vm.runInThisContext(
+    "(()=>{const before=JSON.stringify(storageDocument());try{"
+    + "validateStorageDocument(" + JSON.stringify(corruptedUndoEnvelope)
+    + ");return false}catch(error){return JSON.stringify(storageDocument())"
+    + "===before}})()"
   );
   vm.runInThisContext("setDecision('reject',false)");
   const sameBatchDecisionMutationReloads = vm.runInThisContext(
@@ -1732,6 +1958,26 @@ async function fireDocument(type, event) {
   vm.runInThisContext("downloadDocument(true)");
   const finalBytes = Buffer.from(await globalThis.capturedBlob.arrayBuffer());
   const finalDocument = JSON.parse(finalBytes.toString("utf8"));
+  const mixedFinalExportExact = vm.runInThisContext(`
+    (()=>{
+      const mixed=new Map(pack.entries.map(record=>{
+        const item=defaults(record);item.decision="accept";
+        return [record.id,item]
+      }));
+      mixed.get(pack.entries[1].id).decision="reject";
+      const edited=mixed.get(pack.entries[1000].id);
+      edited.decision="edit";
+      edited.edited_segments=["Юникод 😀 "," хвост"];
+      const documentValue=exportDocument(mixed,true,true);
+      const editRecord=documentValue.decisions[1000];
+      const encoded=documentBytes(documentValue);
+      return documentValue.decisions[0].decision==="accept"
+        &&documentValue.decisions[1].decision==="reject"
+        &&editRecord.decision==="edit"
+        &&editRecord.edited_translation==="Юникод 😀 $NAME$ хвост"
+        &&encoded.at(-1)===10&&encoded.at(-2)!==10
+    })()
+  `);
   const reorderedDocument = {
     ...finalDocument,
     decisions: finalDocument.decisions.slice().reverse()
@@ -1766,6 +2012,33 @@ async function fireDocument(type, event) {
     "undoState===null&&selected.size===0"
     + "&&JSON.parse(localStorage.getItem(storageKey)).last_batch_undo===null"
   );
+  const reloadedFinalBytes = vm.runInThisContext(`
+    (()=>{
+      const restored=validateStorageDocument(JSON.parse(
+        localStorage.getItem(storageKey)
+      ));
+      return documentBytes(exportDocument(restored.state,true,true))
+    })()
+  `);
+  const finalExportStableAfterStorageV3Reload = Buffer.from(
+    reloadedFinalBytes
+  ).equals(finalBytes);
+  const maxDecisionBytes = vm.runInThisContext("MAX_DECISIONS_BYTES");
+  const finalTextAtLimitBase = finalBytes.toString("utf8");
+  const finalTextAtLimit = finalTextAtLimitBase + " ".repeat(
+    maxDecisionBytes - Buffer.byteLength(finalTextAtLimitBase)
+  );
+  let exactLimitRead = false;
+  elements.get("importFile").files = [{
+    size: maxDecisionBytes,
+    text: async () => { exactLimitRead = true; return finalTextAtLimit; }
+  }];
+  await elements.get("importFile").fire(
+    "change", {target: elements.get("importFile")}
+  );
+  const exactDecisionLimitAccepted = exactLimitRead && vm.runInThisContext(
+    "state.size===pack.entries.length"
+  );
   const beforeInvalidImport = vm.runInThisContext(
     "JSON.stringify(sparseDocument())"
   );
@@ -1783,8 +2056,8 @@ async function fireDocument(type, event) {
   const atomicInvalidImport = beforeInvalidImport === vm.runInThisContext(
     "JSON.stringify(sparseDocument())"
   );
-  const invalidImportClearsSelection = vm.runInThisContext(
-    "selected.size===0"
+  const invalidImportPreservesSelection = vm.runInThisContext(
+    "selected.size===1&&selected.has(pack.entries[0].id)"
   );
   vm.runInThisContext(`
     el("search").value="";
@@ -1829,7 +2102,8 @@ async function fireDocument(type, event) {
         path:el("path").textContent,
         decision:el("decision").value,
         emptyHidden:el("empty").classList.contains("hidden"),
-        reviewHidden:el("review").classList.contains("hidden")
+        reviewHidden:el("review").classList.contains("hidden"),
+        selected:[...selected]
       })
     })`);
   }
@@ -1853,12 +2127,15 @@ async function fireDocument(type, event) {
   };
   const extraDocument = cloneFinalDocument();
   extraDocument.decisions.push({...extraDocument.decisions[0]});
+  const malformedLastDocument = cloneFinalDocument();
+  malformedLastDocument.decisions.at(-1).unknown_field = true;
   const invalidImportDocuments = [
     ["missing_occurrence", partialOneDocument],
     ["partial_document", partialManyDocument],
     ["duplicate_occurrence", duplicateDocument],
     ["unknown_occurrence", unknownDocument],
-    ["extra_entry", extraDocument]
+    ["extra_entry", extraDocument],
+    ["malformed_last_record", malformedLastDocument]
   ];
   const completeImportSnapshot = captureImportParts();
   const invalidImportResults = [];
@@ -1893,11 +2170,30 @@ async function fireDocument(type, event) {
       ([key, value]) => key === "name" || value === true
     )
   );
+  const beforeQuotaImport = captureImportParts();
+  localStorage.fail = true;
+  elements.get("importFile").files = [{
+    size: finalBytes.length,
+    text: async () => finalBytes.toString("utf8")
+  }];
+  await elements.get("importFile").fire(
+    "change", {target: elements.get("importFile")}
+  );
+  localStorage.fail = false;
+  const afterQuotaImport = captureImportParts();
+  const quotaImportFailureAtomic = (
+    beforeQuotaImport.decisionBytes === afterQuotaImport.decisionBytes
+    && beforeQuotaImport.sparseBytes === afterQuotaImport.sparseBytes
+    && beforeQuotaImport.storageBytes === afterQuotaImport.storageBytes
+    && beforeQuotaImport.draftsBytes === afterQuotaImport.draftsBytes
+    && beforeQuotaImport.uiBytes === afterQuotaImport.uiBytes
+    && elements.get("storageWarning").textContent.includes("checkpoint")
+  );
   const partialImportResult = invalidImportResults.find(
     result => result.name === "missing_occurrence"
   );
-  const partialImportState1678Preserved = (
-    finalDocument.decisions.length === 1678
+  const partialImportState12871Preserved = (
+    finalDocument.decisions.length === 12871
     && partialImportResult.stateUnchanged
     && partialImportResult.sparseUnchanged
   );
@@ -1906,7 +2202,7 @@ async function fireDocument(type, event) {
   const partialImportCardFiltersPreserved = partialImportResult.uiUnchanged;
   let oversizedRead = false;
   elements.get("importFile").files = [{
-    size: 4 * 1024 * 1024 + 1,
+    size: vm.runInThisContext("MAX_DECISIONS_BYTES") + 1,
     text: async () => { oversizedRead = true; return "{}"; }
   }];
   await elements.get("importFile").fire(
@@ -1969,7 +2265,7 @@ async function fireDocument(type, event) {
     "fullTranslation(byId.get(currentId),currentState(byId.get(currentId)))"
   );
   const validEditCounters = vm.runInThisContext(
-    'el("progressText").textContent==="1678 / 1678 проверено"'
+    'el("progressText").textContent==="12871 / 12871 проверено"'
     + '&&el("progressDetails").textContent.includes("Непроверенные: 0")'
     + '&&el("progressDetails").textContent.includes("невалидные edits: 0")'
   );
@@ -1980,7 +2276,7 @@ async function fireDocument(type, event) {
     "drafts.has(currentId)&&drafts.get(currentId).valid===false"
   );
   const invalidEditCounters = vm.runInThisContext(
-    'el("progressText").textContent==="1677 / 1678 проверено"'
+    'el("progressText").textContent==="12870 / 12871 проверено"'
     + '&&el("progressDetails").textContent.includes("Непроверенные: 0")'
     + '&&el("progressDetails").textContent.includes("невалидные edits: 1")'
     + '&&el("progressDetails").textContent.includes("без валидного решения: 1")'
@@ -2047,7 +2343,7 @@ async function fireDocument(type, event) {
     && !JSON.stringify(tagDraftAfterRepair).includes("$INVALID_BYTES")
   );
   const repairedEditCounters = vm.runInThisContext(
-    'el("progressText").textContent==="1678 / 1678 проверено"'
+    'el("progressText").textContent==="12871 / 12871 проверено"'
     + '&&el("progressDetails").textContent.includes("Непроверенные: 0")'
     + '&&el("progressDetails").textContent.includes("невалидные edits: 0")'
   );
@@ -2358,10 +2654,17 @@ async function fireDocument(type, event) {
     undoConsumed,
     batchRejectExact,
     reviewedCheckboxDisabled,
-    clearResetsUndo,
+    clearRemoveFailureAtomic,
+    clearFailureStorageUnchanged,
+    clearFailureMemoryUnchanged,
+    clearFailureUndoSelectionUnchanged,
+    clearSuccess,
+    pendingSaveAfterClearAbsent,
     multiTagCanonicalization,
     batchReloadUndo,
     legacyV2UnsortedUndoCompatible,
+    legacyV2ReverseUndoMigratesCanonically,
+    corruptLegacyUndoSalvagesDecisions,
     repeatedSaveReloadUndo,
     exactMultiTagMetadataRestoration,
     affectedTagMutationClearsUndo,
@@ -2370,18 +2673,22 @@ async function fireDocument(type, event) {
     legacyDraftV1UnsortedTags,
     duplicateTagRejected,
     unknownTagRejected,
+    storageV3RoundTrip:storageV3Validation.roundTrip,
+    storageV3Compact:storageV3Validation.compact,
+    storageV3InvalidAtomic:storageV3Validation.invalidAtomic,
     storageFailureKeepsMemoryExport,
     storageEnvelopeFailureCoherent,
     newBatchReplacesUndo,
     latestBatchOnlyUndo,
-    staleUndoSalvagesDecisions,
+    malformedUndoRejectedAtomically,
     sameBatchDecisionMutationReloads,
     sameBatchMetadataMutationReloads,
     invalidDraftCheckboxDisabled,
     invalidDraftNotSelected,
     textWasDebounced,
-    sparseAfterBlurChanges: sparseAfterBlur.changes.length,
-    sparseAfterDecisionChanges: sparseAfterDecision.changes.length,
+    storageSchemaAfterBlur: sparseAfterBlur.storage_schema_version,
+    storageAfterBlurRecords: sparseAfterBlur.records.length,
+    storageAfterDecisionRecords: sparseAfterDecision.records.length,
     reloadDecision,
     memorySurvivedStorageFailure,
     storageWarningVisible,
@@ -2391,14 +2698,18 @@ async function fireDocument(type, event) {
     finalEnabled,
     finalDecisionCount: finalDocument.decisions.length,
     finalExactlyOneLf: finalBytes.at(-1) === 10 && finalBytes.at(-2) !== 10,
+    mixedFinalExportExact,
     importedCount,
     reorderedFullImportAccepted,
     legacyImportResetsBatchState,
+    finalExportStableAfterStorageV3Reload,
+    exactDecisionLimitAccepted,
     atomicInvalidImport,
-    invalidImportClearsSelection,
+    invalidImportPreservesSelection,
     invalidImportCaseCount: invalidImportResults.length,
     completeImportFailuresAtomic,
-    partialImportState1678Preserved,
+    quotaImportFailureAtomic,
+    partialImportState12871Preserved,
     partialImportDraftsPreserved,
     partialImportStoragePreserved,
     partialImportCardFiltersPreserved,
@@ -2488,10 +2799,17 @@ async function fireDocument(type, event) {
         "undoConsumed": True,
         "batchRejectExact": True,
         "reviewedCheckboxDisabled": True,
-        "clearResetsUndo": True,
+        "clearRemoveFailureAtomic": True,
+        "clearFailureStorageUnchanged": True,
+        "clearFailureMemoryUnchanged": True,
+        "clearFailureUndoSelectionUnchanged": True,
+        "clearSuccess": True,
+        "pendingSaveAfterClearAbsent": True,
         "multiTagCanonicalization": True,
         "batchReloadUndo": True,
         "legacyV2UnsortedUndoCompatible": True,
+        "legacyV2ReverseUndoMigratesCanonically": True,
+        "corruptLegacyUndoSalvagesDecisions": True,
         "repeatedSaveReloadUndo": True,
         "exactMultiTagMetadataRestoration": True,
         "affectedTagMutationClearsUndo": True,
@@ -2500,35 +2818,43 @@ async function fireDocument(type, event) {
         "legacyDraftV1UnsortedTags": True,
         "duplicateTagRejected": True,
         "unknownTagRejected": True,
+        "storageV3RoundTrip": True,
+        "storageV3Compact": True,
+        "storageV3InvalidAtomic": True,
         "storageFailureKeepsMemoryExport": True,
         "storageEnvelopeFailureCoherent": True,
         "newBatchReplacesUndo": True,
         "latestBatchOnlyUndo": True,
-        "staleUndoSalvagesDecisions": True,
+        "malformedUndoRejectedAtomically": True,
         "sameBatchDecisionMutationReloads": True,
         "sameBatchMetadataMutationReloads": True,
         "invalidDraftCheckboxDisabled": True,
         "invalidDraftNotSelected": True,
         "textWasDebounced": True,
-        "sparseAfterBlurChanges": 1,
-        "sparseAfterDecisionChanges": 1,
+        "storageSchemaAfterBlur": 3,
+        "storageAfterBlurRecords": 1,
+        "storageAfterDecisionRecords": 1,
         "reloadDecision": "accept",
         "memorySurvivedStorageFailure": True,
         "storageWarningVisible": True,
-        "draftDecisionCount": 1678,
+        "draftDecisionCount": 12871,
         "draftExactlyOneLf": True,
         "incompleteFinalDisabled": True,
         "finalEnabled": True,
-        "finalDecisionCount": 1678,
+        "finalDecisionCount": 12871,
         "finalExactlyOneLf": True,
-        "importedCount": 1678,
+        "mixedFinalExportExact": True,
+        "importedCount": 12871,
         "reorderedFullImportAccepted": True,
         "legacyImportResetsBatchState": True,
+        "finalExportStableAfterStorageV3Reload": True,
+        "exactDecisionLimitAccepted": True,
         "atomicInvalidImport": True,
-        "invalidImportClearsSelection": True,
-        "invalidImportCaseCount": 5,
+        "invalidImportPreservesSelection": True,
+        "invalidImportCaseCount": 6,
         "completeImportFailuresAtomic": True,
-        "partialImportState1678Preserved": True,
+        "quotaImportFailureAtomic": True,
+        "partialImportState12871Preserved": True,
         "partialImportDraftsPreserved": True,
         "partialImportStoragePreserved": True,
         "partialImportCardFiltersPreserved": True,
@@ -2542,7 +2868,7 @@ async function fireDocument(type, event) {
         "validEditCounters": True,
         "invalidDraftPresent": True,
         "invalidEditCounters": True,
-        "invalidEditDraftDecisionCount": 1678,
+        "invalidEditDraftDecisionCount": 12871,
         "invalidEditDraftUsesLastValid": True,
         "invalidEditDraftExcludesInvalidBytes": True,
         "invalidEditDraftExactlyOneLf": True,
@@ -2556,9 +2882,9 @@ async function fireDocument(type, event) {
         "glossarySavedDuringInvalidDraft": True,
         "glossaryPersistedDuringInvalidDraft": True,
         "glossarySurvivesInvalidRepair": True,
-        "filteredAcceptRemainingBefore": 1677,
+        "filteredAcceptRemainingBefore": 12870,
         "filteredEditAcceptAdvance": True,
-        "filteredRejectRemainingBefore": 1677,
+        "filteredRejectRemainingBefore": 12870,
         "filteredEditRejectAdvance": True,
         "filteredEditNoEndWrap": True,
         "decisionFilterCaseCount": 12,

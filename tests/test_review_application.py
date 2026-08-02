@@ -5,10 +5,11 @@ import json
 import os
 from pathlib import Path
 import socket
+import sys
 
 import pytest
 
-from stellaris_mod_translator import review_application
+from stellaris_mod_translator import review, review_application
 from stellaris_mod_translator.engine import (
     SafetyError,
     _snapshot,
@@ -512,6 +513,48 @@ def test_decisions_json_is_strict(
         )
 
 
+def test_deeply_nested_malformed_decisions_json_is_safe_rejection(
+    tmp_path: Path,
+) -> None:
+    source, candidate, identity = make_apply_inputs(tmp_path)
+    depth = sys.getrecursionlimit() + 100
+    raw = (
+        b'{"schema_version":'
+        + (b"[" * depth)
+        + b"0"
+        + (b"]" * (depth - 1))
+        + b"}"
+    )
+    decisions = tmp_path / "decisions.json"
+    decisions.write_bytes(raw)
+    source_before = {
+        item.relative: item.data for item in _snapshot(source.resolve())
+    }
+    candidate_before = {
+        item.relative: item.data for item in _snapshot(candidate.resolve())
+    }
+    output = tmp_path / "reviewed"
+
+    with pytest.raises(SafetyError, match="^invalid_decisions_json$"):
+        apply_review_decisions(
+            source,
+            candidate,
+            decisions,
+            output,
+            expected_identity=identity,
+        )
+
+    assert not output.exists()
+    assert not list(tmp_path.glob(".reviewed.tmp-*"))
+    assert {
+        item.relative: item.data for item in _snapshot(source.resolve())
+    } == source_before
+    assert {
+        item.relative: item.data for item in _snapshot(candidate.resolve())
+    } == candidate_before
+    assert decisions.read_bytes() == raw
+
+
 def test_decisions_size_is_bounded(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -530,6 +573,44 @@ def test_decisions_size_is_bounded(
             tmp_path / "reviewed",
             expected_identity=identity,
         )
+
+
+def test_decisions_exact_32_mib_boundary_is_checked_before_parse(
+    tmp_path: Path,
+) -> None:
+    assert review.MAX_DECISIONS_BYTES == 32 * 1024 * 1024
+    assert review_application.MAX_DECISIONS_BYTES == review.MAX_DECISIONS_BYTES
+    source, candidate, identity = make_apply_inputs(tmp_path)
+    payload = make_decisions_payload(source, candidate, identity)
+    raw = (
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
+        + "\n"
+    ).encode("utf-8")
+    padding = b" " * (review.MAX_DECISIONS_BYTES - len(raw))
+    exact = tmp_path / "decisions-exact.json"
+    exact.write_bytes(raw + padding)
+
+    report = apply_review_decisions(
+        source,
+        candidate,
+        exact,
+        tmp_path / "reviewed-exact",
+        expected_identity=identity,
+    )
+    assert report["counts"]["total_decisions"] == identity.review_entries
+
+    oversized = tmp_path / "decisions-oversized.json"
+    oversized.write_bytes(raw + padding + b" ")
+    output = tmp_path / "reviewed-oversized"
+    with pytest.raises(SafetyError, match="decisions_too_large"):
+        apply_review_decisions(
+            source,
+            candidate,
+            oversized,
+            output,
+            expected_identity=identity,
+        )
+    assert not output.exists()
 
 
 def test_existing_output_and_publication_race_do_not_clobber(

@@ -154,13 +154,18 @@ main{max-width:1500px;margin:auto;padding:18px}.top{display:flex;gap:12px;align-
 <script id="review-data" type="application/octet-stream">__PACK_DATA_BASE64__</script>
 <script>
 "use strict";
-const MAX_JSON_BYTES=4*1024*1024;
+const MAX_REVIEW_PACK_JSON_BYTES=__MAX_REVIEW_PACK_JSON_BYTES__;
+const MAX_DECISIONS_BYTES=__MAX_DECISIONS_BYTES__;
 const PAGE_SIZE=100;
 const TEXT_DEBOUNCE_MS=350;
 const raw=document.getElementById("review-data").textContent.trim();
 const bytes=Uint8Array.from(atob(raw),value=>value.charCodeAt(0));
+if(bytes.byteLength>MAX_REVIEW_PACK_JSON_BYTES)throw new Error("review pack JSON превышает лимит 32 MiB");
 const pack=JSON.parse(new TextDecoder().decode(bytes));
+if(typeof pack.entry_order_sha256!=="string"||!/^[0-9a-f]{64}$/u.test(pack.entry_order_sha256))throw new Error("invalid pack entry order digest");
 const allowedDecisions=new Set(["unreviewed","accept","edit","reject"]);
+const decisionCodes={unreviewed:"u",accept:"a",edit:"e",reject:"r"};
+const codeDecisions={u:"unreviewed",a:"accept",e:"edit",r:"reject"};
 const allowedTags=new Set(["terminology","lore","meaning","style","grammar","leftover_english"]);
 const allowedWarnings=new Set(["model_fallback","accepted_unchanged","leading_boundary_whitespace_changed","trailing_boundary_whitespace_changed"]);
 const storageKey="stellaris-review-pack:"+pack.pack_fingerprint;
@@ -301,27 +306,86 @@ function validateSparseChanges(changes){
   if(!Array.isArray(changes))throw new Error("invalid sparse storage changes");
   const next=new Map();for(const item of changes){const [record,normalized]=validateDecisionRecord(item);if(next.has(record.id))throw new Error("duplicate occurrence ID");if(!isDefaultItem(record,normalized))next.set(record.id,normalized)}return next
 }
+function compactMetadata(record,item){
+  validateStoredItem(record,item);const metadata={};
+  if(item.decision==="edit")metadata.edited_translation=fullTranslation(record,item);
+  if(item.note!=="")metadata.note=item.note;
+  if(item.tags.length)metadata.tags=canonicalTags(item.tags);
+  if(item.glossary_candidate)metadata.glossary_candidate=true;
+  return Object.keys(metadata).length?metadata:null
+}
+function validateCompactMetadata(record,decision,value){
+  if(!value||typeof value!=="object"||Array.isArray(value))throw new Error("invalid compact metadata");
+  const allowed=["edited_translation","note","tags","glossary_candidate"];
+  if(!Object.keys(value).length||Object.keys(value).some(key=>!allowed.includes(key)))throw new Error("invalid compact metadata fields");
+  if(decision==="edit"){if(!Object.hasOwn(value,"edited_translation"))throw new Error("missing edited translation")}else if(Object.hasOwn(value,"edited_translation"))throw new Error("unexpected edited translation");
+  const item=defaults(record);item.decision=decision;
+  if(Object.hasOwn(value,"edited_translation")){if(typeof value.edited_translation!=="string")throw new Error("invalid edited translation");item.edited_segments=splitEdited(record,value.edited_translation)}
+  if(Object.hasOwn(value,"note")){if(typeof value.note!=="string"||value.note==="")throw new Error("invalid compact note");validateNote(value.note);item.note=value.note}
+  if(Object.hasOwn(value,"tags")){if(!Array.isArray(value.tags)||value.tags.length===0||new Set(value.tags).size!==value.tags.length||value.tags.some(tag=>!allowedTags.has(tag))||!arraysEqual(value.tags,canonicalTags(value.tags)))throw new Error("invalid compact tags");item.tags=value.tags.slice()}
+  if(Object.hasOwn(value,"glossary_candidate")){if(value.glossary_candidate!==true)throw new Error("invalid compact glossary state");item.glossary_candidate=true}
+  validateStoredItem(record,item);return item
+}
+function compactState(record,item){const metadata=compactMetadata(record,item);const encoded=[decisionCodes[item.decision]];if(metadata!==null)encoded.push(metadata);return encoded}
+function validateCompactState(record,value){
+  if(!Array.isArray(value)||(value.length!==1&&value.length!==2)||typeof codeDecisions[value[0]]!=="string")throw new Error("invalid compact decision state");
+  const decision=codeDecisions[value[0]];if(value.length===1){if(decision==="edit")throw new Error("missing edited translation");const item=defaults(record);item.decision=decision;validateStoredItem(record,item);return item}
+  return validateCompactMetadata(record,decision,value[1])
+}
+function compactUndoDocument(value=undoState){
+  if(value===null)return null;
+  const records=value.entries.map(entry=>{const index=entryIndexById.get(entry.occurrence_id);if(index===undefined)throw new Error("unknown undo occurrence");return [index,entry.occurrence_id,compactState(byId.get(entry.occurrence_id),entry.before)]});
+  records.sort((left,right)=>left[0]-right[0]);return {decision:value.decision,records}
+}
+function validateCompactUndoDocument(value,stateValue){
+  if(!value||typeof value!=="object"||Array.isArray(value)||!exactFields(value,["decision","records"])||!["accept","reject"].includes(value.decision)||!Array.isArray(value.records)||value.records.length===0||value.records.length>PAGE_SIZE)throw new Error("invalid compact batch undo document");
+  const entries=[];let priorIndex=-1;
+  for(const encoded of value.records){
+    if(!Array.isArray(encoded)||encoded.length!==3||!Number.isInteger(encoded[0])||encoded[0]<=priorIndex||encoded[0]<0||encoded[0]>=pack.entries.length)throw new Error("invalid compact batch undo record");
+    const record=pack.entries[encoded[0]];if(encoded[1]!==record.id)throw new Error("invalid compact batch undo binding");
+    const before=validateCompactState(record,encoded[2]);if(before.decision!=="unreviewed")throw new Error("invalid compact batch undo prior state");
+    const after=cloneItem(before);after.decision=value.decision;after.edited_segments=record.candidate_segments.slice();validateStoredItem(record,after);
+    if(!itemsEqual(stateValue.get(record.id)||defaults(record),after))throw new Error("batch undo no longer matches current state");
+    entries.push({occurrence_id:record.id,before,after});priorIndex=encoded[0]
+  }
+  return {decision:value.decision,entries}
+}
 function storageDocument(stateValue=state,undoValue=undoState){
-  const sparse=sparseDocument(stateValue);
-  return {storage_schema_version:2,pack_fingerprint:pack.pack_fingerprint,changes:sparse.changes,last_batch_undo:undoDocument(undoValue)}
+  const normalized=normalizeSparseMap(stateValue);let decisionStates="";const records=[];
+  pack.entries.forEach((record,index)=>{const item=normalized.get(record.id)||defaults(record);validateStoredItem(record,item);decisionStates+=decisionCodes[item.decision];const metadata=compactMetadata(record,item);if(metadata!==null)records.push([index,record.id,metadata])});
+  return {storage_schema_version:3,pack_fingerprint:pack.pack_fingerprint,entry_order_sha256:pack.entry_order_sha256,decision_states:decisionStates,records,last_batch_undo:compactUndoDocument(undoValue)}
 }
 function validateStorageDocument(documentValue){
   if(!documentValue||typeof documentValue!=="object"||Array.isArray(documentValue))throw new Error("invalid sparse storage document");
   if(documentValue.storage_schema_version===1){
     if(!exactFields(documentValue,["storage_schema_version","pack_fingerprint","changes"])||documentValue.pack_fingerprint!==pack.pack_fingerprint)throw new Error("invalid sparse storage identity");
-    return {state:validateSparseChanges(documentValue.changes),undo:null,undoDiscarded:false}
+    return {state:validateSparseChanges(documentValue.changes),undo:null,undoDiscarded:false,migrated:true}
   }
-  if(documentValue.storage_schema_version!==2||!exactFields(documentValue,["storage_schema_version","pack_fingerprint","changes","last_batch_undo"])||documentValue.pack_fingerprint!==pack.pack_fingerprint)throw new Error("invalid sparse storage identity");
-  const next=validateSparseChanges(documentValue.changes);
-  let nextUndo=null;let undoDiscarded=false;
-  if(documentValue.last_batch_undo!==null){try{nextUndo=validateUndoDocument(documentValue.last_batch_undo,next)}catch(error){undoDiscarded=true}}
-  return {state:next,undo:nextUndo,undoDiscarded}
+  if(documentValue.storage_schema_version===2){
+    if(!exactFields(documentValue,["storage_schema_version","pack_fingerprint","changes","last_batch_undo"])||documentValue.pack_fingerprint!==pack.pack_fingerprint)throw new Error("invalid sparse storage identity");
+    const next=validateSparseChanges(documentValue.changes);let nextUndo=null;let undoDiscarded=false;
+    if(documentValue.last_batch_undo!==null){try{nextUndo=validateUndoDocument(documentValue.last_batch_undo,next)}catch(error){undoDiscarded=true}}
+    return {state:next,undo:nextUndo,undoDiscarded,migrated:true}
+  }
+  if(documentValue.storage_schema_version!==3||!exactFields(documentValue,["storage_schema_version","pack_fingerprint","entry_order_sha256","decision_states","records","last_batch_undo"])||documentValue.pack_fingerprint!==pack.pack_fingerprint||documentValue.entry_order_sha256!==pack.entry_order_sha256)throw new Error("invalid compact storage identity");
+  if(typeof documentValue.decision_states!=="string"||documentValue.decision_states.length!==pack.entries.length||/[^uaer]/u.test(documentValue.decision_states))throw new Error("invalid compact decision states");
+  if(!Array.isArray(documentValue.records))throw new Error("invalid compact storage records");
+  const metadataByIndex=new Map();let priorIndex=-1;
+  for(const encoded of documentValue.records){
+    if(!Array.isArray(encoded)||encoded.length!==3||!Number.isInteger(encoded[0])||encoded[0]<=priorIndex||encoded[0]<0||encoded[0]>=pack.entries.length)throw new Error("invalid compact storage record");
+    const record=pack.entries[encoded[0]];if(encoded[1]!==record.id)throw new Error("invalid compact storage binding");
+    const decision=codeDecisions[documentValue.decision_states[encoded[0]]];metadataByIndex.set(encoded[0],validateCompactMetadata(record,decision,encoded[2]));priorIndex=encoded[0]
+  }
+  const next=new Map();pack.entries.forEach((record,index)=>{const decision=codeDecisions[documentValue.decision_states[index]];let item=metadataByIndex.get(index);if(item===undefined){if(decision==="edit")throw new Error("missing edited translation record");item=defaults(record);item.decision=decision;validateStoredItem(record,item)}if(!isDefaultItem(record,item))next.set(record.id,item)});
+  const nextUndo=documentValue.last_batch_undo===null?null:validateCompactUndoDocument(documentValue.last_batch_undo,next);
+  return {state:next,undo:nextUndo,undoDiscarded:false,migrated:false}
 }
 function validateSparseDocument(documentValue){return validateStorageDocument(documentValue).state}
 function renderStorageWarning(){el("storageWarning").textContent=storageFailureMessage;el("storageWarning").classList.toggle("hidden",!storageFailureMessage)}
+function storageText(stateValue=state,undoValue=undoState){const text=JSON.stringify(storageDocument(stateValue,undoValue));if(new TextEncoder().encode(text).byteLength>MAX_DECISIONS_BYTES)throw new Error("локальное состояние превышает лимит 32 MiB");return text}
 function persistSparse(){
-  try{localStorage.setItem(storageKey,JSON.stringify(storageDocument()));return true}
-  catch(error){storageFailureMessage="Локальное сохранение недоступно. Валидные решения остаются в памяти и доступны для экспорта: "+error.message;renderStorageWarning();return false}
+  try{localStorage.setItem(storageKey,storageText());return true}
+  catch(error){storageFailureMessage="Локальное сохранение недоступно. Валидные решения остаются в памяти; сохраните checkpoint кнопкой «Скачать черновик»: "+error.message;renderStorageWarning();return false}
 }
 function save(nextState=state){state=normalizeSparseMap(nextState);persistSparse();updateProgress()}
 function setStateMemory(record,item){validateStoredItem(record,item);if(undoState!==null&&undoState.entries.some(entry=>entry.occurrence_id===record.id)&&!itemsEqual(currentState(record),item))undoState=null;const next=new Map(state);if(isDefaultItem(record,item))next.delete(record.id);else next.set(record.id,cloneItem(item));state=next}
@@ -463,7 +527,7 @@ function setDecision(decision,advance=false){
   if(advance){const nextRecord=neighboringVisibleRecord(1);if(nextRecord){currentId=nextRecord.id;pageIndex=Math.floor(visible.findIndex(value=>value.id===nextRecord.id)/PAGE_SIZE);render()}}
   if(decision==="edit"){const area=el("editor").querySelector("textarea");if(area)area.focus()}
 }
-function documentBytes(documentValue){const text=JSON.stringify(documentValue,null,2).replace(/\n+$/u,"")+"\n";const encoded=new TextEncoder().encode(text);if(encoded.byteLength>MAX_JSON_BYTES)throw new Error("JSON превышает лимит 4 MiB");return encoded}
+function documentBytes(documentValue){const text=JSON.stringify(documentValue,null,2).replace(/\n+$/u,"")+"\n";const encoded=new TextEncoder().encode(text);if(encoded.byteLength>MAX_DECISIONS_BYTES)throw new Error("JSON превышает лимит 32 MiB");return encoded}
 function downloadDocument(finalMode){
   flushText();const documentValue=exportDocument(state,finalMode,finalMode);const encoded=documentBytes(documentValue);const blob=new Blob([encoded],{type:"application/json"});const link=document.createElement("a");link.download=(finalMode?"review-decisions-final-":"review-decisions-draft-")+pack.pack_fingerprint.slice(0,12)+".json";link.href=URL.createObjectURL(blob);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0)
 }
@@ -487,8 +551,14 @@ el("pageNext").addEventListener("click",()=>{flushText();if((pageIndex+1)*PAGE_S
 el("draftExport").addEventListener("click",()=>{try{downloadDocument(false);showError("")}catch(error){showError("Экспорт черновика отклонён: "+error.message)}});
 el("finalExport").addEventListener("click",()=>{try{downloadDocument(true);showError("")}catch(error){showError("Финальный экспорт отклонён: "+error.message)}});
 el("importButton").addEventListener("click",()=>el("importFile").click());
-el("importFile").addEventListener("change",async event=>{selected.clear();renderList();updateProgress();try{const file=event.target.files[0];if(!file)return;if(file.size>MAX_JSON_BYTES)throw new Error("файл превышает лимит 4 MiB");const text=await file.text();if(new TextEncoder().encode(text).byteLength>MAX_JSON_BYTES)throw new Error("файл превышает лимит 4 MiB");const nextState=validateDocument(JSON.parse(text));state=nextState;drafts.clear();clearUndo();persistSparse();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
-el("clear").addEventListener("click",()=>{if(confirm("Удалить все локальные решения для этого pack?")){state=new Map();drafts.clear();selected.clear();clearUndo();try{localStorage.removeItem(storageKey)}catch(error){storageFailureMessage="Локальное хранилище недоступно, но решения очищены в памяти: "+error.message}applyFilters();showError("")}});
+el("importFile").addEventListener("change",async event=>{try{const file=event.target.files[0];if(!file)return;if(file.size>MAX_DECISIONS_BYTES)throw new Error("файл превышает лимит 32 MiB");const text=await file.text();if(new TextEncoder().encode(text).byteLength>MAX_DECISIONS_BYTES)throw new Error("файл превышает лимит 32 MiB");const nextState=validateDocument(JSON.parse(text));let nextStorage;try{nextStorage=storageText(nextState,null);localStorage.setItem(storageKey,nextStorage)}catch(error){storageFailureMessage="Импорт не применён: локальное хранилище недоступно. Исходный draft-файл остаётся checkpoint, а текущее состояние не изменено: "+error.message;renderStorageWarning();throw error}state=nextState;drafts.clear();undoState=null;selected.clear();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
+el("clear").addEventListener("click",()=>{
+  if(!confirm("Удалить все локальные решения для этого pack?"))return;
+  try{localStorage.removeItem(storageKey)}
+  catch(error){storageFailureMessage="Очистка не выполнена: локальное хранилище недоступно. Решения и интерфейс сохранены без изменений: "+error.message;renderStorageWarning();showError("Очистка отклонена: "+error.message);return}
+  if(saveTimer!==null){clearTimeout(saveTimer);saveTimer=null}
+  state=new Map();drafts.clear();clearUndo();selected.clear();storageFailureMessage="";applyFilters();showError("")
+});
 function toggleHelp(force){const show=force===undefined?el("helpPanel").classList.contains("hidden"):force;el("helpPanel").classList.toggle("hidden",!show)}
 el("helpButton").addEventListener("click",()=>toggleHelp());el("closeHelp").addEventListener("click",()=>toggleHelp(false));
 function interactiveTarget(target){if(!target)return false;const tag=(target.tagName||"").toUpperCase();return ["INPUT","TEXTAREA","SELECT","BUTTON"].includes(tag)||target.isContentEditable}
@@ -503,7 +573,7 @@ document.addEventListener("keydown",event=>{if(interactiveTarget(event.target))r
   else if(key==="k"||key==="K"||key==="ArrowUp"||key==="ArrowLeft"){event.preventDefault();move(-1)}
 });
 if(typeof window!=="undefined")window.addEventListener("pagehide",flushText);
-try{const saved=localStorage.getItem(storageKey);if(saved){const restored=validateStorageDocument(JSON.parse(saved));state=restored.state;undoState=restored.undo;if(restored.undoDiscarded)storageFailureMessage="Сохранённые решения загружены, но устаревший или повреждённый batch undo безопасно отброшен."}}
+try{const saved=localStorage.getItem(storageKey);if(saved){if(new TextEncoder().encode(saved).byteLength>MAX_DECISIONS_BYTES)throw new Error("локальное состояние превышает лимит 32 MiB");const restored=validateStorageDocument(JSON.parse(saved));state=restored.state;undoState=restored.undo;if(restored.undoDiscarded)storageFailureMessage="Legacy decisions загружены; несовместимый undo безопасно отброшен.";if(restored.migrated){try{localStorage.setItem(storageKey,storageText(state,undoState))}catch(error){storageFailureMessage+=(storageFailureMessage?" ":"")+"Legacy state загружен, но миграция v3 не сохранена. Скачайте draft checkpoint: "+error.message}}}}
 catch(error){state=new Map();storageFailureMessage="Локальное сохранение не загружено: "+error.message}
 el("scopeSummary").textContent="Полный candidate · unsupported: "+pack.summary.unsupported+" · skipped files: "+pack.summary.skipped_files+" · whitespace warnings: "+pack.summary.whitespace_warning_entries;
 applyFilters();
