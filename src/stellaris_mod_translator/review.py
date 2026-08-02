@@ -40,6 +40,8 @@ from .review_ui import FULL_REVIEW_HTML_SHELL
 LEGACY_REVIEW_PACK_SCHEMA_VERSION = 1
 FULL_REVIEW_PACK_SCHEMA_VERSION = 2
 DECISIONS_SCHEMA_VERSION = 1
+MAX_REVIEW_PACK_JSON_BYTES = 32 * 1024 * 1024
+MAX_DECISIONS_BYTES = 32 * 1024 * 1024
 FULL_REVIEW_SCOPE = "full_candidate"
 SUPPORTED_PARSER_ORDER_VERSIONS = frozenset(
     {
@@ -383,6 +385,9 @@ def _validated_review_inputs(
                 candidate_report_schema_version
             ),
             "pack_fingerprint": pack_fingerprint,
+            "entry_order_sha256": _sha256_json(
+                [entry["id"] for entry in entries]
+            ),
             "summary": summary,
             "entries": entries,
         }
@@ -1573,9 +1578,10 @@ def _sha256_json(value: object) -> str:
 
 
 def _render_review_html(pack_data: dict[str, object]) -> bytes:
-    encoded = base64.b64encode(
-        _canonical_json(pack_data).encode("utf-8")
-    ).decode("ascii")
+    pack_json = _canonical_json(pack_data).encode("utf-8")
+    if len(pack_json) > MAX_REVIEW_PACK_JSON_BYTES:
+        raise SafetyError("review_pack_json_too_large")
+    encoded = base64.b64encode(pack_json).decode("ascii")
     fingerprint = pack_data["pack_fingerprint"]
     assert isinstance(fingerprint, str)
     shell = (
@@ -1586,6 +1592,11 @@ def _render_review_html(pack_data: dict[str, object]) -> bytes:
     html = (
         shell.replace("__PACK_DATA_BASE64__", encoded)
         .replace("__PACK_FINGERPRINT__", fingerprint)
+        .replace(
+            "__MAX_REVIEW_PACK_JSON_BYTES__",
+            str(MAX_REVIEW_PACK_JSON_BYTES),
+        )
+        .replace("__MAX_DECISIONS_BYTES__", str(MAX_DECISIONS_BYTES))
     )
     return html.encode("utf-8")
 
@@ -1653,8 +1664,11 @@ button{padding:.55rem .8rem;cursor:pointer}button:hover{border-color:var(--accen
 <script id="review-data" type="application/octet-stream">__PACK_DATA_BASE64__</script>
 <script>
 "use strict";
+const MAX_REVIEW_PACK_JSON_BYTES=__MAX_REVIEW_PACK_JSON_BYTES__;
+const MAX_DECISIONS_BYTES=__MAX_DECISIONS_BYTES__;
 const raw=document.getElementById("review-data").textContent.trim();
 const bytes=Uint8Array.from(atob(raw),c=>c.charCodeAt(0));
+if(bytes.byteLength>MAX_REVIEW_PACK_JSON_BYTES)throw new Error("review pack JSON exceeds 32 MiB");
 const pack=JSON.parse(new TextDecoder().decode(bytes));
 const allowedDecisions=new Set(["unreviewed","accept","edit","reject"]);
 const allowedTags=new Set(["terminology","lore","meaning","style","grammar","leftover_english"]);
@@ -1774,11 +1788,11 @@ el("decision").addEventListener("change",()=>{const record=byId.get(currentId);i
 el("note").addEventListener("input",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.note=el("note").value;try{validateNote(item.note);persistRecord(record,item);showError("")}catch(error){el("note").value=currentState(record).note;showError("Комментарий отклонён: "+error.message)}});
 el("glossary").addEventListener("change",()=>{const record=byId.get(currentId);if(!record)return;const item=cloneItem(currentState(record));item.glossary_candidate=el("glossary").checked;try{persistRecord(record,item);showError("")}catch(error){render();showError("Изменение не сохранено: "+error.message)}});
 el("previous").addEventListener("click",()=>move(-1));el("next").addEventListener("click",()=>move(1));
-el("export").addEventListener("click",()=>{try{const blob=new Blob([JSON.stringify(exportDocument(),null,2)+"\n"],{type:"application/json"});const link=document.createElement("a");link.download="review-decisions-"+pack.pack_fingerprint.slice(0,12)+".json";link.href=URL.createObjectURL(blob);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0);showError("")}catch(error){showError("Экспорт отклонён: "+error.message)}});
+el("export").addEventListener("click",()=>{try{const encoded=new TextEncoder().encode(JSON.stringify(exportDocument(),null,2)+"\n");if(encoded.byteLength>MAX_DECISIONS_BYTES)throw new Error("JSON exceeds 32 MiB");const blob=new Blob([encoded],{type:"application/json"});const link=document.createElement("a");link.download="review-decisions-"+pack.pack_fingerprint.slice(0,12)+".json";link.href=URL.createObjectURL(blob);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0);showError("")}catch(error){showError("Экспорт отклонён: "+error.message)}});
 el("importButton").addEventListener("click",()=>el("importFile").click());
-el("importFile").addEventListener("change",async event=>{try{const file=event.target.files[0];if(!file)return;const documentValue=JSON.parse(await file.text());const nextState=validateDocument(documentValue);save(nextState);state=nextState;drafts.clear();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
+el("importFile").addEventListener("change",async event=>{try{const file=event.target.files[0];if(!file)return;if(file.size>MAX_DECISIONS_BYTES)throw new Error("file exceeds 32 MiB");const text=await file.text();if(new TextEncoder().encode(text).byteLength>MAX_DECISIONS_BYTES)throw new Error("file exceeds 32 MiB");const documentValue=JSON.parse(text);const nextState=validateDocument(documentValue);save(nextState);state=nextState;drafts.clear();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
 el("clear").addEventListener("click",()=>{if(confirm("Удалить все локальные решения для этого pack?")){try{localStorage.removeItem(storageKey);state=new Map();drafts.clear();applyFilters();showError("")}catch(error){showError("Очистка отклонена: "+error.message)}}});
-try{const saved=localStorage.getItem(storageKey);if(saved)state=validateDocument(JSON.parse(saved))}catch(error){state=new Map();showError("Локальное сохранение отклонено: "+error.message)}
+try{const saved=localStorage.getItem(storageKey);if(saved){if(new TextEncoder().encode(saved).byteLength>MAX_DECISIONS_BYTES)throw new Error("saved decisions exceed 32 MiB");state=validateDocument(JSON.parse(saved))}}catch(error){state=new Map();showError("Локальное сохранение отклонено: "+error.message)}
 applyFilters();
 </script>
 </body>

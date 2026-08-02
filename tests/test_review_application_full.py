@@ -768,12 +768,12 @@ def test_full_application_output_race_is_no_clobber_and_cleans_temp(
     assert list(tmp_path.glob(".reviewed.tmp-*")) == []
 
 
-def test_full_application_scales_to_about_1700_entries_without_legacy_limit(
+def test_full_application_scales_to_12871_entries_without_legacy_limit(
     tmp_path: Path,
 ) -> None:
     source, candidate, pin = make_full_application_inputs(
         tmp_path,
-        entry_count=1700,
+        entry_count=12871,
     )
     payload = make_full_decisions(
         source,
@@ -792,8 +792,8 @@ def test_full_application_scales_to_about_1700_entries_without_legacy_limit(
         candidate_report_sha256=pin,
     )
 
-    assert report["counts"]["total_decisions"] == 1700
-    assert report["counts"]["accept"] == 1700
+    assert report["counts"]["total_decisions"] == 12871
+    assert report["counts"]["accept"] == 12871
     assert report["status"] == "full_candidate_review_applied"
 
 

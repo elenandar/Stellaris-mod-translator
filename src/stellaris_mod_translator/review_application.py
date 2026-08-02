@@ -26,6 +26,7 @@ from .publication import (
 )
 from .review import (
     FULL_REVIEW_PACK_SCHEMA_VERSION,
+    MAX_DECISIONS_BYTES,
     MVP2_PILOT_IDENTITY,
     ReviewIdentity,
     SHA256_RE,
@@ -45,7 +46,6 @@ from .review import (
 
 REVIEW_APPLICATION_SCHEMA_VERSION = 1
 FULL_REVIEW_APPLICATION_SCHEMA_VERSION = 2
-MAX_DECISIONS_BYTES = 4 * 1024 * 1024
 
 
 def apply_review_decisions(
