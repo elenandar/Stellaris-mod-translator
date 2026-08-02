@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import sys
 
 import pytest
 
@@ -510,6 +511,48 @@ def test_decisions_json_is_strict(
             tmp_path / "reviewed",
             expected_identity=identity,
         )
+
+
+def test_deeply_nested_malformed_decisions_json_is_safe_rejection(
+    tmp_path: Path,
+) -> None:
+    source, candidate, identity = make_apply_inputs(tmp_path)
+    depth = sys.getrecursionlimit() + 100
+    raw = (
+        b'{"schema_version":'
+        + (b"[" * depth)
+        + b"0"
+        + (b"]" * (depth - 1))
+        + b"}"
+    )
+    decisions = tmp_path / "decisions.json"
+    decisions.write_bytes(raw)
+    source_before = {
+        item.relative: item.data for item in _snapshot(source.resolve())
+    }
+    candidate_before = {
+        item.relative: item.data for item in _snapshot(candidate.resolve())
+    }
+    output = tmp_path / "reviewed"
+
+    with pytest.raises(SafetyError, match="^invalid_decisions_json$"):
+        apply_review_decisions(
+            source,
+            candidate,
+            decisions,
+            output,
+            expected_identity=identity,
+        )
+
+    assert not output.exists()
+    assert not list(tmp_path.glob(".reviewed.tmp-*"))
+    assert {
+        item.relative: item.data for item in _snapshot(source.resolve())
+    } == source_before
+    assert {
+        item.relative: item.data for item in _snapshot(candidate.resolve())
+    } == candidate_before
+    assert decisions.read_bytes() == raw
 
 
 def test_decisions_size_is_bounded(

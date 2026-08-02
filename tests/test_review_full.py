@@ -1117,6 +1117,7 @@ globalThis.localStorage = {
   values: new Map(),
   setCounts: new Map(),
   fail: false,
+  removeFail: false,
   getItem(key) {
     if (this.fail) throw new Error("synthetic quota");
     return this.values.has(key) ? this.values.get(key) : null;
@@ -1128,6 +1129,11 @@ globalThis.localStorage = {
   },
   removeItem(key) {
     if (this.fail) throw new Error("synthetic quota");
+    if (this.removeFail) {
+      const error = new Error("synthetic remove restriction");
+      error.name = "SecurityError";
+      throw error;
+    }
     this.values.delete(key);
   }
 };
@@ -1411,10 +1417,99 @@ async function fireDocument(type, event) {
   const reviewedCheckboxDisabled = (
     elements.get("entryList").children[0].children[0].disabled === true
   );
+  vm.runInThisContext(`
+    {
+      const record=pack.entries[1];
+      const item=defaults(record);item.note="pending clear sentinel";
+      updateDraft(record,item);
+      selected=new Set([pack.entries[2].id]);
+      currentId=record.id;
+      el("decisionFilter").value="unreviewed";
+      applyFilters(false,true)
+    }
+  `);
+  function captureClearParts() {
+    return vm.runInThisContext(`({
+      stateBytes:JSON.stringify([...state.entries()]),
+      sparseBytes:JSON.stringify(sparseDocument()),
+      draftsBytes:JSON.stringify([...drafts.entries()].map(
+        ([id,draft])=>[id,{
+          item:draft.item,valid:draft.valid,error:draft.error
+        }]
+      )),
+      undoBytes:JSON.stringify(undoDocument()),
+      selectedBytes:JSON.stringify([...selected]),
+      currentId,
+      filtersBytes:JSON.stringify({
+        search:el("search").value,
+        attention:el("attentionFilter").checked,
+        file:el("fileFilter").value,
+        status:el("statusFilter").value,
+        decision:el("decisionFilter").value,
+        warning:el("warningFilter").value,
+        repeat:el("repeatFilter").value
+      }),
+      visibleBytes:JSON.stringify(visible.map(record=>record.id)),
+      pageIndex,
+      progressBytes:JSON.stringify({
+        text:el("progressText").textContent,
+        width:el("progressBar").style.width,
+        details:el("progressDetails").textContent,
+        selected:el("selectedCount").textContent,
+        result:el("resultCount").textContent
+      }),
+      pendingSave:saveTimer!==null
+    })`);
+  }
+  const storageKeyValue = vm.runInThisContext("storageKey");
+  const clearFailureStorageBefore = localStorage.getItem(storageKeyValue);
+  const clearFailureBefore = captureClearParts();
+  localStorage.removeFail = true;
   await elements.get("clear").fire("click");
-  const clearResetsUndo = vm.runInThisContext(
-    "state.size===0&&undoState===null&&selected.size===0"
-    + "&&localStorage.getItem(storageKey)===null"
+  localStorage.removeFail = false;
+  const clearFailureAfter = captureClearParts();
+  const clearFailureStorageUnchanged = (
+    clearFailureStorageBefore === localStorage.getItem(storageKeyValue)
+  );
+  const clearFailureMemoryUnchanged = (
+    clearFailureBefore.stateBytes === clearFailureAfter.stateBytes
+    && clearFailureBefore.sparseBytes === clearFailureAfter.sparseBytes
+    && clearFailureBefore.draftsBytes === clearFailureAfter.draftsBytes
+    && clearFailureBefore.currentId === clearFailureAfter.currentId
+    && clearFailureBefore.pendingSave === true
+    && clearFailureAfter.pendingSave === true
+  );
+  const clearFailureUndoSelectionUnchanged = (
+    clearFailureBefore.undoBytes === clearFailureAfter.undoBytes
+    && clearFailureBefore.selectedBytes === clearFailureAfter.selectedBytes
+  );
+  const clearRemoveFailureAtomic = (
+    clearFailureStorageUnchanged
+    && clearFailureMemoryUnchanged
+    && clearFailureUndoSelectionUnchanged
+    && clearFailureBefore.filtersBytes === clearFailureAfter.filtersBytes
+    && clearFailureBefore.visibleBytes === clearFailureAfter.visibleBytes
+    && clearFailureBefore.pageIndex === clearFailureAfter.pageIndex
+    && clearFailureBefore.progressBytes === clearFailureAfter.progressBytes
+    && elements.get("storageWarning").textContent.includes(
+      "Решения и интерфейс сохранены без изменений"
+    )
+    && elements.get("error").textContent.startsWith("Очистка отклонена:")
+  );
+  await elements.get("clear").fire("click");
+  const clearSuccess = vm.runInThisContext(
+    "state.size===0&&drafts.size===0&&undoState===null&&selected.size===0"
+    + "&&saveTimer===null&&localStorage.getItem(storageKey)===null"
+    + '&&el("decisionFilter").value==="unreviewed"'
+    + "&&visible.length===pack.entries.length"
+    + '&&el("progressText").textContent==="0 / 12871 проверено"'
+    + '&&el("selectedCount").textContent==="Выбрано на странице: 0"'
+    + '&&el("storageWarning").classList.contains("hidden")'
+    + '&&el("error").textContent===""'
+  );
+  await new Promise(resolve => setTimeout(resolve, 400));
+  const pendingSaveAfterClearAbsent = vm.runInThisContext(
+    "saveTimer===null&&localStorage.getItem(storageKey)===null"
   );
   vm.runInThisContext(`
     state=new Map();drafts.clear();selected.clear();undoState=null;
@@ -2559,7 +2654,12 @@ async function fireDocument(type, event) {
     undoConsumed,
     batchRejectExact,
     reviewedCheckboxDisabled,
-    clearResetsUndo,
+    clearRemoveFailureAtomic,
+    clearFailureStorageUnchanged,
+    clearFailureMemoryUnchanged,
+    clearFailureUndoSelectionUnchanged,
+    clearSuccess,
+    pendingSaveAfterClearAbsent,
     multiTagCanonicalization,
     batchReloadUndo,
     legacyV2UnsortedUndoCompatible,
@@ -2699,7 +2799,12 @@ async function fireDocument(type, event) {
         "undoConsumed": True,
         "batchRejectExact": True,
         "reviewedCheckboxDisabled": True,
-        "clearResetsUndo": True,
+        "clearRemoveFailureAtomic": True,
+        "clearFailureStorageUnchanged": True,
+        "clearFailureMemoryUnchanged": True,
+        "clearFailureUndoSelectionUnchanged": True,
+        "clearSuccess": True,
+        "pendingSaveAfterClearAbsent": True,
         "multiTagCanonicalization": True,
         "batchReloadUndo": True,
         "legacyV2UnsortedUndoCompatible": True,

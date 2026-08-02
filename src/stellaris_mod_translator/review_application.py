@@ -330,7 +330,12 @@ def _load_decisions(data: bytes) -> dict[str, object]:
             parse_float=_finite_json_float,
             parse_constant=_reject_json_constant,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        ValueError,
+        RecursionError,
+    ) as exc:
         raise SafetyError("invalid_decisions_json") from exc
     if not isinstance(payload, dict):
         raise SafetyError("invalid_decisions_json")

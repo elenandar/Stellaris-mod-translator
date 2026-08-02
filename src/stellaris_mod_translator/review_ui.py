@@ -552,7 +552,13 @@ el("draftExport").addEventListener("click",()=>{try{downloadDocument(false);show
 el("finalExport").addEventListener("click",()=>{try{downloadDocument(true);showError("")}catch(error){showError("Финальный экспорт отклонён: "+error.message)}});
 el("importButton").addEventListener("click",()=>el("importFile").click());
 el("importFile").addEventListener("change",async event=>{try{const file=event.target.files[0];if(!file)return;if(file.size>MAX_DECISIONS_BYTES)throw new Error("файл превышает лимит 32 MiB");const text=await file.text();if(new TextEncoder().encode(text).byteLength>MAX_DECISIONS_BYTES)throw new Error("файл превышает лимит 32 MiB");const nextState=validateDocument(JSON.parse(text));let nextStorage;try{nextStorage=storageText(nextState,null);localStorage.setItem(storageKey,nextStorage)}catch(error){storageFailureMessage="Импорт не применён: локальное хранилище недоступно. Исходный draft-файл остаётся checkpoint, а текущее состояние не изменено: "+error.message;renderStorageWarning();throw error}state=nextState;drafts.clear();undoState=null;selected.clear();applyFilters();showError("")}catch(error){showError("Импорт отклонён: "+error.message)}finally{event.target.value=""}});
-el("clear").addEventListener("click",()=>{if(confirm("Удалить все локальные решения для этого pack?")){state=new Map();drafts.clear();selected.clear();clearUndo();try{localStorage.removeItem(storageKey)}catch(error){storageFailureMessage="Локальное хранилище недоступно, но решения очищены в памяти: "+error.message}applyFilters();showError("")}});
+el("clear").addEventListener("click",()=>{
+  if(!confirm("Удалить все локальные решения для этого pack?"))return;
+  try{localStorage.removeItem(storageKey)}
+  catch(error){storageFailureMessage="Очистка не выполнена: локальное хранилище недоступно. Решения и интерфейс сохранены без изменений: "+error.message;renderStorageWarning();showError("Очистка отклонена: "+error.message);return}
+  if(saveTimer!==null){clearTimeout(saveTimer);saveTimer=null}
+  state=new Map();drafts.clear();clearUndo();selected.clear();storageFailureMessage="";applyFilters();showError("")
+});
 function toggleHelp(force){const show=force===undefined?el("helpPanel").classList.contains("hidden"):force;el("helpPanel").classList.toggle("hidden",!show)}
 el("helpButton").addEventListener("click",()=>toggleHelp());el("closeHelp").addEventListener("click",()=>toggleHelp(false));
 function interactiveTarget(target){if(!target)return false;const tag=(target.tagName||"").toUpperCase();return ["INPUT","TEXTAREA","SELECT","BUTTON"].includes(tag)||target.isContentEditable}
